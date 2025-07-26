@@ -7,6 +7,10 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import Companies from "./pages/admin/Companies";
+import UsersPage from "./pages/admin/Users";
+import WhatsAppNumbers from "./pages/admin/WhatsAppNumbers";
 import { DashboardLayout } from "./layouts/DashboardLayout";
 import NotFound from "./pages/NotFound";
 
@@ -31,16 +35,47 @@ const App = () => (
                 <Dashboard />
               </DashboardLayout>
             } />
-            <Route path="/admin/*" element={
+            
+            {/* Admin routes */}
+            <Route path="/admin/dashboard" element={
               <DashboardLayout>
-                <Dashboard />
+                <AdminDashboard />
               </DashboardLayout>
             } />
+            <Route path="/admin/companies" element={
+              <DashboardLayout>
+                <Companies />
+              </DashboardLayout>
+            } />
+            <Route path="/admin/users" element={
+              <DashboardLayout>
+                <UsersPage />
+              </DashboardLayout>
+            } />
+            <Route path="/admin/numbers" element={
+              <DashboardLayout>
+                <WhatsAppNumbers />
+              </DashboardLayout>
+            } />
+            <Route path="/admin/reports" element={
+              <DashboardLayout>
+                <AdminDashboard />
+              </DashboardLayout>
+            } />
+            <Route path="/admin/settings" element={
+              <DashboardLayout>
+                <AdminDashboard />
+              </DashboardLayout>
+            } />
+            
+            {/* Company routes */}
             <Route path="/company/*" element={
               <DashboardLayout>
                 <Dashboard />
               </DashboardLayout>
             } />
+            
+            {/* Employee routes */}
             <Route path="/employee/*" element={
               <DashboardLayout>
                 <Dashboard />
