@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { MessageSquare, Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { authenticate, setCurrentUser, getRedirectPath } from "@/lib/auth";
 
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -20,28 +21,36 @@ const Login = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulação de login - substituir por integração real
-    setTimeout(() => {
-      if (email && password) {
+    try {
+      const user = await authenticate(email, password);
+      
+      if (user) {
+        setCurrentUser(user);
+        
         toast({
           title: "Login realizado com sucesso!",
-          description: "Redirecionando para o dashboard...",
+          description: `Bem-vindo, ${user.name}!`,
         });
+        
         // Redirecionar baseado no tipo de usuário
-        if (email.includes("admin")) {
-          navigate("/admin/dashboard");
-        } else {
-          navigate("/company/dashboard");
-        }
+        const redirectPath = getRedirectPath(user);
+        navigate(redirectPath);
       } else {
         toast({
           title: "Erro no login",
-          description: "Por favor, preencha todos os campos.",
+          description: "Email ou senha incorretos.",
           variant: "destructive",
         });
       }
+    } catch (error) {
+      toast({
+        title: "Erro no login",
+        description: "Erro inesperado. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -136,11 +145,13 @@ const Login = () => {
 
           {/* Links para diferentes tipos de acesso */}
           <div className="mt-6 p-4 bg-muted/20 rounded-lg">
-            <p className="text-sm text-muted-foreground mb-2">Acesso rápido para demonstração:</p>
+            <p className="text-sm text-muted-foreground mb-2">Credenciais de acesso:</p>
             <div className="flex flex-col gap-1 text-xs">
-              <span>👤 Admin: admin@demo.com</span>
-              <span>🏢 Empresa: empresa@demo.com</span>
-              <span>👥 Funcionário: funcionario@demo.com</span>
+              <span>🔑 <strong>Admin Master:</strong> jefson.ti@gmail.com</span>
+              <span>👤 Admin Demo: admin@demo.com</span>
+              <span>🏢 Empresa Demo: empresa@demo.com</span>
+              <span>👥 Funcionário Demo: funcionario@demo.com</span>
+              <span className="text-muted-foreground mt-1">Senha para demos: demo123</span>
             </div>
           </div>
         </Card>

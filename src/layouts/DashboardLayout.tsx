@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
+import { getCurrentUser, logout, User as AuthUser } from "@/lib/auth";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -25,11 +27,25 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const navigate = useNavigate();
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+
+  useEffect(() => {
+    const user = getCurrentUser();
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    setCurrentUser(user);
+  }, [navigate]);
 
   const handleLogout = () => {
-    // Implementar logout
+    logout();
     navigate("/login");
   };
+
+  if (!currentUser) {
+    return <div>Carregando...</div>;
+  }
 
   return (
     <SidebarProvider>
@@ -45,7 +61,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               {/* Breadcrumb ou título dinâmico */}
               <div className="hidden md:block">
                 <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
-                  Empresa Demo
+                  {currentUser.type === "admin" ? "Admin Master" : currentUser.companyId || "Sistema"}
                 </Badge>
               </div>
             </div>
@@ -70,12 +86,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Button variant="ghost" className="flex items-center gap-2 px-3">
                     <Avatar className="h-8 w-8">
                       <AvatarFallback className="bg-primary/10 text-primary">
-                        AD
+                        {currentUser.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div className="hidden md:block text-left">
-                      <p className="text-sm font-medium">Admin Demo</p>
-                      <p className="text-xs text-muted-foreground">admin@demo.com</p>
+                      <p className="text-sm font-medium">{currentUser.name}</p>
+                      <p className="text-xs text-muted-foreground">{currentUser.email}</p>
                     </div>
                   </Button>
                 </DropdownMenuTrigger>
