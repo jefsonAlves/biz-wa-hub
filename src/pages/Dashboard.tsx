@@ -2,6 +2,11 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   MessageSquare, 
   Users, 
@@ -10,14 +15,69 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  BarChart3
+  BarChart3,
+  Plus,
+  Trash2,
+  Building2
 } from "lucide-react";
 import { getCurrentUser, User as AuthUser } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
+
+// Tipos
+interface Department {
+  id: string;
+  name: string;
+  description: string;
+}
+
+interface Employee {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  departmentId: string;
+}
+
+interface WhatsAppNumber {
+  id: string;
+  number: string;
+  name: string;
+  status: 'connected' | 'disconnected';
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  
+  // Estados para gerenciamento
+  const [departments, setDepartments] = useState<Department[]>([
+    { id: '1', name: 'Suporte', description: 'Atendimento técnico' },
+    { id: '2', name: 'Vendas', description: 'Vendas e negociação' },
+    { id: '3', name: 'Financeiro', description: 'Questões financeiras' }
+  ]);
+  
+  const [employees, setEmployees] = useState<Employee[]>([
+    { id: '1', name: 'Maria Santos', email: 'maria@empresa.com', phone: '+55 11 99999-0001', departmentId: '1' },
+    { id: '2', name: 'Pedro Lima', email: 'pedro@empresa.com', phone: '+55 11 99999-0002', departmentId: '2' },
+    { id: '3', name: 'Lucia Ferreira', email: 'lucia@empresa.com', phone: '+55 11 99999-0003', departmentId: '3' }
+  ]);
+  
+  const [whatsappNumbers, setWhatsappNumbers] = useState<WhatsAppNumber[]>([
+    { id: '1', number: '+55 11 99999-1000', name: 'WhatsApp Principal', status: 'connected' },
+    { id: '2', number: '+55 11 99999-2000', name: 'WhatsApp Vendas', status: 'disconnected' }
+  ]);
+
+  // Estados dos modais
+  const [isDepartmentModalOpen, setIsDepartmentModalOpen] = useState(false);
+  const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  
+  // Estados dos formulários
+  const [newDepartment, setNewDepartment] = useState({ name: '', description: '' });
+  const [newEmployee, setNewEmployee] = useState({ name: '', email: '', phone: '', departmentId: '' });
+  const [newWhatsApp, setNewWhatsApp] = useState({ number: '', name: '' });
 
   useEffect(() => {
     const user = getCurrentUser();
@@ -27,6 +87,81 @@ const Dashboard = () => {
     }
     setCurrentUser(user);
   }, [navigate]);
+
+  // Funções de gerenciamento
+  const handleSaveDepartment = () => {
+    if (newDepartment.name.trim()) {
+      const department: Department = {
+        id: Date.now().toString(),
+        name: newDepartment.name,
+        description: newDepartment.description
+      };
+      setDepartments([...departments, department]);
+      setNewDepartment({ name: '', description: '' });
+      setIsDepartmentModalOpen(false);
+      toast({
+        title: "Departamento criado",
+        description: `${department.name} foi adicionado com sucesso.`,
+      });
+    }
+  };
+
+  const handleSaveEmployee = () => {
+    if (newEmployee.name.trim() && newEmployee.email.trim() && newEmployee.departmentId) {
+      const employee: Employee = {
+        id: Date.now().toString(),
+        name: newEmployee.name,
+        email: newEmployee.email,
+        phone: newEmployee.phone,
+        departmentId: newEmployee.departmentId
+      };
+      setEmployees([...employees, employee]);
+      setNewEmployee({ name: '', email: '', phone: '', departmentId: '' });
+      setIsEmployeeModalOpen(false);
+      toast({
+        title: "Funcionário cadastrado",
+        description: `${employee.name} foi adicionado com sucesso.`,
+      });
+    }
+  };
+
+  const handleSaveWhatsApp = () => {
+    if (newWhatsApp.number.trim() && newWhatsApp.name.trim()) {
+      const whatsapp: WhatsAppNumber = {
+        id: Date.now().toString(),
+        number: newWhatsApp.number,
+        name: newWhatsApp.name,
+        status: 'disconnected'
+      };
+      setWhatsappNumbers([...whatsappNumbers, whatsapp]);
+      setNewWhatsApp({ number: '', name: '' });
+      setIsWhatsAppModalOpen(false);
+      toast({
+        title: "WhatsApp adicionado",
+        description: `${whatsapp.name} foi configurado com sucesso.`,
+      });
+    }
+  };
+
+  const handleDeleteDepartment = (id: string) => {
+    setDepartments(departments.filter(dept => dept.id !== id));
+    toast({
+      title: "Departamento removido",
+      description: "O departamento foi excluído com sucesso.",
+    });
+  };
+
+  const handleDeleteEmployee = (id: string) => {
+    setEmployees(employees.filter(emp => emp.id !== id));
+    toast({
+      title: "Funcionário removido",
+      description: "O funcionário foi excluído com sucesso.",
+    });
+  };
+
+  const getDepartmentName = (departmentId: string) => {
+    return departments.find(dept => dept.id === departmentId)?.name || 'N/A';
+  };
 
   if (!currentUser) {
     return <div className="flex items-center justify-center min-h-screen">Carregando...</div>;
@@ -180,44 +315,285 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
+        {/* Management Actions */}
         <Card className="bg-gradient-card border-border/50">
           <CardHeader>
-            <CardTitle>Ações Rápidas</CardTitle>
+            <CardTitle>Gerenciamento</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button className="w-full justify-start" variant="outline">
-              <Users className="mr-2 h-4 w-4" />
-              Adicionar Atendente
-            </Button>
-            <Button className="w-full justify-start" variant="outline">
-              <Phone className="mr-2 h-4 w-4" />
-              Conectar WhatsApp
-            </Button>
-            <Button className="w-full justify-start" variant="outline">
-              <BarChart3 className="mr-2 h-4 w-4" />
-              Ver Relatórios
-            </Button>
-            <Button className="w-full justify-start" variant="outline">
+            {/* WhatsApp Button - Destacado */}
+            <Dialog open={isWhatsAppModalOpen} onOpenChange={setIsWhatsAppModalOpen}>
+              <DialogTrigger asChild>
+                <Button className="w-full justify-start bg-green-600 hover:bg-green-700 text-white">
+                  <Phone className="mr-2 h-4 w-4" />
+                  Adicionar WhatsApp
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Adicionar WhatsApp para Monitoramento</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="whatsapp-number">Número do WhatsApp</Label>
+                    <Input
+                      id="whatsapp-number"
+                      placeholder="+55 11 99999-0000"
+                      value={newWhatsApp.number}
+                      onChange={(e) => setNewWhatsApp({...newWhatsApp, number: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="whatsapp-name">Nome/Identificação</Label>
+                    <Input
+                      id="whatsapp-name"
+                      placeholder="WhatsApp Principal"
+                      value={newWhatsApp.name}
+                      onChange={(e) => setNewWhatsApp({...newWhatsApp, name: e.target.value})}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={handleSaveWhatsApp} className="flex-1">
+                      Salvar
+                    </Button>
+                    <Button variant="outline" onClick={() => setIsWhatsAppModalOpen(false)} className="flex-1">
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Department Button */}
+            <Dialog open={isDepartmentModalOpen} onOpenChange={setIsDepartmentModalOpen}>
+              <DialogTrigger asChild>
+                <Button className="w-full justify-start" variant="outline">
+                  <Building2 className="mr-2 h-4 w-4" />
+                  Gerenciar Departamentos
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Gerenciar Departamentos</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  {/* Form */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="dept-name">Nome do Departamento</Label>
+                      <Input
+                        id="dept-name"
+                        placeholder="Ex: Suporte"
+                        value={newDepartment.name}
+                        onChange={(e) => setNewDepartment({...newDepartment, name: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="dept-desc">Descrição</Label>
+                      <Input
+                        id="dept-desc"
+                        placeholder="Ex: Atendimento técnico"
+                        value={newDepartment.description}
+                        onChange={(e) => setNewDepartment({...newDepartment, description: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={handleSaveDepartment}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Adicionar
+                    </Button>
+                    <Button variant="outline" onClick={() => setIsDepartmentModalOpen(false)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                  
+                  {/* List */}
+                  <div className="border-t pt-4">
+                    <h4 className="font-medium mb-3">Departamentos Cadastrados</h4>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {departments.map((dept) => (
+                        <div key={dept.id} className="flex items-center justify-between p-2 border rounded">
+                          <div>
+                            <span className="font-medium">{dept.name}</span>
+                            <p className="text-sm text-muted-foreground">{dept.description}</p>
+                          </div>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="sm" variant="destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Deseja realmente excluir o departamento "{dept.name}"?
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteDepartment(dept.id)}>
+                                  Excluir
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Employee Button */}
+            <Dialog open={isEmployeeModalOpen} onOpenChange={setIsEmployeeModalOpen}>
+              <DialogTrigger asChild>
+                <Button className="w-full justify-start" variant="outline">
+                  <Users className="mr-2 h-4 w-4" />
+                  Gerenciar Funcionários
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                  <DialogTitle>Gerenciar Funcionários</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  {/* Form */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="emp-name">Nome Completo</Label>
+                      <Input
+                        id="emp-name"
+                        placeholder="Ex: João Silva"
+                        value={newEmployee.name}
+                        onChange={(e) => setNewEmployee({...newEmployee, name: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="emp-email">E-mail</Label>
+                      <Input
+                        id="emp-email"
+                        type="email"
+                        placeholder="joao@empresa.com"
+                        value={newEmployee.email}
+                        onChange={(e) => setNewEmployee({...newEmployee, email: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="emp-phone">Telefone</Label>
+                      <Input
+                        id="emp-phone"
+                        placeholder="+55 11 99999-0000"
+                        value={newEmployee.phone}
+                        onChange={(e) => setNewEmployee({...newEmployee, phone: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="emp-dept">Departamento</Label>
+                      <Select value={newEmployee.departmentId} onValueChange={(value) => setNewEmployee({...newEmployee, departmentId: value})}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecionar departamento" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {departments.map((dept) => (
+                            <SelectItem key={dept.id} value={dept.id}>
+                              {dept.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={handleSaveEmployee}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Adicionar
+                    </Button>
+                    <Button variant="outline" onClick={() => setIsEmployeeModalOpen(false)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                  
+                  {/* List */}
+                  <div className="border-t pt-4">
+                    <h4 className="font-medium mb-3">Funcionários Cadastrados</h4>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {employees.map((emp) => (
+                        <div key={emp.id} className="flex items-center justify-between p-3 border rounded">
+                          <div>
+                            <span className="font-medium">{emp.name}</span>
+                            <p className="text-sm text-muted-foreground">{emp.email}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {getDepartmentName(emp.departmentId)} • {emp.phone}
+                            </p>
+                          </div>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="sm" variant="destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Deseja realmente excluir o funcionário "{emp.name}"?
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteEmployee(emp.id)}>
+                                  Excluir
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <Button className="w-full justify-start" variant="outline" onClick={() => navigate('/chat')}>
               <MessageSquare className="mr-2 h-4 w-4" />
-              Gerenciar Setores
+              Ver Conversas
             </Button>
           </CardContent>
         </Card>
       </div>
 
-      {/* Performance Chart Placeholder */}
+      {/* WhatsApp Numbers Overview */}
       <Card className="bg-gradient-card border-border/50">
         <CardHeader>
-          <CardTitle>Performance de Atendimento - Últimos 7 dias</CardTitle>
+          <CardTitle>WhatsApp Configurados para Monitoramento</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-64 flex items-center justify-center text-muted-foreground border border-dashed border-border/50 rounded-lg">
-            <div className="text-center">
-              <BarChart3 className="h-12 w-12 mx-auto mb-4 text-primary" />
-              <p>Gráfico de performance será exibido aqui</p>
-              <p className="text-sm">Dados em tempo real de mensagens, respostas e satisfação</p>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {whatsappNumbers.map((whatsapp) => (
+              <div key={whatsapp.id} className="p-4 border border-border/50 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-medium">{whatsapp.name}</h4>
+                  <Badge className={whatsapp.status === 'connected' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}>
+                    {whatsapp.status === 'connected' ? 'Conectado' : 'Desconectado'}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">{whatsapp.number}</p>
+                <Button size="sm" className="mt-2" variant="outline">
+                  {whatsapp.status === 'connected' ? 'Desconectar' : 'Conectar'}
+                </Button>
+              </div>
+            ))}
+            {whatsappNumbers.length === 0 && (
+              <div className="col-span-full text-center py-8">
+                <Phone className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground">Nenhum WhatsApp configurado</p>
+                <p className="text-sm text-muted-foreground">Clique em "Adicionar WhatsApp" para começar</p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

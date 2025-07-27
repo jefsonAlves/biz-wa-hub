@@ -19,10 +19,25 @@ import {
   Paperclip,
   Smile
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const Chat = () => {
+  const { toast } = useToast();
   const [selectedChat, setSelectedChat] = useState("1");
   const [newMessage, setNewMessage] = useState("");
+  
+  // Simulando dados sincronizados com o Dashboard
+  const departments = [
+    { id: '1', name: 'Suporte', description: 'Atendimento técnico' },
+    { id: '2', name: 'Vendas', description: 'Vendas e negociação' },
+    { id: '3', name: 'Financeiro', description: 'Questões financeiras' }
+  ];
+  
+  const employees = [
+    { id: '1', name: 'Maria Santos', email: 'maria@empresa.com', phone: '+55 11 99999-0001', departmentId: '1' },
+    { id: '2', name: 'Pedro Lima', email: 'pedro@empresa.com', phone: '+55 11 99999-0002', departmentId: '2' },
+    { id: '3', name: 'Lucia Ferreira', email: 'lucia@empresa.com', phone: '+55 11 99999-0003', departmentId: '3' }
+  ];
 
   const chats = [
     {
@@ -110,6 +125,11 @@ const Chat = () => {
   const handleSendMessage = () => {
     if (newMessage.trim()) {
       // Aqui adicionaria a lógica para enviar mensagem
+      const currentEmployee = employees.find(emp => emp.id === '1'); // Usuário atual (mockado)
+      toast({
+        title: "Mensagem enviada",
+        description: `Mensagem enviada por ${currentEmployee?.name}`,
+      });
       setNewMessage("");
     }
   };
@@ -203,9 +223,9 @@ const Chat = () => {
                           <p className="text-xs text-muted-foreground truncate">
                             {chat.lastMessage}
                           </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {chat.agent}
-                          </p>
+            <p className="text-xs font-medium text-primary mt-1">
+              👤 {chat.agent}
+            </p>
                         </div>
                       </div>
                     </div>
@@ -240,7 +260,11 @@ const Chat = () => {
                           <span>{currentChat.clientPhone}</span>
                           <span>•</span>
                           <span className={getSectorColor(currentChat.sector)}>
-                            {currentChat.sector} - {currentChat.agent}
+                            {currentChat.sector}
+                          </span>
+                          <span>•</span>
+                          <span className="font-medium text-primary">
+                            👤 Atendente: {currentChat.agent}
                           </span>
                         </div>
                       </div>
@@ -262,33 +286,40 @@ const Chat = () => {
                           key={message.id}
                           className={`flex ${message.sender === 'agent' ? 'justify-end' : 'justify-start'}`}
                         >
-                          <div
-                            className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                              message.sender === 'agent'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted'
-                            }`}
-                          >
-                            <p className="text-sm">{message.content}</p>
-                            <div className={`flex items-center gap-1 mt-1 ${
-                              message.sender === 'agent' ? 'justify-end' : 'justify-start'
-                            }`}>
-                              <span className={`text-xs ${
-                                message.sender === 'agent' 
-                                  ? 'text-primary-foreground/70' 
-                                  : 'text-muted-foreground'
-                              }`}>
-                                {message.time}
+                          <div className="flex flex-col">
+                            {message.sender === 'agent' && (
+                              <span className="text-xs text-primary font-medium mb-1 text-right">
+                                👤 Maria Santos | Suporte
                               </span>
-                              {message.sender === 'agent' && (
-                                <div className="text-primary-foreground/70">
-                                  {message.status === 'read' ? (
-                                    <CheckCheck className="h-3 w-3" />
-                                  ) : (
-                                    <Check className="h-3 w-3" />
-                                  )}
-                                </div>
-                              )}
+                            )}
+                            <div
+                              className={`max-w-[70%] rounded-lg px-4 py-2 ${
+                                message.sender === 'agent'
+                                  ? 'bg-primary text-primary-foreground ml-auto'
+                                  : 'bg-muted'
+                              }`}
+                            >
+                              <p className="text-sm">{message.content}</p>
+                              <div className={`flex items-center gap-1 mt-1 ${
+                                message.sender === 'agent' ? 'justify-end' : 'justify-start'
+                              }`}>
+                                <span className={`text-xs ${
+                                  message.sender === 'agent' 
+                                    ? 'text-primary-foreground/70' 
+                                    : 'text-muted-foreground'
+                                }`}>
+                                  {message.time}
+                                </span>
+                                {message.sender === 'agent' && (
+                                  <div className="text-primary-foreground/70">
+                                    {message.status === 'read' ? (
+                                      <CheckCheck className="h-3 w-3" />
+                                    ) : (
+                                      <Check className="h-3 w-3" />
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
