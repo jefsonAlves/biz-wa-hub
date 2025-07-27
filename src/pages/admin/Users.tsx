@@ -338,7 +338,16 @@ const UsersPage = () => {
               </div>
               
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="ghost">
+                <Button 
+                  size="sm" 
+                  variant="ghost"
+                  onClick={() => {
+                    toast({
+                      title: "Visualizar usuário",
+                      description: "Abrindo detalhes do usuário..."
+                    });
+                  }}
+                >
                   <Eye className="h-4 w-4" />
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => handleEditUser(user.id)}>

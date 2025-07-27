@@ -263,10 +263,28 @@ const Companies = () => {
                 <Button size="sm" variant="ghost" onClick={() => handleEditCompany(company.id)}>
                   <Edit className="h-4 w-4" />
                 </Button>
-                <Button size="sm" variant="ghost">
+                <Button 
+                  size="sm" 
+                  variant="ghost"
+                  onClick={() => {
+                    toast({
+                      title: "Relatórios",
+                      description: "Abrindo relatórios da empresa..."
+                    });
+                  }}
+                >
                   <BarChart3 className="h-4 w-4" />
                 </Button>
-                <Button size="sm" variant="ghost">
+                <Button 
+                  size="sm" 
+                  variant="ghost"
+                  onClick={() => {
+                    toast({
+                      title: "Configurações",
+                      description: "Abrindo configurações da empresa..."
+                    });
+                  }}
+                >
                   <Settings className="h-4 w-4" />
                 </Button>
                 <Button 

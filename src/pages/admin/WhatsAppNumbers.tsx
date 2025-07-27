@@ -342,13 +342,40 @@ const WhatsAppNumbers = () => {
                     QR Code
                   </Button>
                 )}
-                <Button size="sm" variant="ghost">
+                <Button 
+                  size="sm" 
+                  variant="ghost"
+                  onClick={() => {
+                    toast({
+                      title: "Visualizar número",
+                      description: "Abrindo detalhes do número WhatsApp..."
+                    });
+                  }}
+                >
                   <Eye className="h-4 w-4" />
                 </Button>
-                <Button size="sm" variant="ghost">
+                <Button 
+                  size="sm" 
+                  variant="ghost"
+                  onClick={() => {
+                    toast({
+                      title: "Editar número",
+                      description: "Abrindo formulário de edição..."
+                    });
+                  }}
+                >
                   <Edit className="h-4 w-4" />
                 </Button>
-                <Button size="sm" variant="ghost">
+                <Button 
+                  size="sm" 
+                  variant="ghost"
+                  onClick={() => {
+                    toast({
+                      title: "Configurações",
+                      description: "Abrindo configurações do número..."
+                    });
+                  }}
+                >
                   <Settings className="h-4 w-4" />
                 </Button>
                 {number.status === "Ativo" && (

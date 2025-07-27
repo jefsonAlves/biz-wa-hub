@@ -253,15 +253,30 @@ const Index = () => {
           Gerencie múltiplos atendentes, setores e agentes inteligentes em um único número WhatsApp. 
           Controle total com hierarquia de permissões e relatórios avançados.
         </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Button size="lg" variant="hero" className="text-lg px-8">
-            Começar Grátis
-            <ArrowRight className="ml-2 h-5 w-5" />
-          </Button>
-          <Button size="lg" variant="premium" className="text-lg px-8">
-            Ver Demonstração
-          </Button>
-        </div>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button 
+              size="lg" 
+              variant="hero" 
+              className="text-lg px-8"
+              onClick={() => navigate("/register")}
+            >
+              Começar Grátis
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+            <Button 
+              size="lg" 
+              variant="premium" 
+              className="text-lg px-8"
+              onClick={() => {
+                toast({
+                  title: "Demonstração disponível!",
+                  description: "Entre em contato conosco para agendar uma demonstração."
+                });
+              }}
+            >
+              Ver Demonstração
+            </Button>
+          </div>
       </section>
 
       {/* Features */}
@@ -331,6 +346,13 @@ const Index = () => {
                 className="w-full" 
                 variant={plan.highlighted ? "hero" : "premium"}
                 size="lg"
+                onClick={() => {
+                  toast({
+                    title: `Plano ${plan.name} selecionado!`,
+                    description: "Você será redirecionado para o cadastro."
+                  });
+                  navigate("/register");
+                }}
               >
                 Escolher Plano
               </Button>
@@ -349,10 +371,25 @@ const Index = () => {
             otimizar o atendimento via WhatsApp
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" variant="hero" className="text-lg px-8">
+            <Button 
+              size="lg" 
+              variant="hero" 
+              className="text-lg px-8"
+              onClick={() => navigate("/register")}
+            >
               Começar Teste Grátis
             </Button>
-            <Button size="lg" variant="premium" className="text-lg px-8">
+            <Button 
+              size="lg" 
+              variant="premium" 
+              className="text-lg px-8"
+              onClick={() => {
+                toast({
+                  title: "Contato solicitado!",
+                  description: "Nossa equipe entrará em contato em breve."
+                });
+              }}
+            >
               Falar com Especialista
             </Button>
           </div>
