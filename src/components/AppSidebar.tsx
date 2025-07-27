@@ -51,14 +51,12 @@ const getMenuItems = (userType: "admin" | "company" | "employee") => {
   if (userType === "company") {
     return [
       ...baseItems,
-      { title: "Atendimentos", url: "/company/chats", icon: MessageSquare },
-      { title: "Funcionários", url: "/company/employees", icon: Users },
-      { title: "Setores", url: "/company/departments", icon: Building2 },
-      { title: "Agentes IA", url: "/company/bots", icon: Bot },
-      { title: "Fluxos", url: "/company/workflows", icon: Workflow },
-      { title: "Relatórios", url: "/company/reports", icon: BarChart3 },
-      { title: "Horários", url: "/company/schedules", icon: Clock },
-      { title: "Configurações", url: "/company/settings", icon: Settings },
+      { title: "Conversas", url: "/chat", icon: MessageSquare },
+      { title: "Setores", url: "/sectors", icon: Building2 },
+      { title: "Atendentes", url: "/agents", icon: Users },
+      { title: "WhatsApp", url: "/admin/numbers", icon: Phone },
+      { title: "Relatórios", url: "/reports", icon: BarChart3 },
+      { title: "Configurações", url: "/settings", icon: Settings },
     ];
   }
 

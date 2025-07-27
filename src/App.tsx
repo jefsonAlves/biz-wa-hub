@@ -7,6 +7,9 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+import Chat from "./pages/Chat";
+import Sectors from "./pages/Sectors";
+import Agents from "./pages/Agents";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import Companies from "./pages/admin/Companies";
 import UsersPage from "./pages/admin/Users";
@@ -33,6 +36,21 @@ const App = () => (
             <Route path="/dashboard" element={
               <DashboardLayout>
                 <Dashboard />
+              </DashboardLayout>
+            } />
+            <Route path="/chat" element={
+              <DashboardLayout>
+                <Chat />
+              </DashboardLayout>
+            } />
+            <Route path="/sectors" element={
+              <DashboardLayout>
+                <Sectors />
+              </DashboardLayout>
+            } />
+            <Route path="/agents" element={
+              <DashboardLayout>
+                <Agents />
               </DashboardLayout>
             } />
             
