@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -9,7 +8,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
@@ -22,107 +20,103 @@ import {
   Bot,
   BarChart3,
   Phone,
-  UserCheck,
+  BookOpen,
   Shield,
-  Clock,
-  FileText,
   Headphones,
-  Workflow,
-  Zap
+  Zap,
+  FileText,
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
-// Menu items baseados no tipo de usuário
-const getMenuItems = (userType: "admin" | "company" | "employee") => {
-  const baseItems = [
-    { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  ];
-
-  if (userType === "admin") {
-    return [
-      ...baseItems,
-      { title: "Empresas", url: "/admin/companies", icon: Building2 },
-      { title: "Usuários", url: "/admin/users", icon: Users },
-      { title: "Números WhatsApp", url: "/admin/numbers", icon: Phone },
-      { title: "Relatórios Globais", url: "/admin/reports", icon: BarChart3 },
-      { title: "Configurações", url: "/admin/settings", icon: Settings },
-    ];
-  }
-
-  if (userType === "company") {
-    return [
-      ...baseItems,
-      { title: "Conversas", url: "/chat", icon: MessageSquare },
-      { title: "Setores", url: "/sectors", icon: Building2 },
-      { title: "Atendentes", url: "/agents", icon: Users },
-      { title: "WhatsApp", url: "/admin/numbers", icon: Phone },
-      { title: "Relatórios", url: "/reports", icon: BarChart3 },
-      { title: "Configurações", url: "/settings", icon: Settings },
-    ];
-  }
-
-  // Employee
-  return [
-    ...baseItems,
-    { title: "Meus Atendimentos", url: "/employee/chats", icon: MessageSquare },
-    { title: "Meu Setor", url: "/employee/department", icon: Building2 },
-    { title: "Relatórios", url: "/employee/reports", icon: FileText },
-    { title: "Perfil", url: "/employee/profile", icon: UserCheck },
-  ];
-};
+interface MenuItem {
+  title: string;
+  url: string;
+  icon: React.ElementType;
+}
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
-  const currentPath = location.pathname;
+  const { profile, isSuperAdmin, isTenantAdmin, isAgent, roles } = useAuth();
 
-  // Detectar tipo de usuário baseado na URL (em produção viria da autenticação)
-  const getUserType = (): "admin" | "company" | "employee" => {
-    if (currentPath.includes("/admin")) return "admin";
-    if (currentPath.includes("/company")) return "company";
-    return "employee";
-  };
-
-  const userType = getUserType();
-  const menuItems = getMenuItems(userType);
-
-  const getUserBadge = () => {
-    switch (userType) {
-      case "admin":
-        return <Badge variant="destructive" className="text-xs">Admin Master</Badge>;
-      case "company":
-        return <Badge variant="default" className="text-xs">Empresa</Badge>;
-      default:
-        return <Badge variant="secondary" className="text-xs">Funcionário</Badge>;
+  const getMenuItems = (): MenuItem[] => {
+    if (isSuperAdmin) {
+      return [
+        { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+        { title: "Inbox", url: "/inbox", icon: MessageSquare },
+        { title: "Tenants", url: "/admin/tenants", icon: Building2 },
+        { title: "Usuários", url: "/admin/users", icon: Users },
+        { title: "Planos", url: "/admin/plans", icon: FileText },
+        { title: "Agentes IA", url: "/agents", icon: Bot },
+        { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
+        { title: "Relatórios", url: "/reports", icon: BarChart3 },
+        { title: "Logs", url: "/admin/logs", icon: Shield },
+        { title: "Configurações", url: "/settings", icon: Settings },
+      ];
     }
+
+    if (isTenantAdmin) {
+      return [
+        { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+        { title: "Inbox", url: "/inbox", icon: MessageSquare },
+        { title: "Agentes IA", url: "/agents", icon: Bot },
+        { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
+        { title: "Departamentos", url: "/departments", icon: Building2 },
+        { title: "Equipe", url: "/team", icon: Users },
+        { title: "Relatórios", url: "/reports", icon: BarChart3 },
+        { title: "Configurações", url: "/settings", icon: Settings },
+      ];
+    }
+
+    if (isAgent) {
+      return [
+        { title: "Inbox", url: "/inbox", icon: MessageSquare },
+        { title: "Meus Atendimentos", url: "/my-conversations", icon: Headphones },
+        { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+      ];
+    }
+
+    // Viewer
+    return [
+      { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+      { title: "Relatórios", url: "/reports", icon: BarChart3 },
+    ];
   };
 
-  const isActive = (path: string) => currentPath === path || currentPath.startsWith(path + "/");
+  const menuItems = getMenuItems();
+
+  const getRoleBadge = () => {
+    if (isSuperAdmin) return <Badge variant="destructive" className="text-xs">Super Admin</Badge>;
+    if (isTenantAdmin) return <Badge variant="default" className="text-xs">Admin</Badge>;
+    if (isAgent) return <Badge variant="secondary" className="text-xs">Agente</Badge>;
+    return <Badge variant="outline" className="text-xs">Viewer</Badge>;
+  };
+
+  const isActive = (path: string) =>
+    location.pathname === path || location.pathname.startsWith(path + "/");
+
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
-    isActive 
-      ? "bg-sidebar-accent text-sidebar-primary font-medium border-r-2 border-sidebar-primary" 
+    isActive
+      ? "bg-sidebar-accent text-sidebar-primary font-medium border-r-2 border-sidebar-primary"
       : "hover:bg-sidebar-accent/50 text-sidebar-foreground";
 
   return (
-    <Sidebar
-      className="border-r border-sidebar-border bg-sidebar transition-all duration-200"
-      collapsible="icon"
-    >
+    <Sidebar className="border-r border-sidebar-border bg-sidebar transition-all duration-200" collapsible="icon">
       <SidebarContent>
-        {/* Header com logo */}
         <div className={`p-4 border-b border-sidebar-border ${collapsed ? "px-2" : ""}`}>
           <div className="flex items-center gap-2">
             <MessageSquare className="h-8 w-8 text-sidebar-primary flex-shrink-0" />
             {!collapsed && (
               <div className="flex flex-col">
-                <span className="font-bold text-sidebar-foreground">WabaFlow</span>
-                <span className="text-xs text-sidebar-foreground/70">Connect</span>
+                <span className="font-bold text-sidebar-foreground">AgentFlow</span>
+                <span className="text-xs text-sidebar-foreground/70">SaaS</span>
               </div>
             )}
           </div>
           {!collapsed && (
             <div className="mt-2 flex items-center gap-2">
-              {getUserBadge()}
+              {getRoleBadge()}
               <Badge variant="outline" className="text-xs bg-sidebar-accent/20">
                 <Zap className="h-3 w-3 mr-1" />
                 Online
@@ -131,11 +125,10 @@ export function AppSidebar() {
           )}
         </div>
 
-        {/* Menu Principal */}
         <SidebarGroup className="px-2">
           {!collapsed && (
             <SidebarGroupLabel className="text-sidebar-foreground/70 font-medium">
-              Menu Principal
+              Menu
             </SidebarGroupLabel>
           )}
           <SidebarGroupContent>
@@ -154,20 +147,15 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Seção de Status/Info */}
-        {!collapsed && (
+        {!collapsed && profile && (
           <div className="mt-auto p-4 border-t border-sidebar-border">
             <div className="bg-sidebar-accent/20 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <Headphones className="h-4 w-4 text-sidebar-primary" />
-                <span className="text-sm font-medium text-sidebar-foreground">
-                  Status: Ativo
-                </span>
-              </div>
-              <div className="text-xs text-sidebar-foreground/70 space-y-1">
-                <div>Conversas hoje: 12</div>
-                <div>Tempo médio: 3m 45s</div>
-              </div>
+              <p className="text-sm font-medium text-sidebar-foreground truncate">
+                {profile.full_name || profile.email}
+              </p>
+              <p className="text-xs text-sidebar-foreground/70 truncate">
+                {profile.email}
+              </p>
             </div>
           </div>
         )}

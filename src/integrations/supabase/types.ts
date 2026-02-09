@@ -14,16 +14,662 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      agents_config: {
+        Row: {
+          blocked_keywords: string[] | null
+          created_at: string
+          department_id: string | null
+          few_shot_examples: Json | null
+          id: string
+          is_active: boolean | null
+          model: string | null
+          name: string
+          persona: string | null
+          system_prompt: string | null
+          temperature: number | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          blocked_keywords?: string[] | null
+          created_at?: string
+          department_id?: string | null
+          few_shot_examples?: Json | null
+          id?: string
+          is_active?: boolean | null
+          model?: string | null
+          name: string
+          persona?: string | null
+          system_prompt?: string | null
+          temperature?: number | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          blocked_keywords?: string[] | null
+          created_at?: string
+          department_id?: string | null
+          few_shot_examples?: Json | null
+          id?: string
+          is_active?: boolean | null
+          model?: string | null
+          name?: string
+          persona?: string | null
+          system_prompt?: string | null
+          temperature?: number | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agents_config_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agents_config_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_hours: {
+        Row: {
+          config: Json
+          created_at: string
+          id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          id?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_hours_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contacts: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string | null
+          id: string
+          metadata: Json | null
+          name: string | null
+          phone: string
+          tags: string[] | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          metadata?: Json | null
+          name?: string | null
+          phone: string
+          tags?: string[] | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          metadata?: Json | null
+          name?: string | null
+          phone?: string
+          tags?: string[] | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversations: {
+        Row: {
+          ai_paused: boolean
+          assigned_agent_id: string | null
+          closed_at: string | null
+          contact_id: string
+          created_at: string
+          deal_value: number | null
+          department_id: string | null
+          id: string
+          last_message_at: string | null
+          next_meeting: string | null
+          sales_status: Database["public"]["Enums"]["sales_status"]
+          status: Database["public"]["Enums"]["conversation_status"]
+          tags: string[] | null
+          tenant_id: string
+          unread_count: number
+          updated_at: string
+          whatsapp_connection_id: string | null
+        }
+        Insert: {
+          ai_paused?: boolean
+          assigned_agent_id?: string | null
+          closed_at?: string | null
+          contact_id: string
+          created_at?: string
+          deal_value?: number | null
+          department_id?: string | null
+          id?: string
+          last_message_at?: string | null
+          next_meeting?: string | null
+          sales_status?: Database["public"]["Enums"]["sales_status"]
+          status?: Database["public"]["Enums"]["conversation_status"]
+          tags?: string[] | null
+          tenant_id: string
+          unread_count?: number
+          updated_at?: string
+          whatsapp_connection_id?: string | null
+        }
+        Update: {
+          ai_paused?: boolean
+          assigned_agent_id?: string | null
+          closed_at?: string | null
+          contact_id?: string
+          created_at?: string
+          deal_value?: number | null
+          department_id?: string | null
+          id?: string
+          last_message_at?: string | null
+          next_meeting?: string | null
+          sales_status?: Database["public"]["Enums"]["sales_status"]
+          status?: Database["public"]["Enums"]["conversation_status"]
+          tags?: string[] | null
+          tenant_id?: string
+          unread_count?: number
+          updated_at?: string
+          whatsapp_connection_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_whatsapp_connection_id_fkey"
+            columns: ["whatsapp_connection_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      departments: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "departments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_items: {
+        Row: {
+          content: string | null
+          created_at: string
+          file_url: string | null
+          id: string
+          indexed_at: string | null
+          source_url: string | null
+          status: Database["public"]["Enums"]["knowledge_status"]
+          tenant_id: string
+          title: string
+          type: Database["public"]["Enums"]["knowledge_type"]
+          updated_at: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          file_url?: string | null
+          id?: string
+          indexed_at?: string | null
+          source_url?: string | null
+          status?: Database["public"]["Enums"]["knowledge_status"]
+          tenant_id: string
+          title: string
+          type?: Database["public"]["Enums"]["knowledge_type"]
+          updated_at?: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          file_url?: string | null
+          id?: string
+          indexed_at?: string | null
+          source_url?: string | null
+          status?: Database["public"]["Enums"]["knowledge_status"]
+          tenant_id?: string
+          title?: string
+          type?: Database["public"]["Enums"]["knowledge_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          author_id: string | null
+          content: string | null
+          conversation_id: string
+          created_at: string
+          delivery_status: string | null
+          id: string
+          is_internal: boolean
+          media_mime_type: string | null
+          media_url: string | null
+          message_type: Database["public"]["Enums"]["message_type"]
+          metadata: Json | null
+          role: Database["public"]["Enums"]["message_role"]
+          zapi_message_id: string | null
+        }
+        Insert: {
+          author_id?: string | null
+          content?: string | null
+          conversation_id: string
+          created_at?: string
+          delivery_status?: string | null
+          id?: string
+          is_internal?: boolean
+          media_mime_type?: string | null
+          media_url?: string | null
+          message_type?: Database["public"]["Enums"]["message_type"]
+          metadata?: Json | null
+          role?: Database["public"]["Enums"]["message_role"]
+          zapi_message_id?: string | null
+        }
+        Update: {
+          author_id?: string | null
+          content?: string | null
+          conversation_id?: string
+          created_at?: string
+          delivery_status?: string | null
+          id?: string
+          is_internal?: boolean
+          media_mime_type?: string | null
+          media_url?: string | null
+          message_type?: Database["public"]["Enums"]["message_type"]
+          metadata?: Json | null
+          role?: Database["public"]["Enums"]["message_role"]
+          zapi_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_configs: {
+        Row: {
+          created_at: string
+          features: Json | null
+          id: string
+          max_agents: number
+          max_departments: number
+          max_knowledge_items: number
+          max_messages_per_month: number
+          name: string
+          tier: Database["public"]["Enums"]["plan_tier"]
+        }
+        Insert: {
+          created_at?: string
+          features?: Json | null
+          id?: string
+          max_agents?: number
+          max_departments?: number
+          max_knowledge_items?: number
+          max_messages_per_month?: number
+          name: string
+          tier: Database["public"]["Enums"]["plan_tier"]
+        }
+        Update: {
+          created_at?: string
+          features?: Json | null
+          id?: string
+          max_agents?: number
+          max_departments?: number
+          max_knowledge_items?: number
+          max_messages_per_month?: number
+          name?: string
+          tier?: Database["public"]["Enums"]["plan_tier"]
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+          is_available: boolean | null
+          phone: string | null
+          tenant_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          is_available?: boolean | null
+          phone?: string | null
+          tenant_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          is_available?: boolean | null
+          phone?: string | null
+          tenant_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      system_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          id: string
+          ip_address: string | null
+          level: Database["public"]["Enums"]["log_level"]
+          tenant_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: string | null
+          level?: Database["public"]["Enums"]["log_level"]
+          tenant_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: string | null
+          level?: Database["public"]["Enums"]["log_level"]
+          tenant_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenants: {
+        Row: {
+          billing_cycle_start: string | null
+          created_at: string
+          id: string
+          messages_this_month: number
+          name: string
+          plan: Database["public"]["Enums"]["plan_tier"]
+          settings: Json | null
+          slug: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          billing_cycle_start?: string | null
+          created_at?: string
+          id?: string
+          messages_this_month?: number
+          name: string
+          plan?: Database["public"]["Enums"]["plan_tier"]
+          settings?: Json | null
+          slug?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          billing_cycle_start?: string | null
+          created_at?: string
+          id?: string
+          messages_this_month?: number
+          name?: string
+          plan?: Database["public"]["Enums"]["plan_tier"]
+          settings?: Json | null
+          slug?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          tenant_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          tenant_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          tenant_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_connections: {
+        Row: {
+          created_at: string
+          id: string
+          last_connected_at: string | null
+          name: string
+          phone_number: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          webhook_url: string | null
+          zapi_client_token: string | null
+          zapi_instance_id: string
+          zapi_token: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_connected_at?: string | null
+          name?: string
+          phone_number?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          webhook_url?: string | null
+          zapi_client_token?: string | null
+          zapi_instance_id: string
+          zapi_token: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_connected_at?: string | null
+          name?: string
+          phone_number?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          webhook_url?: string | null
+          zapi_client_token?: string | null
+          zapi_instance_id?: string
+          zapi_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_connections_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_tenant_id: { Args: never; Returns: string }
+      has_role: {
+        Args: { _role: Database["public"]["Enums"]["app_role"] }
+        Returns: boolean
+      }
+      has_role_in_tenant: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _tenant_id: string
+        }
+        Returns: boolean
+      }
+      is_tenant_member: { Args: { _tenant_id: string }; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "super_admin" | "tenant_admin" | "agent" | "viewer"
+      conversation_status: "open" | "waiting" | "closed" | "archived"
+      knowledge_status: "processing" | "indexed" | "error"
+      knowledge_type: "text" | "pdf" | "url"
+      log_level: "info" | "warn" | "error" | "critical"
+      message_role: "contact" | "agent" | "ai" | "system"
+      message_type:
+        | "text"
+        | "audio"
+        | "image"
+        | "document"
+        | "video"
+        | "sticker"
+        | "location"
+      plan_tier: "trial" | "free" | "pro" | "enterprise"
+      sales_status: "none" | "lead" | "negotiation" | "won" | "lost"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +796,24 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["super_admin", "tenant_admin", "agent", "viewer"],
+      conversation_status: ["open", "waiting", "closed", "archived"],
+      knowledge_status: ["processing", "indexed", "error"],
+      knowledge_type: ["text", "pdf", "url"],
+      log_level: ["info", "warn", "error", "critical"],
+      message_role: ["contact", "agent", "ai", "system"],
+      message_type: [
+        "text",
+        "audio",
+        "image",
+        "document",
+        "video",
+        "sticker",
+        "location",
+      ],
+      plan_tier: ["trial", "free", "pro", "enterprise"],
+      sales_status: ["none", "lead", "negotiation", "won", "lost"],
+    },
   },
 } as const
