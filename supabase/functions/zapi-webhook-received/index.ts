@@ -30,7 +30,7 @@ serve(async (req) => {
       .select("*")
       .eq("zapi_instance_id", instanceId)
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (!connection) {
       console.log("No connection found for instanceId:", instanceId);
@@ -64,21 +64,21 @@ serve(async (req) => {
       .select()
       .single();
 
+    let contactId: string;
     if (!contact) {
-      // If upsert fails (no unique constraint), try select then insert
-      const { data: existing } = await supabase.from("contacts").select("*").eq("phone", phone).eq("tenant_id", tenantId).single();
+      const { data: existing } = await supabase.from("contacts").select("*").eq("phone", phone).eq("tenant_id", tenantId).maybeSingle();
       if (!existing) {
         const { data: newContact } = await supabase.from("contacts").insert({ phone, tenant_id: tenantId, name: payload.senderName || null }).select().single();
         if (!newContact) {
           console.error("Failed to create contact");
           return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
         }
-        var contactId = newContact.id;
+        contactId = newContact.id;
       } else {
-        var contactId = existing.id;
+        contactId = existing.id;
       }
     } else {
-      var contactId = contact.id;
+      contactId = contact.id;
     }
 
     // Find or create conversation
@@ -90,7 +90,7 @@ serve(async (req) => {
       .in("status", ["open", "waiting"])
       .order("created_at", { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     let conversationId: string;
     if (existingConv) {
@@ -144,11 +144,147 @@ serve(async (req) => {
 
     console.log("Message stored for conversation:", conversationId);
 
-    // Check if AI should respond
+    // AI Auto-Response
     const conv = existingConv || (await supabase.from("conversations").select("*").eq("id", conversationId).single()).data;
-    if (conv && !conv.ai_paused && messageContent) {
-      console.log("AI response would be triggered here (not yet implemented)");
-      // TODO: Call AI gateway for auto-response
+    if (conv && !conv.ai_paused && messageContent && messageType === "text") {
+      console.log("Triggering AI auto-response for conversation:", conversationId);
+
+      try {
+        // Fetch agent config for this tenant
+        const { data: agentConfig } = await supabase
+          .from("agents_config")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .eq("is_active", true)
+          .limit(1)
+          .maybeSingle();
+
+        // Fetch recent conversation history for context (last 20 messages)
+        const { data: history } = await supabase
+          .from("messages")
+          .select("role, content")
+          .eq("conversation_id", conversationId)
+          .eq("is_internal", false)
+          .order("created_at", { ascending: true })
+          .limit(20);
+
+        // Fetch knowledge items for RAG context
+        const { data: knowledgeItems } = await supabase
+          .from("knowledge_items")
+          .select("content, title")
+          .eq("tenant_id", tenantId)
+          .eq("status", "indexed")
+          .limit(5);
+
+        const knowledgeContext = knowledgeItems?.map(k => `[${k.title}]: ${k.content}`).join("\n\n") || "";
+
+        const systemPrompt = agentConfig?.system_prompt || 
+          "Você é um assistente de atendimento via WhatsApp. Seja educado, conciso e útil. Responda em português.";
+        
+        const persona = agentConfig?.persona || "Assistente virtual amigável";
+        const model = agentConfig?.model || "google/gemini-3-flash-preview";
+        const temperature = agentConfig?.temperature ?? 0.7;
+        const blockedKeywords = agentConfig?.blocked_keywords || [];
+
+        // Check for blocked keywords in the incoming message
+        const hasBlockedKeyword = blockedKeywords.some((kw: string) => 
+          messageContent.toLowerCase().includes(kw.toLowerCase())
+        );
+
+        if (hasBlockedKeyword) {
+          console.log("Message contains blocked keyword, skipping AI response");
+        } else {
+          // Build messages array for AI
+          const aiMessages: Array<{role: string; content: string}> = [
+            { 
+              role: "system", 
+              content: `${systemPrompt}\n\nSua persona: ${persona}\n\n${knowledgeContext ? `Base de conhecimento:\n${knowledgeContext}\n\n` : ""}Regras:\n- Responda de forma concisa e direta, ideal para WhatsApp\n- Use no máximo 2-3 parágrafos curtos\n- Não use markdown formatado (negrito, itálico) pois WhatsApp tem formatação própria\n- Se não souber a resposta, diga que vai encaminhar para um atendente humano`
+            },
+          ];
+
+          // Add conversation history
+          if (history && history.length > 0) {
+            for (const msg of history) {
+              aiMessages.push({
+                role: msg.role === "contact" ? "user" : "assistant",
+                content: msg.content || "",
+              });
+            }
+          }
+
+          const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+          if (!LOVABLE_API_KEY) {
+            console.error("LOVABLE_API_KEY not configured, skipping AI response");
+          } else {
+            console.log("Calling AI gateway with model:", model, "messages:", aiMessages.length);
+
+            const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model,
+                messages: aiMessages,
+                temperature,
+                max_tokens: 500,
+              }),
+            });
+
+            if (!aiResponse.ok) {
+              const errText = await aiResponse.text();
+              console.error("AI gateway error:", aiResponse.status, errText);
+              if (aiResponse.status === 429) {
+                console.log("Rate limited, skipping AI response");
+              } else if (aiResponse.status === 402) {
+                console.log("Payment required, skipping AI response");
+              }
+            } else {
+              const aiData = await aiResponse.json();
+              const aiReply = aiData.choices?.[0]?.message?.content;
+
+              if (aiReply) {
+                console.log("AI reply:", aiReply.slice(0, 100));
+
+                // Store AI message in DB
+                await supabase.from("messages").insert({
+                  conversation_id: conversationId,
+                  content: aiReply,
+                  role: "ai",
+                  message_type: "text",
+                  delivery_status: "queued",
+                });
+
+                // Send via Z-API
+                const sendUrl = `https://api.z-api.io/instances/${connection.zapi_instance_id}/token/${connection.zapi_token}/send-text`;
+                const sendHeaders: Record<string, string> = { "Content-Type": "application/json" };
+                if (connection.zapi_client_token) sendHeaders["Client-Token"] = connection.zapi_client_token;
+
+                const sendResponse = await fetch(sendUrl, {
+                  method: "POST",
+                  headers: sendHeaders,
+                  body: JSON.stringify({ phone, message: aiReply }),
+                });
+
+                const sendData = await sendResponse.json();
+                console.log("Z-API send AI response:", JSON.stringify(sendData));
+
+                // Update message with Z-API ID
+                if (sendData.zapiMessageId || sendData.messageId) {
+                  await supabase.from("messages").update({
+                    zapi_message_id: sendData.zapiMessageId || sendData.messageId,
+                    delivery_status: "sent",
+                  }).eq("conversation_id", conversationId).eq("role", "ai").order("created_at", { ascending: false }).limit(1);
+                }
+              }
+            }
+          }
+        }
+      } catch (aiError) {
+        console.error("AI auto-response error:", aiError);
+        // Don't fail the webhook because of AI errors
+      }
     }
 
     return new Response(JSON.stringify({ ok: true }), {
