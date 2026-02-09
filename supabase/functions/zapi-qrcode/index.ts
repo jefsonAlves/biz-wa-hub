@@ -18,7 +18,15 @@ serve(async (req) => {
       });
     }
 
-    const url = `https://api.z-api.io/instances/${instance_id}/token/${token}/qr-code`;
+    // Clean instance_id - extract just the ID if user pasted full URL
+    let cleanInstanceId = instance_id.trim();
+    const urlMatch = cleanInstanceId.match(/instances\/([A-F0-9]+)/i);
+    if (urlMatch) {
+      cleanInstanceId = urlMatch[1];
+      console.log("Extracted instance ID from URL:", cleanInstanceId);
+    }
+
+    const url = `https://api.z-api.io/instances/${cleanInstanceId}/token/${token}/qr-code/image`;
     const headers: Record<string, string> = {};
     if (client_token) headers["Client-Token"] = client_token;
 

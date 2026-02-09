@@ -296,7 +296,8 @@ const Settings = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>Instance ID</Label>
-                  <Input value={instanceId} onChange={(e) => setInstanceId(e.target.value)} placeholder="Seu Instance ID" />
+                  <Input value={instanceId} onChange={(e) => setInstanceId(e.target.value)} placeholder="Ex: 3EE79997AC1371EE03F0A6D7BDC71B5D" />
+                  <p className="text-xs text-muted-foreground">Apenas o ID, não cole a URL completa</p>
                 </div>
                 <div className="space-y-2">
                   <Label>Token</Label>
