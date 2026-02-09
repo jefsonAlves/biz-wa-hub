@@ -33,6 +33,19 @@ const Settings = () => {
   const [clientToken, setClientToken] = useState("");
   const [testing, setTesting] = useState(false);
 
+  // Auto-extract Instance ID and Token from pasted Z-API URL
+  const handleZapiFieldPaste = (field: "instanceId" | "token" | "clientToken", value: string) => {
+    const urlMatch = value.match(/https?:\/\/api\.z-api\.io\/instances\/([A-F0-9]+)\/token\/([A-Za-z0-9]+)/i);
+    if (urlMatch) {
+      setInstanceId(urlMatch[1]);
+      setToken(urlMatch[2]);
+      return;
+    }
+    if (field === "instanceId") setInstanceId(value);
+    else if (field === "token") setToken(value);
+    else setClientToken(value);
+  };
+
   // QR Code state
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
@@ -162,10 +175,9 @@ const Settings = () => {
   };
 
   const startQrConnection = async () => {
-    // Save credentials first if not saved
     if (!connection) {
-      if (!instanceId || !token) {
-        toast({ title: "Preencha as credenciais", description: "Informe Instance ID e Token antes de conectar.", variant: "destructive" });
+      if (!instanceId || !token || !clientToken) {
+        toast({ title: "Preencha as credenciais", description: "Todos os 3 campos são obrigatórios.", variant: "destructive" });
         return;
       }
       await saveZapiMutation.mutateAsync();
@@ -295,27 +307,28 @@ const Settings = () => {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label>Instance ID</Label>
-                  <Input value={instanceId} onChange={(e) => setInstanceId(e.target.value)} placeholder="Ex: 3EE79997AC1371EE03F0A6D7BDC71B5D" />
-                  <p className="text-xs text-muted-foreground">Apenas o ID, não cole a URL completa</p>
+                  <Label>API da Instância <span className="text-destructive">*</span></Label>
+                  <Input value={clientToken} onChange={(e) => handleZapiFieldPaste("clientToken", e.target.value)} placeholder="Seu Client-Token" type="password" />
+                  <p className="text-xs text-muted-foreground">Header Client-Token — obrigatório</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Token</Label>
-                  <Input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Seu Token" type="password" />
+                  <Label>ID da Instância <span className="text-destructive">*</span></Label>
+                  <Input value={instanceId} onChange={(e) => handleZapiFieldPaste("instanceId", e.target.value)} placeholder="Ex: 3EE79997AC1371EE03F0A6D7BDC71B5D" />
+                  <p className="text-xs text-muted-foreground">Se colar a URL completa, os campos serão preenchidos automaticamente</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Client Token (opcional)</Label>
-                  <Input value={clientToken} onChange={(e) => setClientToken(e.target.value)} placeholder="Client Token" type="password" />
+                  <Label>Token da Instância <span className="text-destructive">*</span></Label>
+                  <Input value={token} onChange={(e) => handleZapiFieldPaste("token", e.target.value)} placeholder="Seu Token" type="password" />
                 </div>
               </div>
               <div className="flex gap-2 flex-wrap">
-                <Button onClick={() => saveZapiMutation.mutate()} disabled={!instanceId || !token || saveZapiMutation.isPending}>
+                <Button onClick={() => saveZapiMutation.mutate()} disabled={!instanceId || !token || !clientToken || saveZapiMutation.isPending}>
                   {saveZapiMutation.isPending ? "Salvando..." : "Salvar Credenciais"}
                 </Button>
-                <Button variant="outline" onClick={testConnection} disabled={!instanceId || !token || testing}>
+                <Button variant="outline" onClick={testConnection} disabled={!instanceId || !token || !clientToken || testing}>
                   {testing ? "Testando..." : "Testar Conexão"}
                 </Button>
-                <Button variant="outline" onClick={registerWebhooks} disabled={!instanceId || !token}>
+                <Button variant="outline" onClick={registerWebhooks} disabled={!instanceId || !token || !clientToken}>
                   Registrar Webhooks
                 </Button>
               </div>
