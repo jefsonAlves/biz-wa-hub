@@ -18,10 +18,18 @@ serve(async (req) => {
       });
     }
 
+    // Clean instance_id and token
+    let cleanInstanceId = instance_id.trim();
+    const idMatch = cleanInstanceId.match(/instances\/([A-F0-9]+)/i);
+    if (idMatch) cleanInstanceId = idMatch[1];
+    let cleanToken = token.trim();
+    const tkMatch = cleanToken.match(/token\/([A-Za-z0-9]+)/i);
+    if (tkMatch) cleanToken = tkMatch[1];
+
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (client_token) headers["Client-Token"] = client_token;
 
-    const baseUrl = `https://api.z-api.io/instances/${instance_id}/token/${token}`;
+    const baseUrl = `https://api.z-api.io/instances/${cleanInstanceId}/token/${cleanToken}`;
 
     // Register received webhook
     const receivedRes = await fetch(`${baseUrl}/update-webhook-received`, {

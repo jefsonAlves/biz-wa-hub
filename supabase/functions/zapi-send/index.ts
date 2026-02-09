@@ -58,7 +58,16 @@ serve(async (req) => {
     }
 
     const phone = conversation.contacts?.phone?.replace(/\D/g, "");
-    const zapiUrl = `https://api.z-api.io/instances/${connection.zapi_instance_id}/token/${connection.zapi_token}/send-text`;
+
+    // Clean instance_id
+    let cleanInstanceId = (connection.zapi_instance_id || "").trim();
+    const idMatch = cleanInstanceId.match(/instances\/([A-F0-9]+)/i);
+    if (idMatch) cleanInstanceId = idMatch[1];
+    let cleanToken = (connection.zapi_token || "").trim();
+    const tkMatch = cleanToken.match(/token\/([A-Za-z0-9]+)/i);
+    if (tkMatch) cleanToken = tkMatch[1];
+
+    const zapiUrl = `https://api.z-api.io/instances/${cleanInstanceId}/token/${cleanToken}/send-text`;
     const zapiHeaders: Record<string, string> = { "Content-Type": "application/json" };
     if (connection.zapi_client_token) zapiHeaders["Client-Token"] = connection.zapi_client_token;
 

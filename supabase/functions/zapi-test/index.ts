@@ -10,7 +10,6 @@ serve(async (req) => {
 
   try {
     const { instance_id, token, client_token } = await req.json();
-    console.log("Testing Z-API connection for instance:", instance_id);
 
     if (!instance_id || !token) {
       return new Response(JSON.stringify({ connected: false, error: "instance_id e token são obrigatórios" }), {
@@ -18,7 +17,19 @@ serve(async (req) => {
       });
     }
 
-    const url = `https://api.z-api.io/instances/${instance_id}/token/${token}/me`;
+    // Clean instance_id - extract just the ID if user pasted full URL
+    let cleanInstanceId = instance_id.trim();
+    const urlMatch = cleanInstanceId.match(/instances\/([A-F0-9]+)/i);
+    if (urlMatch) cleanInstanceId = urlMatch[1];
+
+    // Clean token from URL if needed
+    let cleanToken = token.trim();
+    const tokenMatch = cleanToken.match(/token\/([A-Za-z0-9]+)/i);
+    if (tokenMatch) cleanToken = tokenMatch[1];
+
+    console.log("Testing Z-API connection for instance:", cleanInstanceId);
+
+    const url = `https://api.z-api.io/instances/${cleanInstanceId}/token/${cleanToken}/me`;
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (client_token) headers["Client-Token"] = client_token;
 
