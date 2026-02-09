@@ -1,192 +1,145 @@
 
 
-# Reconstrucao Completa: AgentFlow SaaS - WhatsApp Multi-Tenant
+# Implementacao Completa: Paginas CRUD + Edge Functions Z-API + Fix Auth
 
-## Visao Geral
+## Problema Atual
 
-Reconstruir o projeto do zero como um SaaS multi-tenant de atendimento via WhatsApp com integracao Z-API real, autenticacao via Supabase, IA com Lovable AI, e painel completo.
+O sistema tem apenas a estrutura basica: banco de dados criado, pagina de auth e sidebar. Porem:
+- **Auth quebrado**: email confirmation esta ativo, impedindo login apos cadastro
+- **Todas as paginas sao placeholders** com texto "Em breve"
+- **Nenhuma edge function existe** - Z-API nao esta integrada
+- **Nenhum CRUD funcional** - departamentos, agentes, configuracoes sao stubs
 
 ---
 
-## Fase 0 - Infraestrutura (Lovable Cloud + Banco)
+## 1. Corrigir Autenticacao
 
-1. Ativar Lovable Cloud para obter Supabase integrado
-2. Criar schema completo do banco com migrations:
-   - `tenants` (empresa, plano, status, limites)
-   - `profiles` (nome, avatar, tenant_id)
-   - `user_roles` (user_id, role enum: super_admin/tenant_admin/agent/viewer)
-   - `departments` (nome, tenant_id)
-   - `agents_config` (persona IA, system_prompt, modelo, temperatura, moderacao)
-   - `whatsapp_connections` (instance_id, token, client_token, status, tenant_id) - tokens criptografados
-   - `contacts` (telefone normalizado, nome, tenant_id)
-   - `conversations` (contact_id, department_id, status, agent_id, ai_paused, sales_status, deal_value)
-   - `messages` (conversation_id, role, content, type, author_id, is_internal, audio_url)
-   - `knowledge_items` (tenant_id, title, type, content, status)
-   - `business_hours` (tenant_id, config JSON)
-   - `system_logs` (tenant_id, level, action, details)
-   - `plan_configs` (tier, limits)
-3. RLS policies usando funcao `has_role()` para seguranca multi-tenant
-4. Storage bucket para midias (audio, imagens, PDFs)
+- Habilitar auto-confirm de email no Supabase Auth para que usuarios possam logar imediatamente apos cadastro
+- Criar um tenant automaticamente no signup (trigger ou logica no frontend) para que novos usuarios tenham tenant_id
+- Atribuir role `tenant_admin` automaticamente ao primeiro usuario de um tenant
 
-## Fase 1 - Autenticacao e RBAC
+## 2. Paginas CRUD Completas
 
-1. Remover sistema de auth simulado (`src/lib/auth.ts` com senhas hardcoded)
-2. Implementar auth real via Supabase Auth:
-   - Pagina `/auth` com login e cadastro (email/senha)
-   - Redirect automatico pos-login baseado na role
-   - Listener `onAuthStateChange` para sessao persistente
-3. Roles via tabela `user_roles` (nao no perfil):
-   - super_admin: acesso total
-   - tenant_admin: gerencia sua empresa
-   - agent: inbox e respostas
-   - viewer: somente leitura
-4. Componente `ProtectedRoute` que valida role server-side
+### 2.1 Departamentos (`/departments`)
+- Lista de departamentos do tenant com tabela
+- Dialog para criar/editar departamento (nome, descricao)
+- Botao de excluir com confirmacao
+- Dados persistidos via Supabase (`departments` table)
 
-## Fase 2 - Layout e Navegacao
+### 2.2 Agentes IA (`/agents`)
+- Lista de agentes com cards ou tabela
+- Formulario completo: nome, persona, system_prompt, modelo (select com opcoes), temperatura (slider), few-shot examples (textarea JSON), keywords bloqueadas (tags input)
+- Toggle ativo/inativo
+- Vinculacao opcional com departamento
+- Dados persistidos via Supabase (`agents_config` table)
 
-1. Limpar todas as paginas atuais (Dashboard, Chat, Sectors, Agents, admin/*)
-2. Reconstruir sidebar dinamica baseada na role do usuario autenticado:
-   - Super Admin: Dashboard global, Tenants, Planos, Logs, Configuracoes
-   - Tenant Admin: Dashboard, Inbox, Agentes IA, Base de Conhecimento, Departamentos, Configuracoes (Z-API, horarios), Relatorios
-   - Agent: Inbox (filtrado), Meus Atendimentos
-   - Viewer: Dashboard (readonly), Relatorios
-3. Header com info do usuario, notificacoes, logout
+### 2.3 Base de Conhecimento (`/knowledge`)
+- Lista de itens com status (processing/indexed)
+- Upload de texto (textarea), URL, ou arquivo PDF
+- Armazenamento de arquivos no bucket `media`
+- Dados persistidos via Supabase (`knowledge_items` table)
 
-## Fase 3 - Paginas Principais (com dados reais persistidos)
+### 2.4 Configuracoes (`/settings`)
+- **Aba Z-API**: campos para instance_id, token, client_token + botao "Testar Conexao"
+- **Aba Horarios**: configuracao de dias/horarios + mensagem fora do expediente
+- **Aba Geral**: nome da empresa, configuracoes do tenant
+- Dados persistidos via Supabase (`whatsapp_connections`, `business_hours`, `tenants`)
 
-### Dashboard
-- Graficos de atendimentos por departamento (Recharts)
-- Metricas: volume, tempo medio de resposta, conversoes
-- Cards de status: conversas ativas, em espera, fechadas
+### 2.5 Equipe (`/team`)
+- Lista de membros do tenant com roles
+- Convidar novo membro (email + role)
+- Alterar role de membros existentes
 
-### Inbox (Conversas WhatsApp)
-- Lista de conversas com busca, filtros (status, departamento, agente)
-- Chat em tempo real com Supabase Realtime
-- Identificacao do atendente em cada mensagem
-- Notas internas (nao enviadas ao WhatsApp)
-- Botoes: Assumir conversa, Pausar/Retomar IA, Transferir departamento
-- Suporte a audio, imagens, PDFs (storage)
-- Tags e status de vendas (lead/negotiation/won/lost)
+### 2.6 Inbox (`/inbox`)  
+- Lista de conversas do tenant (lado esquerdo)
+- Painel de chat (lado direito) com mensagens em tempo real
+- Botoes: Assumir, Pausar/Retomar IA, Transferir departamento
+- Suporte a notas internas
+- Realtime via Supabase subscriptions
 
-### Agentes IA
-- CRUD de agentes com: nome, persona, system_prompt, modelo, temperatura
-- Few-shot examples, moderacao (keywords bloqueadas)
-- Toggle ativo/inativo por agente
-- Configuracao de voz (futuro)
+### 2.7 Dashboard (`/dashboard`)
+- Cards com metricas reais do banco (count de conversas, contatos, mensagens)
+- Grafico de mensagens por dia (Recharts)
 
-### Base de Conhecimento
-- Upload de texto, PDF, URL
-- Status de indexacao (processing/indexed)
-- Usado como contexto RAG pela IA
+## 3. Edge Functions Z-API
 
-### Departamentos
-- CRUD de departamentos por tenant
-- Vinculacao de agentes e atendentes
+### 3.1 `zapi-webhook-received` (publica, sem JWT)
+- Recebe POST do webhook Z-API `on-message-received`
+- Identifica tenant pelo `instanceId` no payload
+- Normaliza telefone, faz upsert do contato
+- Cria ou encontra conversa existente
+- Insere mensagem no banco
+- Baixa midia (se houver) para o bucket `media`
+- Dispara resposta IA se `ai_paused = false`
 
-### Configuracoes
-- Conexao Z-API (instance_id, token, client_token)
-- Teste de conexao (GET /me na Z-API)
-- Horarios comerciais com mensagem fora do expediente
-- Moderacao global
+### 3.2 `zapi-webhook-sent` (publica, sem JWT)
+- Recebe delivery status do Z-API
+- Atualiza `delivery_status` da mensagem no banco
 
-### Relatorios
-- Volume de mensagens por periodo
-- Tempo de primeira resposta e resolucao
-- Ranking por agente/departamento
-- Conversoes e valores de deals
+### 3.3 `zapi-send` (autenticada)
+- Recebe conversation_id + conteudo
+- Busca credenciais Z-API do tenant
+- Envia via API Z-API (text/audio/document)
+- Registra mensagem no banco com status "queued"
 
-## Fase 4 - Integracao Z-API (Edge Functions)
+### 3.4 `zapi-test` (autenticada)
+- Recebe instance_id, token, client_token
+- Faz GET na Z-API `/me` para validar credenciais
+- Retorna status da conexao
 
-1. **Edge Function: `zapi-webhook-received`** (public, sem JWT)
-   - Recebe webhook `on-message-received`
-   - Identifica tenant pela instance_id
-   - Normaliza telefone, upsert contato
-   - Cria/encontra conversation
-   - Insere message no banco
-   - Baixa midia para storage (antes de expirar)
-   - Dispara IA se nao pausada
+### 3.5 `zapi-register-webhooks` (autenticada)
+- Registra URLs de webhook na Z-API para o tenant
+- Configura received, sent e connected webhooks
 
-2. **Edge Function: `zapi-webhook-sent`** (public)
-   - Recebe delivery status
-   - Atualiza status da mensagem
+## 4. Paginas Admin (Super Admin)
 
-3. **Edge Function: `zapi-send`** (autenticada)
-   - Envia mensagem via Z-API
-   - Registra no banco com status "queued"
+### 4.1 Tenants (`/admin/tenants`)
+- Lista de todos os tenants com plano, status, contagem de mensagens
+- Editar plano/status de um tenant
 
-4. **Edge Function: `zapi-test`** (autenticada)
-   - Testa credenciais Z-API (GET /me)
+### 4.2 Logs (`/admin/logs`)
+- Tabela de system_logs com filtros por level, tenant, acao
 
-5. **Edge Function: `zapi-register-webhooks`** (autenticada)
-   - Registra URLs de webhook na Z-API
-
-## Fase 5 - Motor de IA (Lovable AI Gateway)
-
-1. **Edge Function: `ai-chat`**
-   - Recebe mensagem + contexto da conversa
-   - Carrega system_prompt do agente configurado
-   - Busca RAG na base de conhecimento
-   - Chama Lovable AI Gateway (google/gemini-3-flash-preview)
-   - Guardrails: detecta dados sensiveis, abre handoff
-   - Retorna resposta (streaming ou nao)
-
-2. **Edge Function: `ai-suggest`** (Copiloto)
-   - Gera sugestao de resposta para o atendente humano
-   - Nao envia automaticamente
-
-## Fase 6 - Super Admin
-
-- Dashboard global com metricas de todos os tenants
-- CRUD de tenants com planos e status
-- Logs de sistema com filtros
-- Gerenciamento de planos e limites
-- Modo "impersonar" tenant (visualizar como tenant_admin)
-
-## Fase 7 - Metering e Limites
-
-- Contagem de mensagens por tenant/mes
-- Verificacao de limites antes de enviar/receber
-- Banner de upgrade quando atingir limite
-- Webhook interno para atualizacao de plano
+### 4.3 Planos (`/admin/plans`)
+- Lista de plan_configs com edicao de limites
 
 ---
 
 ## Detalhes Tecnicos
 
-### Stack
-- Frontend: React + Vite + TypeScript + Tailwind (stack Lovable)
-- Backend: Supabase (Lovable Cloud) + Edge Functions (Deno)
-- Banco: PostgreSQL via Supabase
-- IA: Lovable AI Gateway
-- Realtime: Supabase Realtime para inbox
-- Storage: Supabase Storage para midias
-
-### Seguranca
-- Tokens Z-API armazenados como secrets no Supabase
-- RLS em todas as tabelas com isolamento por tenant
-- Funcao `has_role()` SECURITY DEFINER para evitar recursao
-- Rate limiting nos webhooks publicos
-- Auditoria de acoes criticas
-
-### Arquivos a Remover/Reescrever
-- `src/lib/auth.ts` (auth simulado com senhas hardcoded - REMOVER)
-- Todas as paginas atuais serao reescritas com dados reais
-- `src/components/AppSidebar.tsx` - reescrever com roles reais
-
 ### Ordem de Implementacao
-1. Lovable Cloud + migrations do banco + RLS
-2. Auth real + roles + pagina /auth
-3. Layout + sidebar dinamica
-4. CRUD de departamentos e funcionarios
-5. Inbox basico com dados do banco
-6. Edge functions Z-API (webhooks + envio)
-7. Motor de IA
-8. Relatorios e metering
-9. Super Admin panel
+1. Fix auth (auto-confirm + auto-create tenant/role)
+2. Migration para trigger de auto-tenant no signup
+3. Paginas CRUD: Departamentos, Agentes, Knowledge, Settings, Team
+4. Edge Functions: zapi-test, zapi-send, zapi-webhook-received, zapi-webhook-sent, zapi-register-webhooks
+5. Inbox com realtime
+6. Dashboard com metricas reais
+7. Paginas admin
 
----
+### Arquivos a Criar
+- `src/pages/Departments.tsx` - CRUD departamentos
+- `src/pages/AgentsConfig.tsx` - CRUD agentes IA
+- `src/pages/Knowledge.tsx` - CRUD base de conhecimento
+- `src/pages/Settings.tsx` - Configuracoes Z-API + horarios
+- `src/pages/Team.tsx` - Gerenciamento de equipe
+- `src/pages/Inbox.tsx` - Inbox com chat realtime
+- `src/pages/AdminTenants.tsx` - Gestao de tenants
+- `src/pages/AdminLogs.tsx` - Logs do sistema
+- `src/pages/AdminPlans.tsx` - Gestao de planos
+- `supabase/functions/zapi-webhook-received/index.ts`
+- `supabase/functions/zapi-webhook-sent/index.ts`
+- `supabase/functions/zapi-send/index.ts`
+- `supabase/functions/zapi-test/index.ts`
+- `supabase/functions/zapi-register-webhooks/index.ts`
 
-## Secrets Necessarios (serao solicitados na implementacao)
-- Credenciais Z-API (instance_id, token, client_token) - armazenados como Supabase secrets
-- LOVABLE_API_KEY - ja pre-configurado automaticamente
+### Arquivos a Modificar
+- `src/App.tsx` - Substituir stubs pelas paginas reais
+- `supabase/config.toml` - Adicionar configuracao das edge functions
+- Migration SQL para trigger de auto-criacao de tenant + role no signup
+
+### Stack das Edge Functions
+- Deno runtime (padrao Supabase)
+- Supabase client com service_role_key para operacoes admin
+- CORS headers padrao
+- Logging detalhado
 
