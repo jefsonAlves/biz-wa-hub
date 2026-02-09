@@ -9,6 +9,15 @@ import { DashboardLayout } from "@/layouts/DashboardLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import Departments from "./pages/Departments";
+import AgentsConfig from "./pages/AgentsConfig";
+import Knowledge from "./pages/Knowledge";
+import Settings from "./pages/Settings";
+import Team from "./pages/Team";
+import Inbox from "./pages/Inbox";
+import AdminTenants from "./pages/AdminTenants";
+import AdminLogs from "./pages/AdminLogs";
+import AdminPlans from "./pages/AdminPlans";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,140 +31,26 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <Routes>
-              {/* Public routes */}
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/login" element={<Navigate to="/auth" replace />} />
               <Route path="/register" element={<Navigate to="/auth" replace />} />
 
-              {/* Protected routes */}
-              <Route path="/dashboard" element={
-                <ProtectedRoute>
-                  <DashboardLayout><Dashboard /></DashboardLayout>
-                </ProtectedRoute>
-              } />
-              <Route path="/inbox" element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <div className="text-center py-20 text-muted-foreground">
-                      <h2 className="text-2xl font-bold mb-2">Inbox</h2>
-                      <p>Em breve: conversas em tempo real via WhatsApp</p>
-                    </div>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } />
-              <Route path="/agents" element={
-                <ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}>
-                  <DashboardLayout>
-                    <div className="text-center py-20 text-muted-foreground">
-                      <h2 className="text-2xl font-bold mb-2">Agentes IA</h2>
-                      <p>Em breve: configure personas e prompts de IA</p>
-                    </div>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } />
-              <Route path="/knowledge" element={
-                <ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}>
-                  <DashboardLayout>
-                    <div className="text-center py-20 text-muted-foreground">
-                      <h2 className="text-2xl font-bold mb-2">Base de Conhecimento</h2>
-                      <p>Em breve: upload de documentos e RAG</p>
-                    </div>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } />
-              <Route path="/departments" element={
-                <ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}>
-                  <DashboardLayout>
-                    <div className="text-center py-20 text-muted-foreground">
-                      <h2 className="text-2xl font-bold mb-2">Departamentos</h2>
-                      <p>Em breve: gerencie departamentos</p>
-                    </div>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } />
-              <Route path="/team" element={
-                <ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}>
-                  <DashboardLayout>
-                    <div className="text-center py-20 text-muted-foreground">
-                      <h2 className="text-2xl font-bold mb-2">Equipe</h2>
-                      <p>Em breve: gerencie membros da equipe</p>
-                    </div>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } />
-              <Route path="/reports" element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <div className="text-center py-20 text-muted-foreground">
-                      <h2 className="text-2xl font-bold mb-2">Relatórios</h2>
-                      <p>Em breve: métricas e analytics</p>
-                    </div>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } />
-              <Route path="/settings" element={
-                <ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}>
-                  <DashboardLayout>
-                    <div className="text-center py-20 text-muted-foreground">
-                      <h2 className="text-2xl font-bold mb-2">Configurações</h2>
-                      <p>Em breve: Z-API, horários, moderação</p>
-                    </div>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } />
-              <Route path="/my-conversations" element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <div className="text-center py-20 text-muted-foreground">
-                      <h2 className="text-2xl font-bold mb-2">Meus Atendimentos</h2>
-                      <p>Em breve: suas conversas atribuídas</p>
-                    </div>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } />
+              <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout><Dashboard /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/inbox" element={<ProtectedRoute><DashboardLayout><Inbox /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/departments" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Departments /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/agents" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><AgentsConfig /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/knowledge" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Knowledge /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/settings" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Settings /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/team" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Team /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/reports" element={<ProtectedRoute><DashboardLayout><Dashboard /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/my-conversations" element={<ProtectedRoute><DashboardLayout><Inbox /></DashboardLayout></ProtectedRoute>} />
 
               {/* Admin routes */}
-              <Route path="/admin/tenants" element={
-                <ProtectedRoute requiredRoles={["super_admin"]}>
-                  <DashboardLayout>
-                    <div className="text-center py-20 text-muted-foreground">
-                      <h2 className="text-2xl font-bold mb-2">Tenants</h2>
-                      <p>Em breve: gerenciamento de empresas</p>
-                    </div>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } />
-              <Route path="/admin/users" element={
-                <ProtectedRoute requiredRoles={["super_admin"]}>
-                  <DashboardLayout>
-                    <div className="text-center py-20 text-muted-foreground">
-                      <h2 className="text-2xl font-bold mb-2">Usuários</h2>
-                      <p>Em breve: gerenciamento de usuários</p>
-                    </div>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } />
-              <Route path="/admin/plans" element={
-                <ProtectedRoute requiredRoles={["super_admin"]}>
-                  <DashboardLayout>
-                    <div className="text-center py-20 text-muted-foreground">
-                      <h2 className="text-2xl font-bold mb-2">Planos</h2>
-                      <p>Em breve: gerenciamento de planos</p>
-                    </div>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } />
-              <Route path="/admin/logs" element={
-                <ProtectedRoute requiredRoles={["super_admin"]}>
-                  <DashboardLayout>
-                    <div className="text-center py-20 text-muted-foreground">
-                      <h2 className="text-2xl font-bold mb-2">Logs do Sistema</h2>
-                      <p>Em breve: auditoria e logs</p>
-                    </div>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } />
+              <Route path="/admin/tenants" element={<ProtectedRoute requiredRoles={["super_admin"]}><DashboardLayout><AdminTenants /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/admin/users" element={<ProtectedRoute requiredRoles={["super_admin"]}><DashboardLayout><AdminTenants /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/admin/plans" element={<ProtectedRoute requiredRoles={["super_admin"]}><DashboardLayout><AdminPlans /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/admin/logs" element={<ProtectedRoute requiredRoles={["super_admin"]}><DashboardLayout><AdminLogs /></DashboardLayout></ProtectedRoute>} />
 
               {/* Legacy redirects */}
               <Route path="/admin/dashboard" element={<Navigate to="/dashboard" replace />} />

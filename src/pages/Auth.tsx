@@ -57,9 +57,9 @@ const Auth = () => {
         } else {
           toast({
             title: "Cadastro realizado!",
-            description: "Verifique seu email para confirmar sua conta.",
+            description: "Bem-vindo ao AgentFlow!",
           });
-          setIsLogin(true);
+          navigate("/dashboard");
         }
       }
     } catch (error) {
