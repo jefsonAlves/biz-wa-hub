@@ -6,6 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const GREEN_API_URL = "https://api.green-api.com";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -15,7 +17,6 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Auth check
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
@@ -23,7 +24,7 @@ serve(async (req) => {
 
     const { data: { user }, error: authError } = await createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || Deno.env.get("SUPABASE_URL")!.includes("supabase") ? Deno.env.get("SUPABASE_PUBLISHABLE_KEY")! : "",
+      Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
     ).auth.getUser();
 
@@ -34,7 +35,6 @@ serve(async (req) => {
     const { conversation_id, content, type = "text" } = await req.json();
     console.log("Sending message for conversation:", conversation_id);
 
-    // Get conversation with tenant info
     const { data: conversation, error: convError } = await supabase
       .from("conversations")
       .select("*, contacts(phone)")
@@ -45,7 +45,6 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Conversa não encontrada" }), { status: 404, headers: corsHeaders });
     }
 
-    // Get Z-API credentials
     const { data: connection } = await supabase
       .from("whatsapp_connections")
       .select("*")
@@ -54,22 +53,16 @@ serve(async (req) => {
       .single();
 
     if (!connection) {
-      return new Response(JSON.stringify({ error: "Z-API não configurado" }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "GREEN-API não configurado" }), { status: 400, headers: corsHeaders });
     }
 
     const phone = conversation.contacts?.phone?.replace(/\D/g, "");
+    const chatId = `${phone}@c.us`;
 
-    // Clean instance_id
-    let cleanInstanceId = (connection.zapi_instance_id || "").trim();
-    const idMatch = cleanInstanceId.match(/instances\/([A-F0-9]+)/i);
-    if (idMatch) cleanInstanceId = idMatch[1];
-    let cleanToken = (connection.zapi_token || "").trim();
-    const tkMatch = cleanToken.match(/token\/([A-Za-z0-9]+)/i);
-    if (tkMatch) cleanToken = tkMatch[1];
+    const instanceId = connection.zapi_instance_id;
+    const apiToken = connection.zapi_token;
 
-    const zapiUrl = `https://api.z-api.io/instances/${cleanInstanceId}/token/${cleanToken}/send-text`;
-    const zapiHeaders: Record<string, string> = { "Content-Type": "application/json" };
-    if (connection.zapi_client_token) zapiHeaders["Client-Token"] = connection.zapi_client_token;
+    const greenUrl = `${GREEN_API_URL}/waInstance${instanceId}/sendMessage/${apiToken}`;
 
     // Insert message in DB first
     const { data: message, error: msgError } = await supabase.from("messages").insert({
@@ -79,32 +72,30 @@ serve(async (req) => {
 
     if (msgError) throw msgError;
 
-    // Send via Z-API
-    const zapiResponse = await fetch(zapiUrl, {
+    // Send via GREEN-API
+    const greenResponse = await fetch(greenUrl, {
       method: "POST",
-      headers: zapiHeaders,
-      body: JSON.stringify({ phone, message: content }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatId, message: content }),
     });
 
-    const zapiData = await zapiResponse.json();
-    console.log("Z-API send response:", JSON.stringify(zapiData));
+    const greenData = await greenResponse.json();
+    console.log("GREEN-API send response:", JSON.stringify(greenData));
 
-    // Update message with Z-API ID
-    if (zapiData.zapiMessageId || zapiData.messageId) {
+    if (greenData.idMessage) {
       await supabase.from("messages").update({
-        zapi_message_id: zapiData.zapiMessageId || zapiData.messageId,
+        zapi_message_id: greenData.idMessage,
         delivery_status: "sent",
       }).eq("id", message.id);
     }
 
-    // Update conversation last_message_at
     await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation_id);
 
     return new Response(JSON.stringify({ success: true, message_id: message.id }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("zapi-send error:", error);
+    console.error("green-api-send error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

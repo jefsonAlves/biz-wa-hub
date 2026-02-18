@@ -10,7 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Wifi, Clock, Building, QrCode, CheckCircle2, RefreshCw, Loader2 } from "lucide-react";
 
@@ -27,35 +26,10 @@ const Settings = () => {
   const queryClient = useQueryClient();
   const tenantId = profile?.tenant_id;
 
-  // Z-API state
+  // GREEN-API state (only 2 fields: idInstance and apiTokenInstance)
   const [instanceId, setInstanceId] = useState("");
-  const [token, setToken] = useState("");
-  const [clientToken, setClientToken] = useState("");
+  const [apiToken, setApiToken] = useState("");
   const [testing, setTesting] = useState(false);
-
-  // Extract clean Instance ID from value (strips URL if pasted)
-  const cleanInstanceId = (val: string) => {
-    const m = val.match(/instances\/([A-F0-9]+)/i);
-    return m ? m[1] : val.trim();
-  };
-  // Extract clean Token from value (strips URL if pasted)
-  const cleanToken = (val: string) => {
-    const m = val.match(/token\/([A-Za-z0-9]+)/i);
-    return m ? m[1] : val.trim();
-  };
-
-  // Auto-extract Instance ID and Token from pasted Z-API URL
-  const handleZapiFieldPaste = (field: "instanceId" | "token" | "clientToken", value: string) => {
-    const urlMatch = value.match(/https?:\/\/api\.z-api\.io\/instances\/([A-F0-9]+)\/token\/([A-Za-z0-9]+)/i);
-    if (urlMatch) {
-      setInstanceId(urlMatch[1]);
-      setToken(urlMatch[2]);
-      return;
-    }
-    if (field === "instanceId") setInstanceId(cleanInstanceId(value));
-    else if (field === "token") setToken(cleanToken(value));
-    else setClientToken(value.trim());
-  };
 
   // QR Code state
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -102,9 +76,8 @@ const Settings = () => {
 
   useEffect(() => {
     if (connection) {
-      setInstanceId(cleanInstanceId(connection.zapi_instance_id || ""));
-      setToken(cleanToken(connection.zapi_token || ""));
-      setClientToken(connection.zapi_client_token || "");
+      setInstanceId(connection.zapi_instance_id || "");
+      setApiToken(connection.zapi_token || "");
       if (connection.status === "connected") setIsConnected(true);
     }
   }, [connection]);
@@ -123,28 +96,26 @@ const Settings = () => {
 
   // QR Code polling - refresh every 20s while active
   useEffect(() => {
-    if (!qrPollingActive || !instanceId || !token) return;
+    if (!qrPollingActive || !instanceId || !apiToken) return;
     const interval = setInterval(async () => {
       await fetchQrCode();
-      // Also check connection status
       await checkConnectionStatus();
     }, 20000);
     return () => clearInterval(interval);
-  }, [qrPollingActive, instanceId, token]);
+  }, [qrPollingActive, instanceId, apiToken]);
 
   const fetchQrCode = useCallback(async () => {
-    if (!instanceId || !token) return;
+    if (!instanceId || !apiToken) return;
     setQrLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("zapi-qrcode", {
-        body: { instance_id: instanceId, token, client_token: clientToken },
+        body: { instance_id: instanceId, token: apiToken },
       });
       if (error) throw error;
       if (data?.already_connected) {
         setIsConnected(true);
         setQrCode(null);
         setQrPollingActive(false);
-        // Update connection status in DB
         if (connection) {
           await supabase.from("whatsapp_connections").update({ status: "connected", last_connected_at: new Date().toISOString() }).eq("id", connection.id);
           queryClient.invalidateQueries({ queryKey: ["whatsapp_connection"] });
@@ -161,12 +132,12 @@ const Settings = () => {
     } finally {
       setQrLoading(false);
     }
-  }, [instanceId, token, clientToken, connection]);
+  }, [instanceId, apiToken, connection]);
 
   const checkConnectionStatus = async () => {
     try {
       const { data, error } = await supabase.functions.invoke("zapi-test", {
-        body: { instance_id: instanceId, token, client_token: clientToken },
+        body: { instance_id: instanceId, token: apiToken },
       });
       if (!error && data?.connected) {
         setIsConnected(true);
@@ -187,39 +158,34 @@ const Settings = () => {
 
   const startQrConnection = async () => {
     if (!connection) {
-      if (!instanceId || !token || !clientToken) {
-        toast({ title: "Preencha as credenciais", description: "Todos os 3 campos são obrigatórios.", variant: "destructive" });
+      if (!instanceId || !apiToken) {
+        toast({ title: "Preencha as credenciais", description: "idInstance e apiTokenInstance são obrigatórios.", variant: "destructive" });
         return;
       }
-      await saveZapiMutation.mutateAsync();
+      await saveCredentialsMutation.mutateAsync();
     }
     setQrPollingActive(true);
     await fetchQrCode();
   };
 
-  const saveZapiMutation = useMutation({
+  const saveCredentialsMutation = useMutation({
     mutationFn: async () => {
       if (!tenantId) throw new Error("Sem tenant");
-      const cleanId = cleanInstanceId(instanceId);
-      const cleanTk = cleanToken(token);
       if (connection) {
         const { error } = await supabase.from("whatsapp_connections").update({
-          zapi_instance_id: cleanId, zapi_token: cleanTk, zapi_client_token: clientToken.trim(),
+          zapi_instance_id: instanceId.trim(), zapi_token: apiToken.trim(),
         }).eq("id", connection.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from("whatsapp_connections").insert({
-          tenant_id: tenantId, zapi_instance_id: cleanId, zapi_token: cleanTk, zapi_client_token: clientToken.trim(),
+          tenant_id: tenantId, zapi_instance_id: instanceId.trim(), zapi_token: apiToken.trim(),
         });
         if (error) throw error;
       }
-      // Update local state with clean values
-      setInstanceId(cleanId);
-      setToken(cleanTk);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp_connection"] });
-      toast({ title: "Credenciais Z-API salvas!" });
+      toast({ title: "Credenciais GREEN-API salvas!" });
     },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
@@ -228,7 +194,7 @@ const Settings = () => {
     setTesting(true);
     try {
       const { data, error } = await supabase.functions.invoke("zapi-test", {
-        body: { instance_id: instanceId, token, client_token: clientToken },
+        body: { instance_id: instanceId, token: apiToken },
       });
       if (error) throw error;
       if (data?.connected) {
@@ -249,13 +215,13 @@ const Settings = () => {
     try {
       const webhookBaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const { data, error } = await supabase.functions.invoke("zapi-register-webhooks", {
-        body: { instance_id: instanceId, token, client_token: clientToken, webhook_base_url: webhookBaseUrl },
+        body: { instance_id: instanceId, token: apiToken, webhook_base_url: webhookBaseUrl },
       });
       if (error) throw error;
       if (data?.success) {
-        toast({ title: "Webhooks registrados!", description: "Recebimento e envio de mensagens configurados." });
+        toast({ title: "Webhooks registrados!", description: data.message || "Recebimento e envio de mensagens configurados." });
       } else {
-        toast({ title: "Erro ao registrar webhooks", description: JSON.stringify(data), variant: "destructive" });
+        toast({ title: "Erro ao registrar webhooks", description: data?.error || JSON.stringify(data), variant: "destructive" });
       }
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
@@ -303,48 +269,58 @@ const Settings = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Configurações</h1>
-        <p className="text-muted-foreground">Gerencie sua conexão Z-API, horários e empresa</p>
+        <p className="text-muted-foreground">Gerencie sua conexão GREEN-API, horários e empresa</p>
       </div>
 
-      <Tabs defaultValue="zapi">
+      <Tabs defaultValue="whatsapp">
         <TabsList>
-          <TabsTrigger value="zapi"><Wifi className="h-4 w-4 mr-1" />Z-API</TabsTrigger>
+          <TabsTrigger value="whatsapp"><Wifi className="h-4 w-4 mr-1" />WhatsApp</TabsTrigger>
           <TabsTrigger value="hours"><Clock className="h-4 w-4 mr-1" />Horários</TabsTrigger>
           <TabsTrigger value="general"><Building className="h-4 w-4 mr-1" />Geral</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="zapi" className="space-y-4">
+        <TabsContent value="whatsapp" className="space-y-4">
           {/* Credentials Card */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Wifi className="h-5 w-5" />Credenciais Z-API</CardTitle>
-              <CardDescription>Insira as credenciais da sua instância Z-API</CardDescription>
+              <CardTitle className="flex items-center gap-2"><Wifi className="h-5 w-5" />Credenciais GREEN-API</CardTitle>
+              <CardDescription>
+                Insira as credenciais da sua instância GREEN-API. 
+                <a href="https://green-api.com" target="_blank" rel="noopener noreferrer" className="text-primary ml-1 underline">
+                  Criar conta gratuita →
+                </a>
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>API da Instância <span className="text-destructive">*</span></Label>
-                  <Input value={clientToken} onChange={(e) => handleZapiFieldPaste("clientToken", e.target.value)} placeholder="Seu Client-Token" type="password" />
-                  <p className="text-xs text-muted-foreground">Header Client-Token — obrigatório</p>
+                  <Label>idInstance <span className="text-destructive">*</span></Label>
+                  <Input 
+                    value={instanceId} 
+                    onChange={(e) => setInstanceId(e.target.value.trim())} 
+                    placeholder="Ex: 1101234567" 
+                  />
+                  <p className="text-xs text-muted-foreground">ID numérico da instância no painel GREEN-API</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>ID da Instância <span className="text-destructive">*</span></Label>
-                  <Input value={instanceId} onChange={(e) => handleZapiFieldPaste("instanceId", e.target.value)} placeholder="Ex: 3EE79997AC1371EE03F0A6D7BDC71B5D" />
-                  <p className="text-xs text-muted-foreground">Se colar a URL completa, os campos serão preenchidos automaticamente</p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Token da Instância <span className="text-destructive">*</span></Label>
-                  <Input value={token} onChange={(e) => handleZapiFieldPaste("token", e.target.value)} placeholder="Seu Token" type="password" />
+                  <Label>apiTokenInstance <span className="text-destructive">*</span></Label>
+                  <Input 
+                    value={apiToken} 
+                    onChange={(e) => setApiToken(e.target.value.trim())} 
+                    placeholder="Seu token de API" 
+                    type="password" 
+                  />
+                  <p className="text-xs text-muted-foreground">Token de autenticação da instância</p>
                 </div>
               </div>
               <div className="flex gap-2 flex-wrap">
-                <Button onClick={() => saveZapiMutation.mutate()} disabled={!instanceId || !token || !clientToken || saveZapiMutation.isPending}>
-                  {saveZapiMutation.isPending ? "Salvando..." : "Salvar Credenciais"}
+                <Button onClick={() => saveCredentialsMutation.mutate()} disabled={!instanceId || !apiToken || saveCredentialsMutation.isPending}>
+                  {saveCredentialsMutation.isPending ? "Salvando..." : "Salvar Credenciais"}
                 </Button>
-                <Button variant="outline" onClick={testConnection} disabled={!instanceId || !token || !clientToken || testing}>
+                <Button variant="outline" onClick={testConnection} disabled={!instanceId || !apiToken || testing}>
                   {testing ? "Testando..." : "Testar Conexão"}
                 </Button>
-                <Button variant="outline" onClick={registerWebhooks} disabled={!instanceId || !token || !clientToken}>
+                <Button variant="outline" onClick={registerWebhooks} disabled={!instanceId || !apiToken}>
                   Registrar Webhooks
                 </Button>
               </div>
@@ -392,14 +368,14 @@ const Settings = () => {
                     <div className="text-center py-8">
                       <QrCode className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
                       <p className="text-muted-foreground mb-4">
-                        {instanceId && token 
+                        {instanceId && apiToken 
                           ? "Clique no botão abaixo para gerar o QR Code"
-                          : "Preencha e salve as credenciais Z-API acima primeiro"
+                          : "Preencha e salve as credenciais GREEN-API acima primeiro"
                         }
                       </p>
                       <Button 
                         onClick={startQrConnection} 
-                        disabled={!instanceId || !token}
+                        disabled={!instanceId || !apiToken}
                         size="lg"
                       >
                         <QrCode className="h-4 w-4 mr-2" />
