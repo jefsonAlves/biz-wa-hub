@@ -2,11 +2,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const { instance_id, token, client_token } = await req.json();
@@ -26,9 +26,19 @@ serve(async (req) => {
       console.log("Extracted instance ID from URL:", cleanInstanceId);
     }
 
-    const url = `https://api.z-api.io/instances/${cleanInstanceId}/token/${token}/qr-code/image`;
-    const headers: Record<string, string> = {};
-    if (client_token) headers["Client-Token"] = client_token;
+    // Clean token from URL if needed
+    let cleanToken = (token || "").trim();
+    const tokenMatch = cleanToken.match(/token\/([A-Za-z0-9]+)/i);
+    if (tokenMatch) cleanToken = tokenMatch[1];
+
+    if (!client_token) {
+      return new Response(JSON.stringify({ error: "client_token (API da Instância) é obrigatório. Preencha nas configurações." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const url = `https://api.z-api.io/instances/${cleanInstanceId}/token/${cleanToken}/qr-code/image`;
+    const headers: Record<string, string> = { "Client-Token": client_token };
 
     const response = await fetch(url, { method: "GET", headers });
 
