@@ -33,6 +33,17 @@ const Settings = () => {
   const [clientToken, setClientToken] = useState("");
   const [testing, setTesting] = useState(false);
 
+  // Extract clean Instance ID from value (strips URL if pasted)
+  const cleanInstanceId = (val: string) => {
+    const m = val.match(/instances\/([A-F0-9]+)/i);
+    return m ? m[1] : val.trim();
+  };
+  // Extract clean Token from value (strips URL if pasted)
+  const cleanToken = (val: string) => {
+    const m = val.match(/token\/([A-Za-z0-9]+)/i);
+    return m ? m[1] : val.trim();
+  };
+
   // Auto-extract Instance ID and Token from pasted Z-API URL
   const handleZapiFieldPaste = (field: "instanceId" | "token" | "clientToken", value: string) => {
     const urlMatch = value.match(/https?:\/\/api\.z-api\.io\/instances\/([A-F0-9]+)\/token\/([A-Za-z0-9]+)/i);
@@ -41,9 +52,9 @@ const Settings = () => {
       setToken(urlMatch[2]);
       return;
     }
-    if (field === "instanceId") setInstanceId(value);
-    else if (field === "token") setToken(value);
-    else setClientToken(value);
+    if (field === "instanceId") setInstanceId(cleanInstanceId(value));
+    else if (field === "token") setToken(cleanToken(value));
+    else setClientToken(value.trim());
   };
 
   // QR Code state
@@ -91,8 +102,8 @@ const Settings = () => {
 
   useEffect(() => {
     if (connection) {
-      setInstanceId(connection.zapi_instance_id);
-      setToken(connection.zapi_token);
+      setInstanceId(cleanInstanceId(connection.zapi_instance_id || ""));
+      setToken(cleanToken(connection.zapi_token || ""));
       setClientToken(connection.zapi_client_token || "");
       if (connection.status === "connected") setIsConnected(true);
     }
@@ -189,17 +200,22 @@ const Settings = () => {
   const saveZapiMutation = useMutation({
     mutationFn: async () => {
       if (!tenantId) throw new Error("Sem tenant");
+      const cleanId = cleanInstanceId(instanceId);
+      const cleanTk = cleanToken(token);
       if (connection) {
         const { error } = await supabase.from("whatsapp_connections").update({
-          zapi_instance_id: instanceId, zapi_token: token, zapi_client_token: clientToken,
+          zapi_instance_id: cleanId, zapi_token: cleanTk, zapi_client_token: clientToken.trim(),
         }).eq("id", connection.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from("whatsapp_connections").insert({
-          tenant_id: tenantId, zapi_instance_id: instanceId, zapi_token: token, zapi_client_token: clientToken,
+          tenant_id: tenantId, zapi_instance_id: cleanId, zapi_token: cleanTk, zapi_client_token: clientToken.trim(),
         });
         if (error) throw error;
       }
+      // Update local state with clean values
+      setInstanceId(cleanId);
+      setToken(cleanTk);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp_connection"] });
