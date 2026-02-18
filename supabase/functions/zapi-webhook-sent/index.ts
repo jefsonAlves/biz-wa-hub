@@ -3,11 +3,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const supabase = createClient(
@@ -16,21 +16,26 @@ serve(async (req) => {
     );
 
     const payload = await req.json();
-    console.log("Webhook sent payload:", JSON.stringify(payload).slice(0, 500));
+    console.log("GREEN-API webhook sent:", JSON.stringify(payload).slice(0, 500));
 
-    const messageId = payload.ids?.[0]?.id || payload.messageId || payload.id?.id;
-    const status = payload.status || payload.ack?.toLowerCase() || "delivered";
+    // GREEN-API outgoing webhook: typeWebhook = "outgoingMessageStatus"
+    const messageId = payload.idMessage;
+    const status = payload.status;
 
     if (!messageId) {
       return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
     }
 
-    // Map Z-API status to our status
+    // Map GREEN-API status to our status
     const statusMap: Record<string, string> = {
-      PENDING: "queued", SENT: "sent", RECEIVED: "delivered",
-      READ: "read", PLAYED: "read", FAILED: "failed",
+      pending: "queued",
+      sent: "sent",
+      delivered: "delivered",
+      read: "read",
+      failed: "failed",
+      noAccount: "failed",
     };
-    const deliveryStatus = statusMap[status.toUpperCase()] || status;
+    const deliveryStatus = statusMap[status] || status || "sent";
 
     const { error } = await supabase
       .from("messages")
@@ -44,7 +49,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("zapi-webhook-sent error:", error);
+    console.error("green-api-webhook-sent error:", error);
     return new Response(JSON.stringify({ ok: true }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

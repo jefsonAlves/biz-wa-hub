@@ -5,99 +5,71 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const GREEN_API_URL = "https://api.green-api.com";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { instance_id, token, client_token } = await req.json();
-    console.log("Fetching QR Code for instance:", instance_id);
+    const { instance_id, token } = await req.json();
+    console.log("Fetching QR Code for GREEN-API instance:", instance_id);
 
     if (!instance_id || !token) {
-      return new Response(JSON.stringify({ error: "instance_id e token são obrigatórios" }), {
+      return new Response(JSON.stringify({ error: "idInstance e apiTokenInstance são obrigatórios" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Clean instance_id - extract just the ID if user pasted full URL
-    let cleanInstanceId = instance_id.trim();
-    const urlMatch = cleanInstanceId.match(/instances\/([A-F0-9]+)/i);
-    if (urlMatch) {
-      cleanInstanceId = urlMatch[1];
-      console.log("Extracted instance ID from URL:", cleanInstanceId);
-    }
-
-    // Clean token from URL if needed
-    let cleanToken = (token || "").trim();
-    const tokenMatch = cleanToken.match(/token\/([A-Za-z0-9]+)/i);
-    if (tokenMatch) cleanToken = tokenMatch[1];
-
-    if (!client_token) {
-      return new Response(JSON.stringify({ error: "client_token (API da Instância) é obrigatório. Preencha nas configurações." }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const url = `https://api.z-api.io/instances/${cleanInstanceId}/token/${cleanToken}/qr-code/image`;
-    const headers: Record<string, string> = { "Client-Token": client_token };
-
-    const response = await fetch(url, { method: "GET", headers });
+    const url = `${GREEN_API_URL}/waInstance${instance_id}/qr/${token}`;
+    const response = await fetch(url, { method: "GET" });
 
     if (!response.ok) {
       const text = await response.text();
-      console.error("Z-API QR Code error:", response.status, text);
-
-      // Try parsing as JSON for error message
+      console.error("GREEN-API QR Code error:", response.status, text);
       try {
         const errData = JSON.parse(text);
-        if (errData.connected || errData.value === "É necessário desconectar antes de ler o QR-Code") {
-          return new Response(JSON.stringify({ 
-            already_connected: true, 
-            message: "WhatsApp já está conectado! Não é necessário escanear o QR Code." 
-          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
         return new Response(JSON.stringify({ error: errData.message || errData.value || "Erro ao obter QR Code" }), {
           status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } catch {
-        return new Response(JSON.stringify({ error: "Erro ao obter QR Code" }), {
+        return new Response(JSON.stringify({ error: `Erro ${response.status} ao obter QR Code` }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
     }
 
-    // Check content type - Z-API returns image/png bytes
-    const contentType = response.headers.get("content-type") || "";
+    const data = await response.json();
+    console.log("GREEN-API QR response type:", data.type);
 
-    if (contentType.includes("application/json")) {
-      const data = await response.json();
-      // Might return { value: "base64..." } or { connected: true }
-      if (data.connected) {
-        return new Response(JSON.stringify({ already_connected: true, message: "WhatsApp já conectado!" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (data.value) {
-        return new Response(JSON.stringify({ qr_code: data.value }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ error: "Resposta inesperada da Z-API" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // GREEN-API returns { type: "qrCode", message: "base64..." }
+    // or { type: "alreadyLogged", message: "..." }
+    // or { type: "accountData", ... }
+    if (data.type === "alreadyLogged" || data.type === "accountData") {
+      return new Response(JSON.stringify({
+        already_connected: true,
+        message: "WhatsApp já está conectado! Não é necessário escanear o QR Code.",
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (data.type === "qrCode" && data.message) {
+      // data.message is base64 image
+      const qrDataUrl = data.message.startsWith("data:") ? data.message : `data:image/png;base64,${data.message}`;
+      return new Response(JSON.stringify({ qr_code: qrDataUrl }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Binary image response - convert to base64
-    const imageBuffer = await response.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
-    const dataUrl = `data:image/png;base64,${base64}`;
+    if (data.type === "error") {
+      return new Response(JSON.stringify({ error: data.message || "Erro da GREEN-API" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    console.log("QR Code fetched successfully, size:", imageBuffer.byteLength);
-
-    return new Response(JSON.stringify({ qr_code: dataUrl }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ error: "Resposta inesperada da GREEN-API", raw: data }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("zapi-qrcode error:", error);
+    console.error("green-api-qrcode error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
