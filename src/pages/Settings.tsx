@@ -11,7 +11,8 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Wifi, Clock, Building, QrCode, CheckCircle2, RefreshCw, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Wifi, Clock, Building, QrCode, CheckCircle2, RefreshCw, Loader2, Users, MessageSquare, AlertCircle } from "lucide-react";
 
 const DAYS = [
   { key: "monday", label: "Segunda" }, { key: "tuesday", label: "Terça" },
@@ -19,6 +20,12 @@ const DAYS = [
   { key: "friday", label: "Sexta" }, { key: "saturday", label: "Sábado" },
   { key: "sunday", label: "Domingo" },
 ];
+
+interface SyncResult {
+  contacts_synced: number;
+  conversations_synced: number;
+  messages_synced: number;
+}
 
 const Settings = () => {
   const { profile, loading } = useAuth();
@@ -36,6 +43,11 @@ const Settings = () => {
   const [qrLoading, setQrLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [qrPollingActive, setQrPollingActive] = useState(false);
+
+  // Sync state
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [syncProgress, setSyncProgress] = useState(0);
 
   // Business hours state
   const [hours, setHours] = useState<any>(null);
@@ -265,6 +277,43 @@ const Settings = () => {
     }));
   };
 
+  const syncContacts = async () => {
+    if (!connection || !tenantId) return;
+    setSyncing(true);
+    setSyncResult(null);
+    setSyncProgress(10);
+
+    // Simulate progress while waiting
+    const progressInterval = setInterval(() => {
+      setSyncProgress((p) => Math.min(p + 5, 85));
+    }, 1000);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("green-api-sync", {
+        body: { tenant_id: tenantId, connection_id: connection.id },
+      });
+      clearInterval(progressInterval);
+      setSyncProgress(100);
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      setSyncResult({
+        contacts_synced: data.contacts_synced ?? 0,
+        conversations_synced: data.conversations_synced ?? 0,
+        messages_synced: data.messages_synced ?? 0,
+      });
+      queryClient.invalidateQueries({ queryKey: ["whatsapp_connection"] });
+      toast({ title: "Sincronização concluída!", description: `${data.contacts_synced} contatos importados.` });
+    } catch (e: any) {
+      clearInterval(progressInterval);
+      setSyncProgress(0);
+      toast({ title: "Erro na sincronização", description: e.message, variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   // Estado defensivo: se não tem tenant ainda, mostrar loading
   if (!tenantId) {
     return (
@@ -431,6 +480,76 @@ const Settings = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Sync Card */}
+          {connection && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <RefreshCw className="h-5 w-5" />
+                  Sincronizar Contatos e Conversas
+                </CardTitle>
+                <CardDescription>
+                  Importa contatos, cria conversas e traz o histórico de mensagens do WhatsApp para o Inbox.
+                  {connection.sync_status && connection.sync_status !== "idle" && (
+                    <span className="ml-2">
+                      Status:{" "}
+                      <Badge variant={connection.sync_status === "synced" ? "default" : connection.sync_status === "error" ? "destructive" : "secondary"}>
+                        {connection.sync_status === "synced" ? "Sincronizado" : connection.sync_status === "syncing" ? "Sincronizando..." : connection.sync_status === "error" ? "Erro" : connection.sync_status}
+                      </Badge>
+                    </span>
+                  )}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {syncing && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Sincronizando dados do WhatsApp... pode levar alguns minutos.
+                    </div>
+                    <Progress value={syncProgress} className="h-2" />
+                  </div>
+                )}
+
+                {syncResult && !syncing && (
+                  <div className="grid grid-cols-3 gap-4 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                    <div className="text-center">
+                      <Users className="h-6 w-6 mx-auto mb-1 text-primary" />
+                      <p className="text-2xl font-bold">{syncResult.contacts_synced}</p>
+                      <p className="text-xs text-muted-foreground">Contatos</p>
+                    </div>
+                    <div className="text-center">
+                      <MessageSquare className="h-6 w-6 mx-auto mb-1 text-primary" />
+                      <p className="text-2xl font-bold">{syncResult.conversations_synced}</p>
+                      <p className="text-xs text-muted-foreground">Conversas novas</p>
+                    </div>
+                    <div className="text-center">
+                      <MessageSquare className="h-6 w-6 mx-auto mb-1 text-primary" />
+                      <p className="text-2xl font-bold">{syncResult.messages_synced}</p>
+                      <p className="text-xs text-muted-foreground">Mensagens</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3">
+                  <Button onClick={syncContacts} disabled={syncing || !connection}>
+                    {syncing ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sincronizando...</>
+                    ) : (
+                      <><RefreshCw className="h-4 w-4 mr-2" />Sincronizar Agora</>
+                    )}
+                  </Button>
+                  {!isConnected && (
+                    <div className="flex items-center gap-1 text-sm text-destructive/80">
+                      <AlertCircle className="h-4 w-4" />
+                      Conecte o WhatsApp primeiro
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="hours">
