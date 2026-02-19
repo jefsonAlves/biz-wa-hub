@@ -39,13 +39,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string, retryCount = 0): Promise<void> => {
     const { data } = await supabase
       .from("profiles")
       .select("*")
       .eq("user_id", userId)
       .maybeSingle();
-    if (data) setProfile(data as AuthProfile);
+    
+    if (data) {
+      setProfile(data as AuthProfile);
+      // Se veio sem tenant_id, aguardar e tentar novamente (trigger pode estar sendo processado)
+      if (!data.tenant_id && retryCount < 3) {
+        setTimeout(() => fetchProfile(userId, retryCount + 1), 1500);
+      }
+    } else if (retryCount < 2) {
+      // Profile ainda não existe, aguardar trigger criar
+      setTimeout(() => fetchProfile(userId, retryCount + 1), 1500);
+    }
   };
 
   const fetchRoles = async (userId: string) => {
@@ -72,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setRoles([]);
         }
 
-        if (event === "INITIAL_SESSION") {
+        if (event === "INITIAL_SESSION" || event === "SIGNED_OUT") {
           setLoading(false);
         }
       }
