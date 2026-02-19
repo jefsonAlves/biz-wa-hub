@@ -92,22 +92,57 @@ const Inbox = () => {
     enabled: !!tenantId,
   });
 
-  // Realtime subscription
+  // Realtime subscription — ouve mudanças nas tabelas e invalida queries
   useEffect(() => {
     if (!tenantId) return;
+
     const channel = supabase
-      .channel("inbox-realtime-v2")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, (payload: any) => {
-        queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
-        queryClient.invalidateQueries({ queryKey: ["conversations", tenantId] });
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
-        queryClient.invalidateQueries({ queryKey: ["conversations", tenantId] });
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "internal_notes" }, () => {
-        queryClient.invalidateQueries({ queryKey: ["internal-notes", selectedConversationId] });
-      })
-      .subscribe();
+      .channel(`inbox-realtime-${tenantId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversations", filter: `tenant_id=eq.${tenantId}` },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["conversations", tenantId] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages" },
+        (payload: any) => {
+          // Sempre atualiza a lista de conversas (last_message_at, unread_count)
+          queryClient.invalidateQueries({ queryKey: ["conversations", tenantId] });
+          // Atualiza mensagens da conversa aberta
+          if (selectedConversationId) {
+            const convId = payload.new?.conversation_id || payload.old?.conversation_id;
+            if (!convId || convId === selectedConversationId) {
+              queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
+            }
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "internal_notes" },
+        (payload: any) => {
+          const convId = payload.new?.conversation_id || payload.old?.conversation_id;
+          if (!convId || convId === selectedConversationId) {
+            queryClient.invalidateQueries({ queryKey: ["internal-notes", selectedConversationId] });
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "contacts", filter: `tenant_id=eq.${tenantId}` },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["conversations", tenantId] });
+        }
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log("Realtime Inbox: subscribed ✓");
+        }
+      });
+
     return () => { supabase.removeChannel(channel); };
   }, [tenantId, selectedConversationId, queryClient]);
 
