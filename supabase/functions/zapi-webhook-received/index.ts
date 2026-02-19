@@ -18,17 +18,13 @@ serve(async (req) => {
     const payload = await req.json();
     console.log("GREEN-API webhook received:", JSON.stringify(payload).slice(0, 500));
 
-    // GREEN-API webhook format:
-    // typeWebhook: "incomingMessageReceived", "outgoingMessage", "stateInstanceChanged", etc.
     const typeWebhook = payload.typeWebhook;
     const instanceId = payload.instanceData?.idInstance?.toString();
 
     if (!instanceId) {
-      console.log("No instanceId in payload");
       return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
     }
 
-    // Find tenant by instance ID
     const { data: connection } = await supabase
       .from("whatsapp_connections")
       .select("*")
@@ -43,14 +39,12 @@ serve(async (req) => {
 
     const tenantId = connection.tenant_id;
 
-    // Handle state change webhooks
+    // Handle state change
     if (typeWebhook === "stateInstanceChanged") {
       const state = payload.stateInstance;
-      console.log("Instance state changed:", state);
       if (state === "authorized") {
         await supabase.from("whatsapp_connections").update({
-          status: "connected",
-          last_connected_at: new Date().toISOString(),
+          status: "connected", last_connected_at: new Date().toISOString(),
         }).eq("id", connection.id);
       } else if (state === "notAuthorized" || state === "blocked") {
         await supabase.from("whatsapp_connections").update({ status: "disconnected" }).eq("id", connection.id);
@@ -58,34 +52,45 @@ serve(async (req) => {
       return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
     }
 
-    // Handle status instance webhook
-    if (typeWebhook === "statusInstanceChanged") {
-      console.log("Status instance changed:", payload.statusInstance);
+    // Handle outgoing message status updates
+    if (typeWebhook === "outgoingMessageStatus") {
+      const messageId = payload.idMessage;
+      const status = payload.status; // sent, delivered, read, failed
+      if (messageId && status) {
+        await supabase.from("messages")
+          .update({ delivery_status: status })
+          .eq("wa_message_id", messageId);
+      }
       return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
     }
 
     // Only process incoming messages
     if (typeWebhook !== "incomingMessageReceived") {
-      console.log("Skipping webhook type:", typeWebhook);
       return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
     }
 
     const messageData = payload.messageData;
     const senderData = payload.senderData;
-    
-    // Extract phone from chatId (format: 5511999999999@c.us)
+
     const chatId = senderData?.chatId || "";
     const phone = chatId.replace("@c.us", "").replace("@g.us", "").replace(/\D/g, "");
-    
+
     if (!phone) {
-      console.log("No phone in payload");
       return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
     }
 
     const senderName = senderData?.senderName || null;
     const messageId = payload.idMessage || null;
 
-    // Determine message type and content
+    // Check duplicate
+    if (messageId) {
+      const { data: existingMsg } = await supabase
+        .from("messages").select("id").eq("wa_message_id", messageId).maybeSingle();
+      if (existingMsg) {
+        return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
+      }
+    }
+
     let messageContent = "";
     let messageType = "text";
     let mediaUrl: string | null = null;
@@ -110,9 +115,7 @@ serve(async (req) => {
           await supabase.storage.from("media").upload(path, blob, { contentType: mediaMime || undefined });
           const { data: pubUrl } = supabase.storage.from("media").getPublicUrl(path);
           mediaUrl = pubUrl.publicUrl;
-        } catch (e) {
-          console.error("Media download error:", e);
-        }
+        } catch (e) { console.error("Media error:", e); }
       }
     } else if (msgType === "documentMessage") {
       messageType = "document";
@@ -133,58 +136,48 @@ serve(async (req) => {
     // Upsert contact
     let contactId: string;
     const { data: existingContact } = await supabase
-      .from("contacts")
-      .select("id")
-      .eq("phone", phone)
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
+      .from("contacts").select("id").eq("phone", phone).eq("tenant_id", tenantId).maybeSingle();
 
     if (existingContact) {
       contactId = existingContact.id;
-      if (senderName) {
-        await supabase.from("contacts").update({ name: senderName }).eq("id", contactId);
-      }
+      await supabase.from("contacts").update({
+        name: senderName || undefined,
+        wa_chat_id: chatId,
+        last_message_preview: messageContent?.slice(0, 100) || null,
+      }).eq("id", contactId);
     } else {
-      const { data: newContact } = await supabase
-        .from("contacts")
-        .insert({ phone, tenant_id: tenantId, name: senderName })
-        .select()
-        .single();
-      if (!newContact) {
-        console.error("Failed to create contact");
-        return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
-      }
+      const { data: newContact } = await supabase.from("contacts").insert({
+        phone, tenant_id: tenantId, name: senderName, wa_chat_id: chatId,
+        last_message_preview: messageContent?.slice(0, 100) || null,
+      }).select().single();
+      if (!newContact) return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
       contactId = newContact.id;
     }
 
     // Find or create conversation
     const { data: existingConv } = await supabase
-      .from("conversations")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .eq("contact_id", contactId)
+      .from("conversations").select("*")
+      .eq("tenant_id", tenantId).eq("contact_id", contactId)
       .in("status", ["open", "waiting"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
 
     let conversationId: string;
+    let conv: any;
     if (existingConv) {
       conversationId = existingConv.id;
+      conv = existingConv;
       await supabase.from("conversations").update({
         last_message_at: new Date().toISOString(),
         unread_count: (existingConv.unread_count || 0) + 1,
       }).eq("id", conversationId);
     } else {
       const { data: newConv } = await supabase.from("conversations").insert({
-        tenant_id: tenantId,
-        contact_id: contactId,
-        whatsapp_connection_id: connection.id,
-        status: "open",
-        last_message_at: new Date().toISOString(),
-        unread_count: 1,
+        tenant_id: tenantId, contact_id: contactId, whatsapp_connection_id: connection.id,
+        wa_chat_id: chatId, status: "open",
+        last_message_at: new Date().toISOString(), unread_count: 1,
       }).select().single();
       conversationId = newConv!.id;
+      conv = newConv;
     }
 
     // Insert message
@@ -192,124 +185,105 @@ serve(async (req) => {
       conversation_id: conversationId,
       content: messageContent || null,
       role: "contact",
+      direction: "incoming",
       message_type: messageType,
       media_url: mediaUrl,
       media_mime_type: mediaMime,
+      wa_message_id: messageId,
       zapi_message_id: messageId,
+      delivery_status: "received",
     });
 
     console.log("Message stored for conversation:", conversationId);
 
-    // AI Auto-Response
-    const conv = existingConv || (await supabase.from("conversations").select("*").eq("id", conversationId).single()).data;
-    if (conv && !conv.ai_paused && messageContent && messageType === "text") {
-      console.log("Triggering AI auto-response for conversation:", conversationId);
+    // AI Auto-Response - only if ai_mode is 'auto' and not paused
+    const aiMode = conv?.ai_mode || "auto";
+    const aiPaused = conv?.ai_paused || false;
 
+    if (!aiPaused && aiMode === "auto" && messageContent && messageType === "text") {
       try {
         const { data: agentConfig } = await supabase
-          .from("agents_config")
-          .select("*")
-          .eq("tenant_id", tenantId)
-          .eq("is_active", true)
-          .limit(1)
-          .maybeSingle();
+          .from("agents_config").select("*")
+          .eq("tenant_id", tenantId).eq("is_active", true)
+          .limit(1).maybeSingle();
 
         const { data: history } = await supabase
-          .from("messages")
-          .select("role, content")
-          .eq("conversation_id", conversationId)
-          .eq("is_internal", false)
-          .order("created_at", { ascending: true })
-          .limit(20);
+          .from("messages").select("role, content")
+          .eq("conversation_id", conversationId).eq("is_internal", false)
+          .order("created_at", { ascending: true }).limit(20);
 
         const { data: knowledgeItems } = await supabase
-          .from("knowledge_items")
-          .select("content, title")
-          .eq("tenant_id", tenantId)
-          .eq("status", "indexed")
-          .limit(5);
+          .from("knowledge_items").select("content, title")
+          .eq("tenant_id", tenantId).eq("status", "indexed").limit(5);
 
         const knowledgeContext = knowledgeItems?.map(k => `[${k.title}]: ${k.content}`).join("\n\n") || "";
-
-        const systemPrompt = agentConfig?.system_prompt || 
+        const systemPrompt = agentConfig?.system_prompt ||
           "Você é um assistente de atendimento via WhatsApp. Seja educado, conciso e útil. Responda em português.";
         const persona = agentConfig?.persona || "Assistente virtual amigável";
         const model = agentConfig?.model || "google/gemini-3-flash-preview";
         const temperature = agentConfig?.temperature ?? 0.7;
         const blockedKeywords = agentConfig?.blocked_keywords || [];
 
-        const hasBlockedKeyword = blockedKeywords.some((kw: string) => 
-          messageContent.toLowerCase().includes(kw.toLowerCase())
-        );
+        const hasBlockedKeyword = blockedKeywords.some((kw: string) =>
+          messageContent.toLowerCase().includes(kw.toLowerCase()));
 
-        if (hasBlockedKeyword) {
-          console.log("Message contains blocked keyword, skipping AI response");
-        } else {
+        if (!hasBlockedKeyword) {
           const aiMessages: Array<{role: string; content: string}> = [
-            { 
-              role: "system", 
-              content: `${systemPrompt}\n\nSua persona: ${persona}\n\n${knowledgeContext ? `Base de conhecimento:\n${knowledgeContext}\n\n` : ""}Regras:\n- Responda de forma concisa e direta, ideal para WhatsApp\n- Use no máximo 2-3 parágrafos curtos\n- Não use markdown formatado (negrito, itálico) pois WhatsApp tem formatação própria\n- Se não souber a resposta, diga que vai encaminhar para um atendente humano`
-            },
+            { role: "system", content: `${systemPrompt}\n\nSua persona: ${persona}\n\n${knowledgeContext ? `Base de conhecimento:\n${knowledgeContext}\n\n` : ""}Regras:\n- Responda de forma concisa e direta, ideal para WhatsApp\n- Use no máximo 2-3 parágrafos curtos\n- Não use markdown formatado\n- Se não souber, diga que vai encaminhar para um atendente` },
           ];
 
-          if (history && history.length > 0) {
+          if (history) {
             for (const msg of history) {
-              aiMessages.push({
-                role: msg.role === "contact" ? "user" : "assistant",
-                content: msg.content || "",
-              });
+              aiMessages.push({ role: msg.role === "contact" ? "user" : "assistant", content: msg.content || "" });
             }
           }
 
           const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-          if (!LOVABLE_API_KEY) {
-            console.error("LOVABLE_API_KEY not configured, skipping AI response");
-          } else {
-            console.log("Calling AI gateway with model:", model);
-
+          if (LOVABLE_API_KEY) {
             const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
               method: "POST",
-              headers: {
-                Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                "Content-Type": "application/json",
-              },
+              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
               body: JSON.stringify({ model, messages: aiMessages, temperature, max_tokens: 500 }),
             });
 
-            if (!aiResponse.ok) {
-              const errText = await aiResponse.text();
-              console.error("AI gateway error:", aiResponse.status, errText);
-            } else {
+            if (aiResponse.ok) {
               const aiData = await aiResponse.json();
               const aiReply = aiData.choices?.[0]?.message?.content;
 
               if (aiReply) {
-                console.log("AI reply:", aiReply.slice(0, 100));
+                // suggest mode: save as draft
+                if (aiMode === "suggest") {
+                  await supabase.from("messages").insert({
+                    conversation_id: conversationId,
+                    content: aiReply, role: "ai",
+                    direction: "outgoing", message_type: "text",
+                    delivery_status: "draft",
+                  });
+                } else {
+                  // auto mode: save and send
+                  const { data: aiMsg } = await supabase.from("messages").insert({
+                    conversation_id: conversationId,
+                    content: aiReply, role: "ai",
+                    direction: "outgoing", message_type: "text",
+                    delivery_status: "queued",
+                  }).select().single();
 
-                await supabase.from("messages").insert({
-                  conversation_id: conversationId,
-                  content: aiReply,
-                  role: "ai",
-                  message_type: "text",
-                  delivery_status: "queued",
-                });
+                  const apiUrl = connection.api_url || "https://api.green-api.com";
+                  const sendUrl = `${apiUrl}/waInstance${connection.zapi_instance_id}/sendMessage/${connection.zapi_token}`;
+                  const sendResp = await fetch(sendUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ chatId: `${phone}@c.us`, message: aiReply }),
+                  });
+                  const sendData = await sendResp.json();
 
-                // Send via GREEN-API
-                const sendUrl = `https://api.green-api.com/waInstance${connection.zapi_instance_id}/sendMessage/${connection.zapi_token}`;
-                const sendResponse = await fetch(sendUrl, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ chatId: `${phone}@c.us`, message: aiReply }),
-                });
-
-                const sendData = await sendResponse.json();
-                console.log("GREEN-API send AI response:", JSON.stringify(sendData));
-
-                if (sendData.idMessage) {
-                  await supabase.from("messages").update({
-                    zapi_message_id: sendData.idMessage,
-                    delivery_status: "sent",
-                  }).eq("conversation_id", conversationId).eq("role", "ai").order("created_at", { ascending: false }).limit(1);
+                  if (sendData.idMessage && aiMsg) {
+                    await supabase.from("messages").update({
+                      wa_message_id: sendData.idMessage,
+                      zapi_message_id: sendData.idMessage,
+                      delivery_status: "sent",
+                    }).eq("id", aiMsg.id);
+                  }
                 }
               }
             }
@@ -324,7 +298,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("green-api-webhook-received error:", error);
+    console.error("webhook error:", error);
     return new Response(JSON.stringify({ ok: true }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

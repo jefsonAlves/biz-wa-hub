@@ -77,6 +77,50 @@ export type Database = {
           },
         ]
       }
+      ai_providers: {
+        Row: {
+          api_key_encrypted: string | null
+          config: Json | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          model: string | null
+          provider: string
+          scope: string
+          tenant_id: string | null
+        }
+        Insert: {
+          api_key_encrypted?: string | null
+          config?: Json | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          model?: string | null
+          provider?: string
+          scope?: string
+          tenant_id?: string | null
+        }
+        Update: {
+          api_key_encrypted?: string | null
+          config?: Json | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          model?: string | null
+          provider?: string
+          scope?: string
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_providers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_hours: {
         Row: {
           config: Json
@@ -115,36 +159,42 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          last_message_preview: string | null
           metadata: Json | null
           name: string | null
           phone: string
           tags: string[] | null
           tenant_id: string
           updated_at: string
+          wa_chat_id: string | null
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string
           email?: string | null
           id?: string
+          last_message_preview?: string | null
           metadata?: Json | null
           name?: string | null
           phone: string
           tags?: string[] | null
           tenant_id: string
           updated_at?: string
+          wa_chat_id?: string | null
         }
         Update: {
           avatar_url?: string | null
           created_at?: string
           email?: string | null
           id?: string
+          last_message_preview?: string | null
           metadata?: Json | null
           name?: string | null
           phone?: string
           tags?: string[] | null
           tenant_id?: string
           updated_at?: string
+          wa_chat_id?: string | null
         }
         Relationships: [
           {
@@ -158,6 +208,7 @@ export type Database = {
       }
       conversations: {
         Row: {
+          ai_mode: string | null
           ai_paused: boolean
           assigned_agent_id: string | null
           closed_at: string | null
@@ -174,9 +225,11 @@ export type Database = {
           tenant_id: string
           unread_count: number
           updated_at: string
+          wa_chat_id: string | null
           whatsapp_connection_id: string | null
         }
         Insert: {
+          ai_mode?: string | null
           ai_paused?: boolean
           assigned_agent_id?: string | null
           closed_at?: string | null
@@ -193,9 +246,11 @@ export type Database = {
           tenant_id: string
           unread_count?: number
           updated_at?: string
+          wa_chat_id?: string | null
           whatsapp_connection_id?: string | null
         }
         Update: {
+          ai_mode?: string | null
           ai_paused?: boolean
           assigned_agent_id?: string | null
           closed_at?: string | null
@@ -212,6 +267,7 @@ export type Database = {
           tenant_id?: string
           unread_count?: number
           updated_at?: string
+          wa_chat_id?: string | null
           whatsapp_connection_id?: string | null
         }
         Relationships: [
@@ -280,6 +336,48 @@ export type Database = {
           },
         ]
       }
+      internal_notes: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          id: string
+          note_text: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          id?: string
+          note_text: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          note_text?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "internal_notes_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "internal_notes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       knowledge_items: {
         Row: {
           content: string | null
@@ -337,6 +435,7 @@ export type Database = {
           conversation_id: string
           created_at: string
           delivery_status: string | null
+          direction: string | null
           id: string
           is_internal: boolean
           media_mime_type: string | null
@@ -344,6 +443,7 @@ export type Database = {
           message_type: Database["public"]["Enums"]["message_type"]
           metadata: Json | null
           role: Database["public"]["Enums"]["message_role"]
+          wa_message_id: string | null
           zapi_message_id: string | null
         }
         Insert: {
@@ -352,6 +452,7 @@ export type Database = {
           conversation_id: string
           created_at?: string
           delivery_status?: string | null
+          direction?: string | null
           id?: string
           is_internal?: boolean
           media_mime_type?: string | null
@@ -359,6 +460,7 @@ export type Database = {
           message_type?: Database["public"]["Enums"]["message_type"]
           metadata?: Json | null
           role?: Database["public"]["Enums"]["message_role"]
+          wa_message_id?: string | null
           zapi_message_id?: string | null
         }
         Update: {
@@ -367,6 +469,7 @@ export type Database = {
           conversation_id?: string
           created_at?: string
           delivery_status?: string | null
+          direction?: string | null
           id?: string
           is_internal?: boolean
           media_mime_type?: string | null
@@ -374,6 +477,7 @@ export type Database = {
           message_type?: Database["public"]["Enums"]["message_type"]
           metadata?: Json | null
           role?: Database["public"]["Enums"]["message_role"]
+          wa_message_id?: string | null
           zapi_message_id?: string | null
         }
         Relationships: [
@@ -462,6 +566,63 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schedules: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          created_by_user_id: string | null
+          fail_reason: string | null
+          id: string
+          media: Json | null
+          message_body: string | null
+          run_at: string
+          status: string
+          tenant_id: string
+          to_chat_id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          created_by_user_id?: string | null
+          fail_reason?: string | null
+          id?: string
+          media?: Json | null
+          message_body?: string | null
+          run_at: string
+          status?: string
+          tenant_id: string
+          to_chat_id: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          created_by_user_id?: string | null
+          fail_reason?: string | null
+          id?: string
+          media?: Json | null
+          message_body?: string | null
+          run_at?: string
+          status?: string
+          tenant_id?: string
+          to_chat_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedules_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedules_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -583,12 +744,14 @@ export type Database = {
       }
       whatsapp_connections: {
         Row: {
+          api_url: string | null
           created_at: string
           id: string
           last_connected_at: string | null
           name: string
           phone_number: string | null
           status: string
+          sync_status: string | null
           tenant_id: string
           updated_at: string
           webhook_url: string | null
@@ -597,12 +760,14 @@ export type Database = {
           zapi_token: string
         }
         Insert: {
+          api_url?: string | null
           created_at?: string
           id?: string
           last_connected_at?: string | null
           name?: string
           phone_number?: string | null
           status?: string
+          sync_status?: string | null
           tenant_id: string
           updated_at?: string
           webhook_url?: string | null
@@ -611,12 +776,14 @@ export type Database = {
           zapi_token: string
         }
         Update: {
+          api_url?: string | null
           created_at?: string
           id?: string
           last_connected_at?: string | null
           name?: string
           phone_number?: string | null
           status?: string
+          sync_status?: string | null
           tenant_id?: string
           updated_at?: string
           webhook_url?: string | null

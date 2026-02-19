@@ -1,0 +1,63 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
+    }
+
+    const { data: { user }, error: authError } = await createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    ).auth.getUser();
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
+    }
+
+    const { instance_id, token, api_url } = await req.json();
+    const greenUrl = `${api_url || "https://api.green-api.com"}/waInstance${instance_id}/getStatusInstance/${token}`;
+
+    const resp = await fetch(greenUrl);
+    const data = await resp.json();
+    
+    console.log("GREEN-API status response:", JSON.stringify(data));
+
+    // stateInstance: authorized | notAuthorized | blocked
+    // statusInstance: online | offline
+    const stateInstance = data.stateInstance;
+    const statusInstance = data.statusInstance;
+
+    const isConnected = stateInstance === "authorized";
+    const isOnline = statusInstance === "online";
+
+    return new Response(JSON.stringify({
+      success: true,
+      state: stateInstance,
+      status: statusInstance,
+      is_connected: isConnected,
+      is_online: isOnline,
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  } catch (error) {
+    console.error("green-api-status error:", error);
+    return new Response(JSON.stringify({ error: error.message, is_connected: false, is_online: false }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
