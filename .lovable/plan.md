@@ -1,77 +1,49 @@
 
-## Problema Diagnosticado
+## Diagnóstico
 
-### Causa Raiz do Erro "Sem tenant"
-Os triggers `on_auth_user_created` e `on_auth_user_created_tenant` **nunca foram criados** no banco — as funções existem mas não estão vinculadas à tabela `auth.users`. O resultado: o usuário `jefson.ti@gmail.com` existe em `auth.users` mas não tem nenhuma linha em `profiles`, `tenants` ou `user_roles`.
+O WhatsApp está conectado mas o banco de dados está vazio (0 contatos, 0 conversas). Há 3 problemas a resolver:
 
-### O que está faltando visualmente (imagem de referência)
-A imagem mostra o menu lateral com: Dashboard, Inbox, Agentes IA, Base de Conhecimento, Departamentos, Equipe, Relatórios, Configurações. Estas rotas já existem no código, mas o usuário não consegue acessar porque o `profile` está nulo (sem tenant_id), então o `useAuth` não consegue determinar os roles e o menu não renderiza corretamente.
+**Problema 1 — Bug de autenticação no `green-api-sync`**
+A função usa `SUPABASE_PUBLISHABLE_KEY` para validar o usuário, mas esse secret não existe no ambiente da função. O correto é `SUPABASE_ANON_KEY` (mesmo fix já aplicado em `green-api-status`).
 
----
+**Problema 2 — Sem botão de sincronização na UI**
+A página de Configurações não tem um botão para disparar o `green-api-sync` e trazer os contatos/conversas da GREEN-API para o banco de dados.
 
-## Plano de Correção
-
-### 1. Nova Migration: Corrigir Triggers + Backfill do usuário existente
-
-A migration vai:
-
-**a) Recriar os triggers na tabela `auth.users`:**
-```sql
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
-DROP TRIGGER IF EXISTS on_auth_user_created_tenant ON auth.users;
-CREATE TRIGGER on_auth_user_created_tenant
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user_tenant();
-```
-
-**b) Backfill do usuário `jefson.ti@gmail.com` (id: `888b8e33-7a27-4d5f-8ba9-6725c15f247f`):**
-- Criar tenant com nome "Workspace de jefson de Souza Alves"
-- Criar profile com tenant_id vinculado
-- Inserir role `tenant_admin` em `user_roles`
-- Criar business_hours padrão para o tenant
-
-Tudo idempotente (com verificações `IF NOT EXISTS`/`ON CONFLICT DO NOTHING`).
-
-### 2. Ajustes Defensivos no `useAuth.tsx`
-
-Adicionar retry: se após `fetchProfile` o `tenant_id` vier `null`, aguardar 1s e tentar novamente (cobre race condition do trigger em novos cadastros).
-
-### 3. Ajuste Defensivo no `Settings.tsx`
-
-Em vez de lançar erro imediato quando `tenantId` é null, mostrar um estado de "carregando perfil..." com retry automático.
-
-### 4. Verificar e garantir que `handle_new_user_tenant` cria `tenant_admin`
-
-A função atual pode não estar atribuindo corretamente o role. Vamos garantir que ela:
-- Cria o tenant
-- Atualiza o profile com o tenant_id
-- Insere `tenant_admin` em `user_roles`
+**Problema 3 — Schedule worker sem cron job**
+A função `green-api-schedule-worker` existe, mas nunca é chamada automaticamente. Sem um cron job, mensagens agendadas ficam presas em status `queued` para sempre.
 
 ---
 
-## Arquivos a Modificar
+## Plano de Implementação
 
-**Nova migration** — fix triggers + backfill:
-- Recria os dois triggers em `auth.users`
-- Backfilla o usuário existente com tenant + profile + role + business_hours
+### Passo 1 — Corrigir `green-api-sync/index.ts`
+Substituir `SUPABASE_PUBLISHABLE_KEY` por `SUPABASE_ANON_KEY` na validação do usuário (linha 26), idêntico ao fix aplicado nas outras funções.
 
-**`src/hooks/useAuth.tsx`** — retry defensivo:
-- Se `profile` veio sem `tenant_id`, fazer nova tentativa após 1.5s
+### Passo 2 — Adicionar botão "Sincronizar Contatos" na Settings
+Na aba WhatsApp da página `src/pages/Settings.tsx`, adicionar um Card de sincronização abaixo do card de conexão, com:
+- Botão **"Sincronizar Contatos e Conversas"** que chama `green-api-sync`
+- Indicador de progresso durante a sincronização
+- Exibição do resultado: quantos contatos, conversas e mensagens foram importados
+- Estado do sync (`sync_status` da conexão: `idle`, `syncing`, `synced`, `error`)
 
-**`src/pages/Settings.tsx`** — estado defensivo:
-- Mostrar "Aguardando perfil..." em vez de lançar erro quando `tenantId` é null
+### Passo 3 — Configurar cron job para o schedule worker
+Usando `pg_cron` + `pg_net`, criar um job que chama `green-api-schedule-worker` a cada minuto, para que mensagens agendadas sejam enviadas automaticamente no horário configurado.
 
 ---
 
-## Resultado Esperado
+## Arquivos a modificar
 
-Após a correção:
-1. Login com `jefson.ti@gmail.com` funcionará normalmente
-2. O menu lateral mostrará Dashboard, Inbox, Agentes IA, Base de Conhecimento, Departamentos, Equipe, Relatórios, Configurações (igual à imagem)
-3. A página Configurações não jogará mais o erro "Sem tenant"
-4. Novos cadastros criarão automaticamente o tenant e o perfil via trigger
-5. As funcionalidades de IA (Agentes IA, Base de Conhecimento) estarão acessíveis
+| Arquivo | Mudança |
+|---|---|
+| `supabase/functions/green-api-sync/index.ts` | Trocar `SUPABASE_PUBLISHABLE_KEY` → `SUPABASE_ANON_KEY` |
+| `src/pages/Settings.tsx` | Adicionar Card com botão de sync + status |
+| SQL (insert via tool) | Criar cron job para o schedule worker |
+
+---
+
+## Resultado esperado
+
+Após a implementação:
+1. Clicar em "Sincronizar" nas Configurações → contatos e conversas aparecem no Inbox
+2. Mensagens agendadas via ActionMenu são enviadas automaticamente no horário definido
+3. O Inbox mostrará conversas reais do WhatsApp com histórico de mensagens
