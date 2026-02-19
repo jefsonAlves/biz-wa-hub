@@ -15,6 +15,24 @@ import { InternalNotes } from "@/components/inbox/InternalNotes";
 import { ActionMenu } from "@/components/inbox/ActionMenu";
 import { cn } from "@/lib/utils";
 
+// --- Notificação sonora via Web Audio API (sem arquivo externo) ---
+function playNotificationSound() {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g);
+    g.connect(ctx.destination);
+    o.type = "sine";
+    o.frequency.setValueAtTime(880, ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15);
+    g.gain.setValueAtTime(0.3, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    o.start(ctx.currentTime);
+    o.stop(ctx.currentTime + 0.4);
+  } catch { /* sem AudioContext */ }
+}
+
 const Inbox = () => {
   const { profile, user } = useAuth();
   const { toast } = useToast();
@@ -27,6 +45,9 @@ const Inbox = () => {
   const [filter, setFilter] = useState("all");
   const [inputTab, setInputTab] = useState<"message" | "internal">("message");
   const [aiSuggesting, setAiSuggesting] = useState(false);
+  const [unreadBadge, setUnreadBadge] = useState(0);
+  const originalTitleRef = useRef(document.title);
+  const titleIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -92,6 +113,31 @@ const Inbox = () => {
     enabled: !!tenantId,
   });
 
+  // --- Badge no título da aba ---
+  useEffect(() => {
+    if (unreadBadge > 0) {
+      // Pisca o título alternando entre "💬 (N) Novas" e o título original
+      let toggle = true;
+      titleIntervalRef.current = setInterval(() => {
+        document.title = toggle
+          ? `💬 (${unreadBadge}) Nova${unreadBadge > 1 ? "s" : ""} mensagem${unreadBadge > 1 ? "ns" : ""}`
+          : originalTitleRef.current;
+        toggle = !toggle;
+      }, 1200);
+    } else {
+      if (titleIntervalRef.current) clearInterval(titleIntervalRef.current);
+      document.title = originalTitleRef.current;
+    }
+    return () => { if (titleIntervalRef.current) clearInterval(titleIntervalRef.current); };
+  }, [unreadBadge]);
+
+  // Limpa badge ao focar na aba
+  useEffect(() => {
+    const onFocus = () => setUnreadBadge(0);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
   // Realtime subscription — ouve mudanças nas tabelas e invalida queries
   useEffect(() => {
     if (!tenantId) return;
@@ -111,12 +157,26 @@ const Inbox = () => {
         (payload: any) => {
           // Sempre atualiza a lista de conversas (last_message_at, unread_count)
           queryClient.invalidateQueries({ queryKey: ["conversations", tenantId] });
-          // Atualiza mensagens da conversa aberta
-          if (selectedConversationId) {
-            const convId = payload.new?.conversation_id || payload.old?.conversation_id;
-            if (!convId || convId === selectedConversationId) {
-              queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
+
+          const newMsg = payload.new;
+          const convId = newMsg?.conversation_id || payload.old?.conversation_id;
+
+          // Só notifica para mensagens RECEBIDAS de contatos (não as enviadas pelo agente/IA)
+          const isIncoming = newMsg?.direction === "incoming" && newMsg?.role === "contact";
+
+          if (isIncoming) {
+            // Notifica se a conversa não está aberta ou a janela não está em foco
+            const isCurrentConv = convId === selectedConversationId;
+            const isFocused = document.hasFocus();
+            if (!isCurrentConv || !isFocused) {
+              playNotificationSound();
+              setUnreadBadge((prev) => prev + 1);
             }
+          }
+
+          // Atualiza mensagens da conversa aberta
+          if (selectedConversationId && convId === selectedConversationId) {
+            queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
           }
         }
       )
@@ -145,6 +205,14 @@ const Inbox = () => {
 
     return () => { supabase.removeChannel(channel); };
   }, [tenantId, selectedConversationId, queryClient]);
+
+  // Zera badge ao abrir uma conversa
+  const handleSelectConversation = useCallback((id: string) => {
+    setSelectedConversationId(id);
+    setInputTab("message");
+    setMessageInput("");
+    setUnreadBadge(0);
+  }, []);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -256,11 +324,8 @@ const Inbox = () => {
           <ConversationList
             conversations={conversations}
             selectedId={selectedConversationId}
-            onSelect={(id) => {
-              setSelectedConversationId(id);
-              setInputTab("message");
-              setMessageInput("");
-            }}
+            onSelect={handleSelectConversation}
+
             filter={filter}
             onFilterChange={setFilter}
             search={search}
