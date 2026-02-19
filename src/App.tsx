@@ -15,10 +15,12 @@ import Knowledge from "./pages/Knowledge";
 import Settings from "./pages/Settings";
 import Team from "./pages/Team";
 import Inbox from "./pages/Inbox";
+import Reports from "./pages/Reports";
 import AdminTenants from "./pages/AdminTenants";
 import AdminLogs from "./pages/AdminLogs";
 import AdminPlans from "./pages/AdminPlans";
 import NotFound from "./pages/NotFound";
+
 
 const queryClient = new QueryClient();
 
@@ -43,7 +45,7 @@ const App = () => (
               <Route path="/knowledge" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Knowledge /></DashboardLayout></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Settings /></DashboardLayout></ProtectedRoute>} />
               <Route path="/team" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Team /></DashboardLayout></ProtectedRoute>} />
-              <Route path="/reports" element={<ProtectedRoute><DashboardLayout><Dashboard /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/reports" element={<ProtectedRoute><DashboardLayout><Reports /></DashboardLayout></ProtectedRoute>} />
               <Route path="/my-conversations" element={<ProtectedRoute><DashboardLayout><Inbox /></DashboardLayout></ProtectedRoute>} />
 
               {/* Admin routes */}

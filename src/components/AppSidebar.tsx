@@ -19,14 +19,14 @@ import {
   Settings,
   Bot,
   BarChart3,
-  Phone,
   BookOpen,
   Shield,
   Headphones,
-  Zap,
   FileText,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { WhatsAppStatusBadge } from "@/components/WhatsAppStatusBadge";
+
 
 interface MenuItem {
   title: string;
@@ -115,12 +115,9 @@ export function AppSidebar() {
             )}
           </div>
           {!collapsed && (
-            <div className="mt-2 flex items-center gap-2">
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
               {getRoleBadge()}
-              <Badge variant="outline" className="text-xs bg-sidebar-accent/20">
-                <Zap className="h-3 w-3 mr-1" />
-                Online
-              </Badge>
+              <WhatsAppStatusBadge />
             </div>
           )}
         </div>
