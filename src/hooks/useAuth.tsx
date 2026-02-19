@@ -51,6 +51,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Se veio sem tenant_id, aguardar e tentar novamente (trigger pode estar sendo processado)
       if (!data.tenant_id && retryCount < 3) {
         setTimeout(() => fetchProfile(userId, retryCount + 1), 1500);
+      } else if (data.tenant_id) {
+        // Garantir que os roles foram carregados quando o tenant_id estiver disponível
+        fetchRoles(userId);
       }
     } else if (retryCount < 2) {
       // Profile ainda não existe, aguardar trigger criar
