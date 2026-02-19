@@ -10,42 +10,42 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
     }
 
-    const token = authHeader.replace("Bearer ", "");
+    const jwtToken = authHeader.replace("Bearer ", "");
     const authClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
     );
-    const { data: claimsData, error: authError } = await authClient.auth.getClaims(token);
+    const { data: claimsData, error: authError } = await authClient.auth.getClaims(jwtToken);
     const user = claimsData?.claims ? { id: claimsData.claims.sub } : null;
 
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
     }
 
-    const { instance_id, token, api_url } = await req.json();
-    const greenUrl = `${api_url || "https://api.green-api.com"}/waInstance${instance_id}/getStatusInstance/${token}`;
+    const { instance_id, token: apiToken, api_url } = await req.json();
+    const greenUrl = `${api_url || "https://api.green-api.com"}/waInstance${instance_id}/getStatusInstance/${apiToken}`;
 
     const resp = await fetch(greenUrl);
-    const data = await resp.json();
-    
+    const rawText = await resp.text();
+    let data: any;
+    try {
+      data = JSON.parse(rawText);
+    } catch (_) {
+      return new Response(JSON.stringify({ error: "GREEN-API returned invalid response", is_connected: false, is_online: false }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     console.log("GREEN-API status response:", JSON.stringify(data));
 
-    // stateInstance: authorized | notAuthorized | blocked
-    // statusInstance: online | offline
     const stateInstance = data.stateInstance;
     const statusInstance = data.statusInstance;
-
     const isConnected = stateInstance === "authorized";
     const isOnline = statusInstance === "online";
 
