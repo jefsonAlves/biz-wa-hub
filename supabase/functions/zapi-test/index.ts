@@ -22,8 +22,34 @@ serve(async (req) => {
     console.log("Testing GREEN-API connection for instance:", instance_id);
 
     const url = `${GREEN_API_URL}/waInstance${instance_id}/getStateInstance/${token}`;
-    const response = await fetch(url, { method: "GET" });
-    const data = await response.json();
+    
+    let response: Response;
+    let data: any;
+    
+    try {
+      response = await fetch(url, { method: "GET" });
+    } catch (fetchError) {
+      console.error("Fetch error:", fetchError);
+      return new Response(JSON.stringify({ connected: false, error: "Não foi possível conectar à GREEN-API. Verifique sua conexão." }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const rawText = await response.text();
+    console.log("GREEN-API raw response:", rawText);
+
+    try {
+      data = JSON.parse(rawText);
+    } catch (_) {
+      console.error("GREEN-API returned non-JSON:", rawText.substring(0, 200));
+      return new Response(JSON.stringify({ 
+        connected: false, 
+        error: `GREEN-API retornou resposta inválida (HTTP ${response.status}). Verifique o idInstance e o token.` 
+      }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     console.log("GREEN-API state response:", JSON.stringify(data));
 
     if (response.ok && data.stateInstance === "authorized") {
