@@ -1,27 +1,68 @@
 
 
-## Correcao da Sincronizacao e IA Condicionada a Base de Conhecimento
+## Correcao da Sincronizacao de Contatos e Melhorias no Inbox
 
-### Problema 1: Sincronizacao falhando
-A funcao `green-api-sync` usa `authClient.auth.getClaims(jwtToken)` que nao existe no Supabase JS SDK, causando erro "Failed to send a request to the Edge Function". Alem disso, o arquivo `config.toml` nao tem `verify_jwt = false` para essa funcao, entao o gateway rejeita o request antes mesmo de chegar no codigo.
+### Problemas Identificados
 
-**Correcao:**
-- Adicionar `[functions.green-api-sync] verify_jwt = false` no `config.toml`
-- Trocar `getClaims` por `supabase.auth.getUser(jwtToken)` que e o metodo correto do SDK
-- Aplicar a mesma correcao para todas as edge functions que usam autenticacao manual
+1. **Contatos sem nomes**: 540 contatos importados, mas apenas 52 tem nome. A API `getContacts` do GREEN-API nao retorna nomes para todos os contatos. Precisa usar `getContactInfo` para buscar nome e avatar individualmente.
 
-### Problema 2: IA so deve ficar ativa quando houver base de conhecimento
-Atualmente o agente IA pode ser ativado livremente pelo toggle. O usuario quer que a IA so funcione quando existir pelo menos 1 item na base de conhecimento (`knowledge_items`).
+2. **Grupos importados indevidamente**: 3 contatos com `@g.us` (grupos) foram importados e nao deveriam estar na lista.
 
-**Correcao no webhook (`zapi-webhook-received`):**
-- Antes de chamar a IA, verificar se existem `knowledge_items` com status "indexed" para o tenant
-- Se nao houver nenhum, pular a auto-resposta IA
+3. **sync_status travado em "syncing"**: O status nunca voltou para "synced", possivelmente por timeout da edge function ao processar 540+ contatos.
 
-**Correcao na UI (`Settings.tsx`):**
-- O toggle do agente IA so fica habilitado se houver itens na base de conhecimento
-- Adicionar query para contar `knowledge_items` do tenant
-- Se nao houver itens, mostrar mensagem "Adicione itens a Base de Conhecimento primeiro" com link para `/knowledge`
-- No checklist, atualizar o item "Agente IA ativo" para tambem considerar a existencia de knowledge items
+4. **Conversas mostram apenas numeros**: O Inbox nao mostra nomes porque os contatos nao tem `name` preenchido.
+
+5. **Falta de avatar/imagem**: A tabela `contacts` tem campo `avatar_url` mas o sync nunca preenche.
+
+6. **Conversas inativas dominam a lista**: Todas as conversas tem `status: open` mesmo sem mensagens recentes.
+
+---
+
+### Plano de Correcao
+
+#### 1. Reescrever `supabase/functions/green-api-sync/index.ts`
+
+Mudancas principais:
+
+- **Filtrar grupos**: Remover contatos com `@g.us` ja existentes no banco e impedir novos
+- **Buscar nomes com `getContactInfo`**: Para cada contato sem nome, chamar `POST /waInstance{id}/getContactInfo/{token}` com `{ chatId: "phone@c.us" }` para obter `name`, `contactName` e `avatar`
+- **Buscar avatar com `getContactInfo`**: O endpoint retorna campo `avatar` com URL da foto do perfil
+- **Limitar contatos processados**: Processar apenas contatos que tem chats recentes (priorizar os ultimos 100 contatos com atividade)
+- **Otimizar com batch processing**: Adicionar delay de 300ms entre chamadas `getContactInfo` para evitar rate limiting
+- **Atualizar sync_status corretamente**: Garantir que muda para "synced" ou "error" no final
+- **Criar conversas apenas para contatos com historico**: Nao criar conversa para contatos que nunca trocaram mensagens
+
+Fluxo revisado:
+```text
+1. Fetch getContacts -> lista de todos os contatos
+2. Filtrar apenas @c.us (ignorar grupos @g.us)
+3. Para cada contato SEM nome:
+   - Chamar getContactInfo para obter name + avatar
+   - Delay 300ms entre chamadas
+4. Upsert contatos no banco (com nome e avatar)
+5. Fetch historico de mensagens (getChatHistory) 
+   - Apenas para contatos com atividade recente
+6. Criar conversas apenas para quem tem mensagens
+7. Atualizar sync_status = "synced"
+```
+
+#### 2. Limpar dados incorretos (migracao SQL)
+
+- Remover contatos que sao grupos (`wa_chat_id LIKE '%@g.us'`)
+- Remover conversas orfas (sem contato valido)
+
+#### 3. Melhorar o ConversationList (`src/components/inbox/ConversationList.tsx`)
+
+- Mostrar avatar do contato quando disponivel (usar `avatar_url` da tabela contacts)
+- Fallback para iniciais do nome/numero quando sem avatar
+
+#### 4. Melhorar o Inbox Header (`src/pages/Inbox.tsx`)
+
+- Mostrar avatar do contato no cabecalho da conversa quando disponivel
+
+#### 5. Atualizar webhook para salvar avatar (`supabase/functions/zapi-webhook-received/index.ts`)
+
+- Quando receber mensagem de novo contato, buscar avatar via `getContactInfo` e salvar
 
 ---
 
@@ -29,53 +70,17 @@ Atualmente o agente IA pode ser ativado livremente pelo toggle. O usuario quer q
 
 **Arquivos modificados:**
 
-1. **`supabase/config.toml`** - Nao pode ser editado manualmente (gerenciado automaticamente). A verificacao JWT sera tratada no codigo.
+1. `supabase/functions/green-api-sync/index.ts` - Reescrever logica de sync com getContactInfo para nomes e avatares
+2. `src/components/inbox/ConversationList.tsx` - Adicionar exibicao de avatar do contato
+3. `src/pages/Inbox.tsx` - Mostrar avatar no header do chat
+4. `supabase/functions/zapi-webhook-received/index.ts` - Buscar avatar ao receber msg de novo contato
 
-2. **`supabase/functions/green-api-sync/index.ts`**
-   - Substituir bloco de autenticacao:
-   ```typescript
-   // ANTES (quebrado)
-   const { data: claimsData, error: authError } = await authClient.auth.getClaims(jwtToken);
-   
-   // DEPOIS (correto)
-   const { data: { user }, error: authError } = await supabase.auth.getUser(jwtToken);
-   ```
-   - Remover criacao do `authClient` (usar o `supabase` com service role para `getUser`)
-   - Adicionar delays entre requests de historico para evitar rate limiting da GREEN-API
+**Migracao SQL:**
+- Deletar contatos de grupo (`wa_chat_id LIKE '%@g.us'`) e conversas/mensagens associadas
+- Atualizar `sync_status` de "syncing" para "idle" para desbloquear
 
-3. **`supabase/functions/zapi-webhook-received/index.ts`**
-   - Adicionar verificacao de knowledge_items antes da auto-resposta IA:
-   ```typescript
-   const { count: knowledgeCount } = await supabase
-     .from("knowledge_items")
-     .select("id", { count: "exact", head: true })
-     .eq("tenant_id", tenantId);
-   
-   if (!knowledgeCount || knowledgeCount === 0) {
-     console.log("No knowledge base - skipping AI response");
-     // pular toda a logica de IA
-   }
-   ```
+**API GREEN-API utilizada:**
+- `POST /waInstance{id}/getContactInfo/{token}` - body: `{ chatId: "phone@c.us" }` - retorna `name`, `contactName`, `avatar`
 
-4. **`src/pages/Settings.tsx`**
-   - Adicionar query para contar knowledge_items:
-   ```typescript
-   const { data: knowledgeCount } = useQuery({
-     queryKey: ["knowledge_count", tenantId],
-     queryFn: async () => {
-       const { count } = await supabase
-         .from("knowledge_items")
-         .select("id", { count: "exact", head: true })
-         .eq("tenant_id", tenantId);
-       return count || 0;
-     },
-     enabled: !!tenantId,
-   });
-   ```
-   - Desabilitar Switch do agente IA quando `knowledgeCount === 0`
-   - Mostrar alerta: "Adicione conteudo a Base de Conhecimento para ativar o agente IA"
-   - Adicionar botao "Ir para Base de Conhecimento" linkando para `/knowledge`
-   - Atualizar checklist: item "Agente IA ativo" so fica verde se `is_active && knowledgeCount > 0`
-
-**Nenhuma mudanca de banco de dados necessaria.**
+**Nenhuma nova tabela ou coluna necessaria** - o campo `avatar_url` ja existe na tabela `contacts`.
 
