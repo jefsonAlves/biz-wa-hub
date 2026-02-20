@@ -104,6 +104,20 @@ const Settings = () => {
     enabled: !!tenantId,
   });
 
+  // Query: Knowledge items count
+  const { data: knowledgeCount = 0 } = useQuery({
+    queryKey: ["knowledge_count", tenantId],
+    queryFn: async () => {
+      if (!tenantId) return 0;
+      const { count } = await supabase
+        .from("knowledge_items")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId);
+      return count || 0;
+    },
+    enabled: !!tenantId,
+  });
+
   // Mutation: toggle agent is_active
   const toggleAgentMutation = useMutation({
     mutationFn: async () => {
@@ -354,7 +368,7 @@ const Settings = () => {
     { label: "WhatsApp conectado", done: isConnected },
     { label: "Webhooks registrados", done: !!connection?.webhook_url },
     { label: "Contatos sincronizados", done: connection?.sync_status === "synced" },
-    { label: "Agente IA ativo", done: !!agentConfig?.is_active },
+    { label: "Agente IA ativo", done: !!agentConfig?.is_active && knowledgeCount > 0 },
   ];
   const checklistDone = checklistItems.filter((i) => i.done).length;
 
@@ -653,6 +667,19 @@ const Settings = () => {
                 </div>
               ) : agentConfig ? (
                 <>
+                  {/* Knowledge base warning */}
+                  {knowledgeCount === 0 && (
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm">
+                      <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+                      <div>
+                        <p className="font-medium text-destructive">Base de Conhecimento vazia</p>
+                        <p className="text-muted-foreground">Adicione conteúdo à Base de Conhecimento para ativar o agente IA.</p>
+                      </div>
+                      <Button variant="outline" size="sm" className="ml-auto shrink-0" onClick={() => navigate("/knowledge")}>
+                        Ir para Base de Conhecimento
+                      </Button>
+                    </div>
+                  )}
                   {/* Agent summary */}
                   <div className="p-4 rounded-lg bg-muted/50 space-y-2">
                     <div className="flex items-center justify-between">
@@ -671,7 +698,7 @@ const Settings = () => {
                           id="agent-toggle"
                           checked={agentConfig.is_active ?? false}
                           onCheckedChange={() => toggleAgentMutation.mutate()}
-                          disabled={toggleAgentMutation.isPending}
+                          disabled={toggleAgentMutation.isPending || knowledgeCount === 0}
                         />
                       </div>
                     </div>
