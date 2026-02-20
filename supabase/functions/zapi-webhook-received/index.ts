@@ -140,15 +140,34 @@ serve(async (req) => {
 
     if (existingContact) {
       contactId = existingContact.id;
-      await supabase.from("contacts").update({
-        name: senderName || undefined,
+      const updateData: any = {
         wa_chat_id: chatId,
         last_message_preview: messageContent?.slice(0, 100) || null,
-      }).eq("id", contactId);
+      };
+      if (senderName) updateData.name = senderName;
+      await supabase.from("contacts").update(updateData).eq("id", contactId);
     } else {
+      // New contact - fetch avatar via getContactInfo
+      let avatarUrl: string | null = null;
+      let contactName = senderName;
+      try {
+        const apiUrl = connection.api_url || "https://api.green-api.com";
+        const infoResp = await fetch(`${apiUrl}/waInstance${connection.zapi_instance_id}/getContactInfo/${connection.zapi_token}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chatId }),
+        });
+        if (infoResp.ok) {
+          const info = await infoResp.json();
+          avatarUrl = info.avatar || null;
+          if (!contactName) contactName = info.name || info.contactName || null;
+        }
+      } catch (e) { console.error("getContactInfo error:", e); }
+
       const { data: newContact } = await supabase.from("contacts").insert({
-        phone, tenant_id: tenantId, name: senderName, wa_chat_id: chatId,
+        phone, tenant_id: tenantId, name: contactName, wa_chat_id: chatId,
         last_message_preview: messageContent?.slice(0, 100) || null,
+        avatar_url: avatarUrl,
       }).select().single();
       if (!newContact) return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
       contactId = newContact.id;

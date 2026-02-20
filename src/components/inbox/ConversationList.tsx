@@ -98,7 +98,18 @@ export function ConversationList({
                 )}
               >
                 <div className="relative flex-shrink-0">
-                  <div className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold text-sm">
+                  {conv.contacts?.avatar_url ? (
+                    <img
+                      src={conv.contacts.avatar_url}
+                      alt={name}
+                      className="w-11 h-11 rounded-full object-cover"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
+                    />
+                  ) : null}
+                  <div className={cn(
+                    "w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold text-sm",
+                    conv.contacts?.avatar_url ? "hidden" : ""
+                  )}>
                     {name.charAt(0).toUpperCase()}
                   </div>
                   <span className={cn("absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background", statusDot)} />
