@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
-import { Wifi, Clock, Building, QrCode, CheckCircle2, RefreshCw, Loader2, Users, MessageSquare, AlertCircle } from "lucide-react";
+import { Wifi, Clock, Building, QrCode, CheckCircle2, RefreshCw, Loader2, Users, MessageSquare, AlertCircle, Bot, Circle, ExternalLink } from "lucide-react";
 
 const DAYS = [
   { key: "monday", label: "Segunda" }, { key: "tuesday", label: "Terça" },
@@ -31,6 +32,7 @@ const Settings = () => {
   const { profile, loading } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const tenantId = profile?.tenant_id;
 
   // GREEN-API state (only 2 fields: idInstance and apiTokenInstance)
@@ -84,6 +86,39 @@ const Settings = () => {
       return data;
     },
     enabled: !!tenantId,
+  });
+
+  // Query: AI Agent config
+  const { data: agentConfig, isLoading: agentLoading } = useQuery({
+    queryKey: ["agent_config_active", tenantId],
+    queryFn: async () => {
+      if (!tenantId) return null;
+      const { data } = await supabase
+        .from("agents_config")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!tenantId,
+  });
+
+  // Mutation: toggle agent is_active
+  const toggleAgentMutation = useMutation({
+    mutationFn: async () => {
+      if (!agentConfig) throw new Error("Nenhum agente configurado");
+      const { error } = await supabase
+        .from("agents_config")
+        .update({ is_active: !agentConfig.is_active })
+        .eq("id", agentConfig.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["agent_config_active"] });
+      toast({ title: agentConfig?.is_active ? "Agente IA desativado" : "Agente IA ativado!" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
   useEffect(() => {
@@ -283,7 +318,6 @@ const Settings = () => {
     setSyncResult(null);
     setSyncProgress(10);
 
-    // Simulate progress while waiting
     const progressInterval = setInterval(() => {
       setSyncProgress((p) => Math.min(p + 5, 85));
     }, 1000);
@@ -314,7 +348,16 @@ const Settings = () => {
     }
   };
 
-  // Estado defensivo: se não tem tenant ainda, mostrar loading
+  // Setup checklist items
+  const checklistItems = [
+    { label: "Credenciais salvas", done: !!connection },
+    { label: "WhatsApp conectado", done: isConnected },
+    { label: "Webhooks registrados", done: !!connection?.webhook_url },
+    { label: "Contatos sincronizados", done: connection?.sync_status === "synced" },
+    { label: "Agente IA ativo", done: !!agentConfig?.is_active },
+  ];
+  const checklistDone = checklistItems.filter((i) => i.done).length;
+
   if (!tenantId) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
@@ -344,6 +387,34 @@ const Settings = () => {
         </TabsList>
 
         <TabsContent value="whatsapp" className="space-y-4">
+          {/* Setup Checklist Card */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CheckCircle2 className="h-5 w-5" />
+                Progresso do Setup
+                <Badge variant={checklistDone === checklistItems.length ? "default" : "secondary"} className="ml-auto">
+                  {checklistDone}/{checklistItems.length}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                {checklistItems.map((item) => (
+                  <div key={item.label} className="flex items-center gap-2 text-sm">
+                    {item.done ? (
+                      <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                    ) : (
+                      <Circle className="h-4 w-4 text-muted-foreground shrink-0" />
+                    )}
+                    <span className={item.done ? "text-foreground" : "text-muted-foreground"}>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+              <Progress value={(checklistDone / checklistItems.length) * 100} className="h-1.5 mt-3" />
+            </CardContent>
+          </Card>
+
           {/* Credentials Card */}
           <Card>
             <CardHeader>
@@ -490,7 +561,7 @@ const Settings = () => {
                   Sincronizar Contatos e Conversas
                 </CardTitle>
                 <CardDescription>
-                  Importa contatos, cria conversas e traz o histórico de mensagens do WhatsApp para o Inbox.
+                  Importa contatos, cria conversas e traz até 30 mensagens por conversa do WhatsApp para o Inbox.
                   {connection.sync_status && connection.sync_status !== "idle" && (
                     <span className="ml-2">
                       Status:{" "}
@@ -502,6 +573,13 @@ const Settings = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Last sync info */}
+                {connection.last_connected_at && connection.sync_status === "synced" && (
+                  <div className="text-sm text-muted-foreground p-3 rounded-md bg-muted/50">
+                    Última sincronização: <strong>{new Date(connection.last_connected_at).toLocaleString("pt-BR")}</strong>
+                  </div>
+                )}
+
                 {syncing && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -550,6 +628,71 @@ const Settings = () => {
               </CardContent>
             </Card>
           )}
+
+          {/* AI Agent Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5" />
+                Agente IA
+                {agentConfig?.is_active && (
+                  <Badge variant="default" className="ml-2">Ativo</Badge>
+                )}
+                {agentConfig && !agentConfig.is_active && (
+                  <Badge variant="secondary" className="ml-2">Inativo</Badge>
+                )}
+              </CardTitle>
+              <CardDescription>
+                O agente IA responde automaticamente às mensagens recebidas no WhatsApp usando inteligência artificial.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {agentLoading ? (
+                <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
+                </div>
+              ) : agentConfig ? (
+                <>
+                  {/* Agent summary */}
+                  <div className="p-4 rounded-lg bg-muted/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{agentConfig.name}</p>
+                        <p className="text-xs text-muted-foreground">Modelo: {agentConfig.model || "Padrão"}</p>
+                        {agentConfig.persona && (
+                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">Persona: {agentConfig.persona}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Label htmlFor="agent-toggle" className="text-sm text-muted-foreground">
+                          {agentConfig.is_active ? "Ativo" : "Inativo"}
+                        </Label>
+                        <Switch
+                          id="agent-toggle"
+                          checked={agentConfig.is_active ?? false}
+                          onCheckedChange={() => toggleAgentMutation.mutate()}
+                          disabled={toggleAgentMutation.isPending}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <Button variant="outline" onClick={() => navigate("/agents-config")}>
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Configurar Agente
+                  </Button>
+                </>
+              ) : (
+                <div className="text-center py-6">
+                  <Bot className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+                  <p className="text-muted-foreground mb-4">Nenhum agente IA configurado ainda.</p>
+                  <Button onClick={() => navigate("/agents-config")}>
+                    <Bot className="h-4 w-4 mr-2" />
+                    Criar Agente IA
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="hours">
