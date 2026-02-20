@@ -21,15 +21,10 @@ serve(async (req) => {
     }
 
     const jwtToken = authHeader.replace("Bearer ", "");
-    const authClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: claimsData, error: authError } = await authClient.auth.getClaims(jwtToken);
-    const user = claimsData?.claims ? { id: claimsData.claims.sub } : null;
+    const { data: { user }, error: authError } = await supabase.auth.getUser(jwtToken);
 
     if (authError || !user) {
+      console.error("Auth error:", authError?.message);
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
     }
 
@@ -126,6 +121,9 @@ serve(async (req) => {
         if (!chatId) continue;
 
         try {
+          // Delay between requests to avoid rate limiting
+          await new Promise((r) => setTimeout(r, 500));
+
           const historyResp = await fetch(`${apiUrl}/waInstance${instanceId}/getChatHistory/${token}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

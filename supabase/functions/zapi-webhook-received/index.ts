@@ -202,6 +202,16 @@ serve(async (req) => {
 
     if (!aiPaused && aiMode === "auto" && messageContent && messageType === "text") {
       try {
+        // Check if knowledge base has indexed items - skip AI if empty
+        const { count: knowledgeCount } = await supabase
+          .from("knowledge_items")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
+          .eq("status", "indexed");
+
+        if (!knowledgeCount || knowledgeCount === 0) {
+          console.log("No knowledge base items - skipping AI response for tenant:", tenantId);
+        } else {
         const { data: agentConfig } = await supabase
           .from("agents_config").select("*")
           .eq("tenant_id", tenantId).eq("is_active", true)
@@ -289,6 +299,7 @@ serve(async (req) => {
             }
           }
         }
+        } // end knowledgeCount > 0
       } catch (aiError) {
         console.error("AI auto-response error:", aiError);
       }
