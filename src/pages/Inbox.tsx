@@ -59,7 +59,7 @@ const Inbox = () => {
       if (!tenantId) return [];
       const { data, error } = await supabase
         .from("conversations")
-        .select("*, contacts(name, phone, wa_chat_id, last_message_preview), departments(name)")
+        .select("*, contacts(name, phone, wa_chat_id, last_message_preview, avatar_url), departments(name)")
         .eq("tenant_id", tenantId)
         .order("last_message_at", { ascending: false });
       if (error) throw error;
@@ -353,7 +353,18 @@ const Inbox = () => {
             <div className="px-4 py-3 border-b border-border bg-card/80 backdrop-blur-sm">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0">
+                  {selectedConv.contacts?.avatar_url ? (
+                    <img
+                      src={selectedConv.contacts.avatar_url}
+                      alt={selectedConv.contacts?.name || ""}
+                      className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
+                    />
+                  ) : null}
+                  <div className={cn(
+                    "w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0",
+                    selectedConv.contacts?.avatar_url ? "hidden" : ""
+                  )}>
                     {(selectedConv.contacts?.name || selectedConv.contacts?.phone || "?").charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
