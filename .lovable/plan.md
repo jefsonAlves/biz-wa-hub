@@ -1,49 +1,52 @@
 
-## Diagnóstico
 
-O WhatsApp está conectado mas o banco de dados está vazio (0 contatos, 0 conversas). Há 3 problemas a resolver:
+## Melhorias na Aba WhatsApp das Configurações
 
-**Problema 1 — Bug de autenticação no `green-api-sync`**
-A função usa `SUPABASE_PUBLISHABLE_KEY` para validar o usuário, mas esse secret não existe no ambiente da função. O correto é `SUPABASE_ANON_KEY` (mesmo fix já aplicado em `green-api-status`).
+### Contexto
+A aba WhatsApp ja tem o botao "Sincronizar Agora" funcionando, o webhook `zapi-webhook-received` ja processa mensagens recebidas com auto-resposta IA integrada, e a pagina `AgentsConfig` permite configurar agentes IA. O que falta e uma experiencia mais completa e integrada na tela de Configuracoes.
 
-**Problema 2 — Sem botão de sincronização na UI**
-A página de Configurações não tem um botão para disparar o `green-api-sync` e trazer os contatos/conversas da GREEN-API para o banco de dados.
+### Mudancas Planejadas
 
-**Problema 3 — Schedule worker sem cron job**
-A função `green-api-schedule-worker` existe, mas nunca é chamada automaticamente. Sem um cron job, mensagens agendadas ficam presas em status `queued` para sempre.
+#### 1. Card "Agente IA" na aba WhatsApp (Settings.tsx)
+Adicionar um novo Card abaixo do card de sincronizacao com:
+- Status do agente IA (ativo/inativo) baseado na existencia de um `agents_config` ativo para o tenant
+- Botao **"Ativar Agente IA"** que redireciona para `/agents-config` se nao houver agente, ou toggle rapido se ja houver um configurado
+- Resumo do agente ativo: nome, modelo, persona
+- Switch para ativar/desativar rapidamente o agente sem sair da tela
 
----
+#### 2. Melhorar o Card de Sincronizacao
+- Mostrar data/hora da ultima sincronizacao (campo `last_connected_at` ou `sync_status`)
+- Adicionar texto explicativo sobre o que o sync faz (contatos, conversas, historico de ate 30 mensagens por conversa)
 
-## Plano de Implementação
-
-### Passo 1 — Corrigir `green-api-sync/index.ts`
-Substituir `SUPABASE_PUBLISHABLE_KEY` por `SUPABASE_ANON_KEY` na validação do usuário (linha 26), idêntico ao fix aplicado nas outras funções.
-
-### Passo 2 — Adicionar botão "Sincronizar Contatos" na Settings
-Na aba WhatsApp da página `src/pages/Settings.tsx`, adicionar um Card de sincronização abaixo do card de conexão, com:
-- Botão **"Sincronizar Contatos e Conversas"** que chama `green-api-sync`
-- Indicador de progresso durante a sincronização
-- Exibição do resultado: quantos contatos, conversas e mensagens foram importados
-- Estado do sync (`sync_status` da conexão: `idle`, `syncing`, `synced`, `error`)
-
-### Passo 3 — Configurar cron job para o schedule worker
-Usando `pg_cron` + `pg_net`, criar um job que chama `green-api-schedule-worker` a cada minuto, para que mensagens agendadas sejam enviadas automaticamente no horário configurado.
+#### 3. Card de Status Geral do WhatsApp
+- Consolidar informacoes: conexao, webhooks, sync, IA -- tudo visivel de uma vez
+- Mostrar checklist visual: Credenciais salvas, WhatsApp conectado, Webhooks registrados, Contatos sincronizados, Agente IA ativo
 
 ---
 
-## Arquivos a modificar
+### Detalhes Tecnicos
 
-| Arquivo | Mudança |
-|---|---|
-| `supabase/functions/green-api-sync/index.ts` | Trocar `SUPABASE_PUBLISHABLE_KEY` → `SUPABASE_ANON_KEY` |
-| `src/pages/Settings.tsx` | Adicionar Card com botão de sync + status |
-| SQL (insert via tool) | Criar cron job para o schedule worker |
+**Arquivo modificado:** `src/pages/Settings.tsx`
 
----
+**Nova query adicionada:**
+- Buscar `agents_config` do tenant para verificar se ha agente IA ativo
+- Query: `supabase.from("agents_config").select("*").eq("tenant_id", tenantId).eq("is_active", true).limit(1).maybeSingle()`
 
-## Resultado esperado
+**Nova mutation:**
+- Toggle `is_active` do agente diretamente do card
+- Update: `supabase.from("agents_config").update({ is_active: !current }).eq("id", agentId)`
 
-Após a implementação:
-1. Clicar em "Sincronizar" nas Configurações → contatos e conversas aparecem no Inbox
-2. Mensagens agendadas via ActionMenu são enviadas automaticamente no horário definido
-3. O Inbox mostrará conversas reais do WhatsApp com histórico de mensagens
+**Novo Card "Agente IA":**
+- Exibe nome, modelo e persona do agente ativo
+- Switch para ativar/desativar
+- Link "Configurar Agente" que navega para `/agents-config`
+- Se nenhum agente existir, mostra botao "Criar Agente IA" que navega para `/agents-config`
+
+**Checklist de Setup (dentro do Card de Conexao existente):**
+- Credenciais salvas (check se `connection` existe)
+- WhatsApp conectado (check se `isConnected`)
+- Webhooks registrados (check se `connection.webhook_url` existe)
+- Contatos sincronizados (check se `connection.sync_status === "synced"`)
+- Agente IA ativo (check se ha agente ativo)
+
+Nenhuma mudanca de banco de dados e necessaria -- todas as tabelas ja existem.
