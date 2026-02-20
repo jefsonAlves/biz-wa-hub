@@ -1,52 +1,81 @@
 
 
-## Melhorias na Aba WhatsApp das Configurações
+## Correcao da Sincronizacao e IA Condicionada a Base de Conhecimento
 
-### Contexto
-A aba WhatsApp ja tem o botao "Sincronizar Agora" funcionando, o webhook `zapi-webhook-received` ja processa mensagens recebidas com auto-resposta IA integrada, e a pagina `AgentsConfig` permite configurar agentes IA. O que falta e uma experiencia mais completa e integrada na tela de Configuracoes.
+### Problema 1: Sincronizacao falhando
+A funcao `green-api-sync` usa `authClient.auth.getClaims(jwtToken)` que nao existe no Supabase JS SDK, causando erro "Failed to send a request to the Edge Function". Alem disso, o arquivo `config.toml` nao tem `verify_jwt = false` para essa funcao, entao o gateway rejeita o request antes mesmo de chegar no codigo.
 
-### Mudancas Planejadas
+**Correcao:**
+- Adicionar `[functions.green-api-sync] verify_jwt = false` no `config.toml`
+- Trocar `getClaims` por `supabase.auth.getUser(jwtToken)` que e o metodo correto do SDK
+- Aplicar a mesma correcao para todas as edge functions que usam autenticacao manual
 
-#### 1. Card "Agente IA" na aba WhatsApp (Settings.tsx)
-Adicionar um novo Card abaixo do card de sincronizacao com:
-- Status do agente IA (ativo/inativo) baseado na existencia de um `agents_config` ativo para o tenant
-- Botao **"Ativar Agente IA"** que redireciona para `/agents-config` se nao houver agente, ou toggle rapido se ja houver um configurado
-- Resumo do agente ativo: nome, modelo, persona
-- Switch para ativar/desativar rapidamente o agente sem sair da tela
+### Problema 2: IA so deve ficar ativa quando houver base de conhecimento
+Atualmente o agente IA pode ser ativado livremente pelo toggle. O usuario quer que a IA so funcione quando existir pelo menos 1 item na base de conhecimento (`knowledge_items`).
 
-#### 2. Melhorar o Card de Sincronizacao
-- Mostrar data/hora da ultima sincronizacao (campo `last_connected_at` ou `sync_status`)
-- Adicionar texto explicativo sobre o que o sync faz (contatos, conversas, historico de ate 30 mensagens por conversa)
+**Correcao no webhook (`zapi-webhook-received`):**
+- Antes de chamar a IA, verificar se existem `knowledge_items` com status "indexed" para o tenant
+- Se nao houver nenhum, pular a auto-resposta IA
 
-#### 3. Card de Status Geral do WhatsApp
-- Consolidar informacoes: conexao, webhooks, sync, IA -- tudo visivel de uma vez
-- Mostrar checklist visual: Credenciais salvas, WhatsApp conectado, Webhooks registrados, Contatos sincronizados, Agente IA ativo
+**Correcao na UI (`Settings.tsx`):**
+- O toggle do agente IA so fica habilitado se houver itens na base de conhecimento
+- Adicionar query para contar `knowledge_items` do tenant
+- Se nao houver itens, mostrar mensagem "Adicione itens a Base de Conhecimento primeiro" com link para `/knowledge`
+- No checklist, atualizar o item "Agente IA ativo" para tambem considerar a existencia de knowledge items
 
 ---
 
 ### Detalhes Tecnicos
 
-**Arquivo modificado:** `src/pages/Settings.tsx`
+**Arquivos modificados:**
 
-**Nova query adicionada:**
-- Buscar `agents_config` do tenant para verificar se ha agente IA ativo
-- Query: `supabase.from("agents_config").select("*").eq("tenant_id", tenantId).eq("is_active", true).limit(1).maybeSingle()`
+1. **`supabase/config.toml`** - Nao pode ser editado manualmente (gerenciado automaticamente). A verificacao JWT sera tratada no codigo.
 
-**Nova mutation:**
-- Toggle `is_active` do agente diretamente do card
-- Update: `supabase.from("agents_config").update({ is_active: !current }).eq("id", agentId)`
+2. **`supabase/functions/green-api-sync/index.ts`**
+   - Substituir bloco de autenticacao:
+   ```typescript
+   // ANTES (quebrado)
+   const { data: claimsData, error: authError } = await authClient.auth.getClaims(jwtToken);
+   
+   // DEPOIS (correto)
+   const { data: { user }, error: authError } = await supabase.auth.getUser(jwtToken);
+   ```
+   - Remover criacao do `authClient` (usar o `supabase` com service role para `getUser`)
+   - Adicionar delays entre requests de historico para evitar rate limiting da GREEN-API
 
-**Novo Card "Agente IA":**
-- Exibe nome, modelo e persona do agente ativo
-- Switch para ativar/desativar
-- Link "Configurar Agente" que navega para `/agents-config`
-- Se nenhum agente existir, mostra botao "Criar Agente IA" que navega para `/agents-config`
+3. **`supabase/functions/zapi-webhook-received/index.ts`**
+   - Adicionar verificacao de knowledge_items antes da auto-resposta IA:
+   ```typescript
+   const { count: knowledgeCount } = await supabase
+     .from("knowledge_items")
+     .select("id", { count: "exact", head: true })
+     .eq("tenant_id", tenantId);
+   
+   if (!knowledgeCount || knowledgeCount === 0) {
+     console.log("No knowledge base - skipping AI response");
+     // pular toda a logica de IA
+   }
+   ```
 
-**Checklist de Setup (dentro do Card de Conexao existente):**
-- Credenciais salvas (check se `connection` existe)
-- WhatsApp conectado (check se `isConnected`)
-- Webhooks registrados (check se `connection.webhook_url` existe)
-- Contatos sincronizados (check se `connection.sync_status === "synced"`)
-- Agente IA ativo (check se ha agente ativo)
+4. **`src/pages/Settings.tsx`**
+   - Adicionar query para contar knowledge_items:
+   ```typescript
+   const { data: knowledgeCount } = useQuery({
+     queryKey: ["knowledge_count", tenantId],
+     queryFn: async () => {
+       const { count } = await supabase
+         .from("knowledge_items")
+         .select("id", { count: "exact", head: true })
+         .eq("tenant_id", tenantId);
+       return count || 0;
+     },
+     enabled: !!tenantId,
+   });
+   ```
+   - Desabilitar Switch do agente IA quando `knowledgeCount === 0`
+   - Mostrar alerta: "Adicione conteudo a Base de Conhecimento para ativar o agente IA"
+   - Adicionar botao "Ir para Base de Conhecimento" linkando para `/knowledge`
+   - Atualizar checklist: item "Agente IA ativo" so fica verde se `is_active && knowledgeCount > 0`
 
-Nenhuma mudanca de banco de dados e necessaria -- todas as tabelas ja existem.
+**Nenhuma mudanca de banco de dados necessaria.**
+
