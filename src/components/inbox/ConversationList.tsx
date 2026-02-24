@@ -1,8 +1,11 @@
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Search, ChevronLeft, ChevronRight, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 interface ConversationListProps {
   conversations: any[];
@@ -13,6 +16,14 @@ interface ConversationListProps {
   search: string;
   onSearchChange: (s: string) => void;
   userId?: string;
+  page: number;
+  onPageChange: (p: number) => void;
+  totalCount: number;
+  departments?: any[];
+  salesStatusFilter: string;
+  onSalesStatusChange: (s: string) => void;
+  departmentFilter: string;
+  onDepartmentChange: (d: string) => void;
 }
 
 const filterTabs = [
@@ -23,21 +34,26 @@ const filterTabs = [
   { key: "unassigned", label: "Sem agente" },
 ];
 
+const salesStatuses = [
+  { key: "all", label: "Todos" },
+  { key: "lead", label: "Lead" },
+  { key: "negotiation", label: "Negociação" },
+  { key: "won", label: "Ganho" },
+  { key: "lost", label: "Perdido" },
+];
+
+const PAGE_SIZE = 20;
+
 export function ConversationList({
   conversations, selectedId, onSelect, filter, onFilterChange, search, onSearchChange, userId,
+  page, onPageChange, totalCount, departments = [], salesStatusFilter, onSalesStatusChange,
+  departmentFilter, onDepartmentChange,
 }: ConversationListProps) {
-  const filtered = conversations.filter((c) => {
-    const name = c.contacts?.name || c.contacts?.phone || "";
-    const phone = c.contacts?.phone || "";
-    const matchSearch = !search || name.toLowerCase().includes(search.toLowerCase()) || phone.includes(search);
-    if (!matchSearch) return false;
-    if (filter === "open") return c.status === "open";
-    if (filter === "waiting") return c.status === "waiting";
-    if (filter === "closed") return c.status === "closed";
-    if (filter === "mine") return c.assigned_agent_id === userId;
-    if (filter === "unassigned") return !c.assigned_agent_id;
-    return true;
-  });
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const from = page * PAGE_SIZE + 1;
+  const to = Math.min((page + 1) * PAGE_SIZE, totalCount);
 
   return (
     <div className="flex flex-col h-full">
@@ -46,16 +62,16 @@ export function ConversationList({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Buscar conversa..."
+            onChange={(e) => { onSearchChange(e.target.value); onPageChange(0); }}
+            placeholder="Buscar nome ou telefone..."
             className="pl-9 h-9 bg-muted/50"
           />
         </div>
-        <div className="flex gap-1 flex-wrap">
+        <div className="flex gap-1 flex-wrap items-center">
           {filterTabs.map((tab) => (
             <button
               key={tab.key}
-              onClick={() => onFilterChange(tab.key)}
+              onClick={() => { onFilterChange(tab.key); onPageChange(0); }}
               className={cn(
                 "text-xs px-2 py-1 rounded-full transition-colors",
                 filter === tab.key
@@ -66,16 +82,50 @@ export function ConversationList({
               {tab.label}
             </button>
           ))}
+          <button
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className={cn(
+              "text-xs px-2 py-1 rounded-full transition-colors ml-auto",
+              showAdvanced ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent"
+            )}
+          >
+            <Filter className="h-3 w-3" />
+          </button>
         </div>
+        {showAdvanced && (
+          <div className="flex gap-2">
+            <Select value={departmentFilter} onValueChange={(v) => { onDepartmentChange(v); onPageChange(0); }}>
+              <SelectTrigger className="h-7 text-xs flex-1">
+                <SelectValue placeholder="Depto" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos deptos</SelectItem>
+                {departments.map((d: any) => (
+                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={salesStatusFilter} onValueChange={(v) => { onSalesStatusChange(v); onPageChange(0); }}>
+              <SelectTrigger className="h-7 text-xs flex-1">
+                <SelectValue placeholder="Vendas" />
+              </SelectTrigger>
+              <SelectContent>
+                {salesStatuses.map((s) => (
+                  <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       <ScrollArea className="flex-1">
-        {filtered.length === 0 ? (
+        {conversations.length === 0 ? (
           <div className="p-8 text-center">
             <p className="text-sm text-muted-foreground">Nenhuma conversa</p>
           </div>
         ) : (
-          filtered.map((conv) => {
+          conversations.map((conv) => {
             const name = conv.contacts?.name || conv.contacts?.phone || "Desconhecido";
             const phone = conv.contacts?.phone || "";
             const preview = conv.contacts?.last_message_preview || "";
@@ -125,6 +175,9 @@ export function ConversationList({
                     {conv.ai_paused && (
                       <Badge variant="outline" className="text-xs py-0 h-4">IA off</Badge>
                     )}
+                    {conv.departments?.name && (
+                      <Badge variant="secondary" className="text-xs py-0 h-4">{conv.departments.name}</Badge>
+                    )}
                     {unread > 0 && (
                       <Badge className="text-xs py-0 h-4 ml-auto">{unread}</Badge>
                     )}
@@ -135,6 +188,35 @@ export function ConversationList({
           })
         )}
       </ScrollArea>
+
+      {/* Pagination footer */}
+      {totalCount > 0 && (
+        <div className="p-2 border-t border-border flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            {from}-{to} de {totalCount}
+          </span>
+          <div className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              disabled={page === 0}
+              onClick={() => onPageChange(page - 1)}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              disabled={page >= totalPages - 1}
+              onClick={() => onPageChange(page + 1)}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

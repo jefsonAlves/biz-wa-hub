@@ -15,7 +15,7 @@ import { InternalNotes } from "@/components/inbox/InternalNotes";
 import { ActionMenu } from "@/components/inbox/ActionMenu";
 import { cn } from "@/lib/utils";
 
-// --- Notificação sonora via Web Audio API (sem arquivo externo) ---
+// --- Notification sound via Web Audio API ---
 function playNotificationSound() {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -30,8 +30,10 @@ function playNotificationSound() {
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
     o.start(ctx.currentTime);
     o.stop(ctx.currentTime + 0.4);
-  } catch { /* sem AudioContext */ }
+  } catch { /* no AudioContext */ }
 }
+
+const PAGE_SIZE = 20;
 
 const Inbox = () => {
   const { profile, user } = useAuth();
@@ -43,37 +45,61 @@ const Inbox = () => {
   const [messageInput, setMessageInput] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [page, setPage] = useState(0);
+  const [salesStatusFilter, setSalesStatusFilter] = useState("all");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
   const [inputTab, setInputTab] = useState<"message" | "internal">("message");
   const [aiSuggesting, setAiSuggesting] = useState(false);
   const [unreadBadge, setUnreadBadge] = useState(0);
   const originalTitleRef = useRef(document.title);
   const titleIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Conversations
-  const { data: conversations = [], isLoading: convsLoading } = useQuery({
-    queryKey: ["conversations", tenantId],
+  // Conversations with server-side pagination
+  const { data: conversationsData, isLoading: convsLoading } = useQuery({
+    queryKey: ["conversations", tenantId, page, filter, search, salesStatusFilter, departmentFilter],
     queryFn: async () => {
-      if (!tenantId) return [];
-      const { data, error } = await supabase
+      if (!tenantId) return { data: [], count: 0 };
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      let query = supabase
         .from("conversations")
-        .select("*, contacts(name, phone, wa_chat_id, last_message_preview, avatar_url), departments(name)")
+        .select("*, contacts(name, phone, wa_chat_id, last_message_preview, avatar_url), departments(name)", { count: "exact" })
         .eq("tenant_id", tenantId)
-        .order("last_message_at", { ascending: false });
+        .order("last_message_at", { ascending: false })
+        .range(from, to);
+
+      // Apply filters
+      if (filter === "open") query = query.eq("status", "open");
+      else if (filter === "waiting") query = query.eq("status", "waiting");
+      else if (filter === "mine" && user?.id) query = query.eq("assigned_agent_id", user.id);
+      else if (filter === "unassigned") query = query.is("assigned_agent_id", null);
+
+      if (salesStatusFilter !== "all") query = query.eq("sales_status", salesStatusFilter);
+      if (departmentFilter !== "all") query = query.eq("department_id", departmentFilter);
+
+      // Search by contact name or phone via textSearch workaround
+      if (search.trim()) {
+        query = query.or(`contacts.name.ilike.%${search}%,contacts.phone.ilike.%${search}%`);
+      }
+
+      const { data, error, count } = await query;
       if (error) throw error;
-      return data;
+      return { data: data || [], count: count || 0 };
     },
     enabled: !!tenantId,
   });
+
+  const conversations = conversationsData?.data || [];
+  const totalCount = conversationsData?.count || 0;
 
   // Messages
   const { data: messages = [], isLoading: msgsLoading } = useQuery({
     queryKey: ["messages", selectedConversationId],
     queryFn: async () => {
       if (!selectedConversationId) return [];
-      // Reset unread count when opening conversation
       await supabase.from("conversations").update({ unread_count: 0 }).eq("id", selectedConversationId);
       const { data, error } = await supabase
         .from("messages")
@@ -113,10 +139,9 @@ const Inbox = () => {
     enabled: !!tenantId,
   });
 
-  // --- Badge no título da aba ---
+  // --- Tab title badge ---
   useEffect(() => {
     if (unreadBadge > 0) {
-      // Pisca o título alternando entre "💬 (N) Novas" e o título original
       let toggle = true;
       titleIntervalRef.current = setInterval(() => {
         document.title = toggle
@@ -131,82 +156,49 @@ const Inbox = () => {
     return () => { if (titleIntervalRef.current) clearInterval(titleIntervalRef.current); };
   }, [unreadBadge]);
 
-  // Limpa badge ao focar na aba
   useEffect(() => {
     const onFocus = () => setUnreadBadge(0);
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, []);
 
-  // Realtime subscription — ouve mudanças nas tabelas e invalida queries
+  // Realtime subscription
   useEffect(() => {
     if (!tenantId) return;
-
     const channel = supabase
       .channel(`inbox-realtime-${tenantId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "conversations", filter: `tenant_id=eq.${tenantId}` },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["conversations", tenantId] });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "messages" },
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations", filter: `tenant_id=eq.${tenantId}` },
+        () => { queryClient.invalidateQueries({ queryKey: ["conversations"] }); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" },
         (payload: any) => {
-          // Sempre atualiza a lista de conversas (last_message_at, unread_count)
-          queryClient.invalidateQueries({ queryKey: ["conversations", tenantId] });
-
+          queryClient.invalidateQueries({ queryKey: ["conversations"] });
           const newMsg = payload.new;
           const convId = newMsg?.conversation_id || payload.old?.conversation_id;
-
-          // Só notifica para mensagens RECEBIDAS de contatos (não as enviadas pelo agente/IA)
           const isIncoming = newMsg?.direction === "incoming" && newMsg?.role === "contact";
-
           if (isIncoming) {
-            // Notifica se a conversa não está aberta ou a janela não está em foco
             const isCurrentConv = convId === selectedConversationId;
-            const isFocused = document.hasFocus();
-            if (!isCurrentConv || !isFocused) {
+            if (!isCurrentConv || !document.hasFocus()) {
               playNotificationSound();
               setUnreadBadge((prev) => prev + 1);
             }
           }
-
-          // Atualiza mensagens da conversa aberta
           if (selectedConversationId && convId === selectedConversationId) {
             queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
           }
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "internal_notes" },
+        })
+      .on("postgres_changes", { event: "*", schema: "public", table: "internal_notes" },
         (payload: any) => {
           const convId = payload.new?.conversation_id || payload.old?.conversation_id;
           if (!convId || convId === selectedConversationId) {
             queryClient.invalidateQueries({ queryKey: ["internal-notes", selectedConversationId] });
           }
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "contacts", filter: `tenant_id=eq.${tenantId}` },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["conversations", tenantId] });
-        }
-      )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          console.log("Realtime Inbox: subscribed ✓");
-        }
-      });
-
+        })
+      .on("postgres_changes", { event: "*", schema: "public", table: "contacts", filter: `tenant_id=eq.${tenantId}` },
+        () => { queryClient.invalidateQueries({ queryKey: ["conversations"] }); })
+      .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [tenantId, selectedConversationId, queryClient]);
 
-  // Zera badge ao abrir uma conversa
   const handleSelectConversation = useCallback((id: string) => {
     setSelectedConversationId(id);
     setInputTab("message");
@@ -214,7 +206,6 @@ const Inbox = () => {
     setUnreadBadge(0);
   }, []);
 
-  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -226,10 +217,8 @@ const Inbox = () => {
       if (!selectedConversationId || !messageInput.trim()) return;
       if (inputTab === "internal") {
         const { error } = await supabase.from("internal_notes").insert({
-          tenant_id: tenantId,
-          conversation_id: selectedConversationId,
-          user_id: user?.id,
-          note_text: messageInput.trim(),
+          tenant_id: tenantId, conversation_id: selectedConversationId,
+          user_id: user?.id, note_text: messageInput.trim(),
         });
         if (error) throw error;
       } else {
@@ -243,9 +232,7 @@ const Inbox = () => {
       setMessageInput("");
       inputRef.current?.focus();
       queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
-      if (inputTab === "internal") {
-        queryClient.invalidateQueries({ queryKey: ["internal-notes", selectedConversationId] });
-      }
+      if (inputTab === "internal") queryClient.invalidateQueries({ queryKey: ["internal-notes", selectedConversationId] });
     },
     onError: (e: any) => toast({ title: "Erro ao enviar", description: e.message, variant: "destructive" }),
   });
@@ -255,51 +242,40 @@ const Inbox = () => {
     setAiSuggesting(true);
     try {
       const { error } = await supabase.functions.invoke("zapi-send", {
-        body: {
-          conversation_id: selectedConversationId,
-          content: "Sugira uma resposta baseada no contexto desta conversa.",
-          type: "text",
-          mode: "suggest",
-        },
+        body: { conversation_id: selectedConversationId, content: "Sugira uma resposta baseada no contexto desta conversa.", type: "text", mode: "suggest" },
       });
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
-      toast({ title: "Sugestão da IA gerada", description: "Verifique as mensagens com 'Sugestão IA'." });
+      toast({ title: "Sugestão da IA gerada" });
     } catch (e: any) {
       toast({ title: "Erro na sugestão", description: e.message, variant: "destructive" });
-    } finally {
-      setAiSuggesting(false);
-    }
+    } finally { setAiSuggesting(false); }
   }, [selectedConversationId, queryClient, toast]);
 
   const toggleAi = useMutation({
     mutationFn: async (conv: any) => {
-      const { error } = await supabase.from("conversations")
-        .update({ ai_paused: !conv.ai_paused }).eq("id", conv.id);
+      const { error } = await supabase.from("conversations").update({ ai_paused: !conv.ai_paused }).eq("id", conv.id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["conversations", tenantId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["conversations"] }),
   });
 
   const assignToMe = useMutation({
     mutationFn: async (convId: string) => {
-      const { error } = await supabase.from("conversations")
-        .update({ assigned_agent_id: user?.id }).eq("id", convId);
+      const { error } = await supabase.from("conversations").update({ assigned_agent_id: user?.id }).eq("id", convId);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["conversations", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
       toast({ title: "Conversa atribuída a você!" });
     },
   });
 
-  // Group messages by date for separators
+  // Group messages by date
   const groupedMessages = messages.reduce((acc: any[], msg: any) => {
     const date = new Date(msg.created_at).toLocaleDateString("pt-BR");
     const last = acc[acc.length - 1];
-    if (!last || last.date !== date) {
-      acc.push({ type: "separator", date, id: `sep-${date}` });
-    }
+    if (!last || last.date !== date) acc.push({ type: "separator", date, id: `sep-${date}` });
     acc.push({ type: "message", ...msg });
     return acc;
   }, []);
@@ -312,7 +288,7 @@ const Inbox = () => {
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-sm">Inbox</h2>
             <Badge variant="secondary" className="text-xs">
-              {conversations.filter((c: any) => c.unread_count > 0).length} novas
+              {totalCount} conversa{totalCount !== 1 ? "s" : ""}
             </Badge>
           </div>
         </div>
@@ -325,12 +301,19 @@ const Inbox = () => {
             conversations={conversations}
             selectedId={selectedConversationId}
             onSelect={handleSelectConversation}
-
             filter={filter}
             onFilterChange={setFilter}
             search={search}
             onSearchChange={setSearch}
             userId={user?.id}
+            page={page}
+            onPageChange={setPage}
+            totalCount={totalCount}
+            departments={departments}
+            salesStatusFilter={salesStatusFilter}
+            onSalesStatusChange={setSalesStatusFilter}
+            departmentFilter={departmentFilter}
+            onDepartmentChange={setDepartmentFilter}
           />
         )}
       </div>
@@ -354,12 +337,9 @@ const Inbox = () => {
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   {selectedConv.contacts?.avatar_url ? (
-                    <img
-                      src={selectedConv.contacts.avatar_url}
-                      alt={selectedConv.contacts?.name || ""}
+                    <img src={selectedConv.contacts.avatar_url} alt={selectedConv.contacts?.name || ""}
                       className="w-9 h-9 rounded-full object-cover flex-shrink-0"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
-                    />
+                      onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
                   ) : null}
                   <div className={cn(
                     "w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0",
@@ -375,7 +355,7 @@ const Inbox = () => {
                       <Badge variant={selectedConv.status === "open" ? "default" : "secondary"} className="text-xs h-4 py-0">
                         {selectedConv.status}
                       </Badge>
-                    {selectedConv.ai_paused ? (
+                      {selectedConv.ai_paused ? (
                         <Badge variant="outline" className="text-xs h-4 py-0">IA pausada</Badge>
                       ) : (
                         <Badge variant="outline" className="text-xs h-4 py-0 border-primary/40 text-primary">IA ativa</Badge>
@@ -384,25 +364,16 @@ const Inbox = () => {
                     <p className="text-xs text-muted-foreground">{selectedConv.contacts?.phone}</p>
                   </div>
                 </div>
-
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <Button variant="outline" size="sm" className="h-7 text-xs px-2" onClick={() => assignToMe.mutate(selectedConv.id)}>
                     <UserCheck className="h-3 w-3 mr-1" />Assumir
                   </Button>
-                  <Button
-                    variant={selectedConv.ai_paused ? "default" : "outline"}
-                    size="sm"
-                    className="h-7 text-xs px-2"
-                    onClick={() => toggleAi.mutate(selectedConv)}
-                  >
+                  <Button variant={selectedConv.ai_paused ? "default" : "outline"} size="sm" className="h-7 text-xs px-2"
+                    onClick={() => toggleAi.mutate(selectedConv)}>
                     {selectedConv.ai_paused ? <Play className="h-3 w-3 mr-1" /> : <Pause className="h-3 w-3 mr-1" />}
                     {selectedConv.ai_paused ? "Retomar IA" : "Pausar IA"}
                   </Button>
-                  <ActionMenu
-                    conversation={selectedConv}
-                    departments={departments}
-                    tenantId={tenantId!}
-                  />
+                  <ActionMenu conversation={selectedConv} departments={departments} tenantId={tenantId!} />
                 </div>
               </div>
             </div>
@@ -410,9 +381,7 @@ const Inbox = () => {
             {/* Messages */}
             <ScrollArea className="flex-1 p-4">
               {msgsLoading ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
+                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
               ) : groupedMessages.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <MessageSquare className="h-10 w-10 mx-auto mb-2 opacity-30" />
@@ -447,49 +416,24 @@ const Inbox = () => {
                     <Bot className="h-3 w-3 mr-1" />Nota Interna
                   </TabsTrigger>
                 </TabsList>
-
                 <TabsContent value="message" className="mt-0">
                   <div className="flex gap-2 items-center">
-                    <ActionMenu
-                      conversation={selectedConv}
-                      departments={departments}
-                      tenantId={tenantId!}
-                    />
-                    <Input
-                      ref={inputRef}
-                      value={messageInput}
-                      onChange={(e) => setMessageInput(e.target.value)}
-                      placeholder="Digite sua mensagem..."
-                      className="flex-1 h-9"
-                      onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMutation.mutate()}
-                    />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 flex-shrink-0"
-                      onClick={suggestAI}
-                      disabled={aiSuggesting}
-                      title="Sugerir resposta com IA"
-                    >
+                    <ActionMenu conversation={selectedConv} departments={departments} tenantId={tenantId!} />
+                    <Input ref={inputRef} value={messageInput} onChange={(e) => setMessageInput(e.target.value)}
+                      placeholder="Digite sua mensagem..." className="flex-1 h-9"
+                      onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMutation.mutate()} />
+                    <Button variant="outline" size="icon" className="h-9 w-9 flex-shrink-0" onClick={suggestAI}
+                      disabled={aiSuggesting} title="Sugerir resposta com IA">
                       {aiSuggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                     </Button>
-                    <Button
-                      size="icon"
-                      className="h-9 w-9 flex-shrink-0"
-                      onClick={() => sendMutation.mutate()}
-                      disabled={!messageInput.trim() || sendMutation.isPending}
-                    >
+                    <Button size="icon" className="h-9 w-9 flex-shrink-0" onClick={() => sendMutation.mutate()}
+                      disabled={!messageInput.trim() || sendMutation.isPending}>
                       {sendMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     </Button>
                   </div>
                 </TabsContent>
-
                 <TabsContent value="internal" className="mt-0">
-                  <InternalNotes
-                    conversationId={selectedConversationId!}
-                    tenantId={tenantId!}
-                    notes={internalNotes}
-                  />
+                  <InternalNotes conversationId={selectedConversationId!} tenantId={tenantId!} notes={internalNotes} />
                 </TabsContent>
               </Tabs>
             </div>
