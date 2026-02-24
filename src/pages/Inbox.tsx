@@ -77,7 +77,7 @@ const Inbox = () => {
       else if (filter === "mine" && user?.id) query = query.eq("assigned_agent_id", user.id);
       else if (filter === "unassigned") query = query.is("assigned_agent_id", null);
 
-      if (salesStatusFilter !== "all") query = query.eq("sales_status", salesStatusFilter);
+      if (salesStatusFilter !== "all") query = query.eq("sales_status", salesStatusFilter as any);
       if (departmentFilter !== "all") query = query.eq("department_id", departmentFilter);
 
       // Search by contact name or phone via textSearch workaround
