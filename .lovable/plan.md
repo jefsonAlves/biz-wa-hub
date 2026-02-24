@@ -1,86 +1,94 @@
 
 
-## Correcao da Sincronizacao de Contatos e Melhorias no Inbox
+## Sincronizacao Otimizada + Paginacao e Busca no Inbox
 
-### Problemas Identificados
-
-1. **Contatos sem nomes**: 540 contatos importados, mas apenas 52 tem nome. A API `getContacts` do GREEN-API nao retorna nomes para todos os contatos. Precisa usar `getContactInfo` para buscar nome e avatar individualmente.
-
-2. **Grupos importados indevidamente**: 3 contatos com `@g.us` (grupos) foram importados e nao deveriam estar na lista.
-
-3. **sync_status travado em "syncing"**: O status nunca voltou para "synced", possivelmente por timeout da edge function ao processar 540+ contatos.
-
-4. **Conversas mostram apenas numeros**: O Inbox nao mostra nomes porque os contatos nao tem `name` preenchido.
-
-5. **Falta de avatar/imagem**: A tabela `contacts` tem campo `avatar_url` mas o sync nunca preenche.
-
-6. **Conversas inativas dominam a lista**: Todas as conversas tem `status: open` mesmo sem mensagens recentes.
+### Resumo
+Tres grandes mudancas: (1) reescrever a sincronizacao para trazer apenas conversas dos ultimos 30 dias sem criar contatos desnecessarios, (2) adicionar paginacao na lista de conversas do Inbox, e (3) corrigir o sync_status travado.
 
 ---
 
-### Plano de Correcao
+### 1. Reescrever `green-api-sync` - Apenas ultimos 30 dias
 
-#### 1. Reescrever `supabase/functions/green-api-sync/index.ts`
+**Arquivo:** `supabase/functions/green-api-sync/index.ts`
 
-Mudancas principais:
+Estrategia completamente diferente - ao inves de buscar todos os contatos e depois criar conversas, vamos:
 
-- **Filtrar grupos**: Remover contatos com `@g.us` ja existentes no banco e impedir novos
-- **Buscar nomes com `getContactInfo`**: Para cada contato sem nome, chamar `POST /waInstance{id}/getContactInfo/{token}` com `{ chatId: "phone@c.us" }` para obter `name`, `contactName` e `avatar`
-- **Buscar avatar com `getContactInfo`**: O endpoint retorna campo `avatar` com URL da foto do perfil
-- **Limitar contatos processados**: Processar apenas contatos que tem chats recentes (priorizar os ultimos 100 contatos com atividade)
-- **Otimizar com batch processing**: Adicionar delay de 300ms entre chamadas `getContactInfo` para evitar rate limiting
-- **Atualizar sync_status corretamente**: Garantir que muda para "synced" ou "error" no final
-- **Criar conversas apenas para contatos com historico**: Nao criar conversa para contatos que nunca trocaram mensagens
+1. Buscar `getChats` primeiro (lista de chats recentes da GREEN-API)
+2. Filtrar apenas `@c.us` (sem grupos)
+3. Para cada chat recente, buscar `getContactInfo` para nome e avatar
+4. Fazer upsert do contato (criar se nao existe, atualizar se existe)
+5. Criar conversa se nao existir
+6. Buscar historico de mensagens (`getChatHistory` com count: 30)
+7. Filtrar mensagens dos ultimos 30 dias apenas
+8. Limitar a 100 chats para evitar timeout da edge function
 
-Fluxo revisado:
-```text
-1. Fetch getContacts -> lista de todos os contatos
-2. Filtrar apenas @c.us (ignorar grupos @g.us)
-3. Para cada contato SEM nome:
-   - Chamar getContactInfo para obter name + avatar
-   - Delay 300ms entre chamadas
-4. Upsert contatos no banco (com nome e avatar)
-5. Fetch historico de mensagens (getChatHistory) 
-   - Apenas para contatos com atividade recente
-6. Criar conversas apenas para quem tem mensagens
-7. Atualizar sync_status = "synced"
-```
+Mudancas especificas:
+- Remover a chamada `getContacts` (que traz 540+ contatos)
+- Usar `getChats` como fonte primaria (apenas conversas ativas)
+- Adicionar filtro de 30 dias no historico de mensagens
+- Garantir que `sync_status` SEMPRE volta para `synced` ou `error` (com try/finally)
+- Adicionar `last_connected_at` ao finalizar sync
 
-#### 2. Limpar dados incorretos (migracao SQL)
+### 2. Limpeza de dados antigos (SQL)
 
-- Remover contatos que sao grupos (`wa_chat_id LIKE '%@g.us'`)
-- Remover conversas orfas (sem contato valido)
+- Resetar `sync_status` de "syncing" para "idle" (esta travado)
+- Remover contatos sem nome e sem nenhuma conversa associada (lixo da sincronizacao anterior)
 
-#### 3. Melhorar o ConversationList (`src/components/inbox/ConversationList.tsx`)
+### 3. Paginacao no Inbox
 
-- Mostrar avatar do contato quando disponivel (usar `avatar_url` da tabela contacts)
-- Fallback para iniciais do nome/numero quando sem avatar
+**Arquivo:** `src/components/inbox/ConversationList.tsx`
 
-#### 4. Melhorar o Inbox Header (`src/pages/Inbox.tsx`)
+- Adicionar estado de paginacao: `page` e `pageSize` (20 conversas por pagina)
+- Mostrar botoes "Anterior" / "Proxima" no rodape da lista
+- Exibir contador "Mostrando X-Y de Z conversas"
+- A busca e filtros continuam funcionando, mas agora paginados
 
-- Mostrar avatar do contato no cabecalho da conversa quando disponivel
+**Arquivo:** `src/pages/Inbox.tsx`
 
-#### 5. Atualizar webhook para salvar avatar (`supabase/functions/zapi-webhook-received/index.ts`)
+- Adicionar paginacao na query de conversas usando `.range(from, to)` no Supabase
+- Passar `page` e `setPage` para o ConversationList
+- Adicionar contagem total de conversas com `count: "exact"`
 
-- Quando receber mensagem de novo contato, buscar avatar via `getContactInfo` e salvar
+### 4. Busca avancada no Inbox
+
+**Arquivo:** `src/components/inbox/ConversationList.tsx`
+
+Melhorar a busca existente para incluir:
+- Busca por nome do contato
+- Busca por numero de telefone
+- Busca por tag
+- Busca por departamento
+- Filtro adicional por status de vendas (`sales_status`)
 
 ---
 
 ### Detalhes Tecnicos
 
-**Arquivos modificados:**
+**`supabase/functions/green-api-sync/index.ts`** - Reescrita completa:
 
-1. `supabase/functions/green-api-sync/index.ts` - Reescrever logica de sync com getContactInfo para nomes e avatares
-2. `src/components/inbox/ConversationList.tsx` - Adicionar exibicao de avatar do contato
-3. `src/pages/Inbox.tsx` - Mostrar avatar no header do chat
-4. `supabase/functions/zapi-webhook-received/index.ts` - Buscar avatar ao receber msg de novo contato
+```text
+Fluxo novo:
+1. getChats -> lista de conversas ativas no WhatsApp
+2. Filtrar @c.us, limitar a 100
+3. Para cada chat:
+   a. getContactInfo -> nome + avatar
+   b. Upsert contato no banco
+   c. Criar conversa se nao existe
+   d. getChatHistory (count: 30)
+   e. Filtrar msgs dos ultimos 30 dias
+   f. Inserir msgs novas
+4. sync_status = "synced" (em finally)
+```
 
-**Migracao SQL:**
-- Deletar contatos de grupo (`wa_chat_id LIKE '%@g.us'`) e conversas/mensagens associadas
-- Atualizar `sync_status` de "syncing" para "idle" para desbloquear
+**`src/pages/Inbox.tsx`** - Query com paginacao:
+- Adicionar estado `page` (default 0)
+- Query passa a usar `.range(page * 20, (page + 1) * 20 - 1)` 
+- Adicionar `{ count: "exact" }` na query para saber total
 
-**API GREEN-API utilizada:**
-- `POST /waInstance{id}/getContactInfo/{token}` - body: `{ chatId: "phone@c.us" }` - retorna `name`, `contactName`, `avatar`
+**`src/components/inbox/ConversationList.tsx`** - UI de paginacao:
+- Props novas: `page`, `onPageChange`, `totalCount`
+- Botoes de navegacao no rodape
+- Filtros de busca avancada (tags, departamento, status venda)
 
-**Nenhuma nova tabela ou coluna necessaria** - o campo `avatar_url` ja existe na tabela `contacts`.
+**Nenhuma mudanca de banco de dados necessaria.**
 
