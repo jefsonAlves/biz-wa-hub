@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -21,6 +21,22 @@ import {
 const statusVariant = (status: string) =>
   status === "connected" ? "default" : status === "error" ? "destructive" : "secondary";
 
+const toQrImageSource = (value: string | null) => {
+  const qr = value?.trim();
+  if (!qr) return null;
+  if (qr.startsWith("data:image/")) return qr;
+  if (/^[A-Za-z0-9+/=\s]+$/.test(qr) && qr.replace(/\s/g, "").length > 100) {
+    return `data:image/png;base64,${qr.replace(/\s/g, "")}`;
+  }
+  return null;
+};
+
+const toQrGeneratorUrl = (value: string | null) => {
+  const qr = value?.trim();
+  if (!qr || toQrImageSource(qr)) return null;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(qr)}`;
+};
+
 const Connections = () => {
   const { profile } = useAuth();
   const tenantId = profile?.tenant_id;
@@ -31,13 +47,59 @@ const Connections = () => {
   const [name, setName] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [pending, setPending] = useState<string | null>(null);
+  const [qrConnectionId, setQrConnectionId] = useState<string | null>(null);
 
   const { data: connections = [], isLoading } = useQuery({
     queryKey: ["whatsapp_connections_safe", tenantId],
     queryFn: listConnections,
     enabled: !!tenantId,
-    refetchInterval: 20000,
+    refetchInterval: (query) => {
+      const rows = (query.state.data ?? []) as SafeConnection[];
+      return rows.some((connection) =>
+        connection.status === "connecting" ||
+        connection.status === "qr_pending" ||
+        connection.qr_status === "pending"
+      ) ? 2500 : 20000;
+    },
   });
+
+  const qrConnection = useMemo(
+    () => connections.find((connection) => connection.id === qrConnectionId) ?? null,
+    [connections, qrConnectionId],
+  );
+
+  const qrImageSource = toQrImageSource(qrConnection?.qr_code ?? null);
+  const qrGeneratorUrl = toQrGeneratorUrl(qrConnection?.qr_code ?? null);
+  const qrDisplaySource = qrImageSource ?? qrGeneratorUrl;
+
+  useEffect(() => {
+    if (!qrConnectionId) return;
+    const updated = connections.find((connection) => connection.id === qrConnectionId);
+    if (!updated) return;
+    if (updated.qr_status === "available") setQrConnectionId(updated.id);
+  }, [connections, qrConnectionId]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+
+    const channel = supabase
+      .channel(`whatsapp-connections-${tenantId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "whatsapp_connections",
+          filter: `tenant_id=eq.${tenantId}`,
+        },
+        () => queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe", tenantId] }),
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient, tenantId]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -63,12 +125,14 @@ const Connections = () => {
 
   const runCommand = async (connection: SafeConnection, command: ConnectionCommand) => {
     setPending(`${connection.id}:${command}`);
+    if (command === "generate_qr") setQrConnectionId(connection.id);
+
     try {
       const res = await sendConnectionCommand(connection.id, command);
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe"] });
+      await queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe"] });
       toast({
         title: res.warning ? "Comando enfileirado" : "Comando enviado ao n8n",
-        description: res.warning ?? "O n8n responderá via webhook assinado.",
+        description: res.warning ?? "Aguardando o callback assinado com o QR Code.",
       });
     } catch (e) {
       toast({ title: "Erro no comando", description: (e as Error).message, variant: "destructive" });
@@ -169,13 +233,26 @@ const Connections = () => {
                     </div>
                   )}
 
+                  {conn.qr_status === "available" && !conn.qr_code && (
+                    <div className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      O n8n informou que o QR está disponível, mas não enviou o conteúdo de data.qr_code.
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" onClick={() => runCommand(conn, "create_session")} disabled={busy("create_session")}>
                       <PlugZap className="h-3.5 w-3.5 mr-1" />Criar sessão
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => runCommand(conn, "generate_qr")} disabled={busy("generate_qr")}>
-                      <QrCode className="h-3.5 w-3.5 mr-1" />Gerar QR
+                      {busy("generate_qr") ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <QrCode className="h-3.5 w-3.5 mr-1" />}
+                      Gerar QR
                     </Button>
+                    {conn.qr_status === "available" && (
+                      <Button size="sm" variant="outline" onClick={() => setQrConnectionId(conn.id)}>
+                        <QrCode className="h-3.5 w-3.5 mr-1" />Ver QR
+                      </Button>
+                    )}
                     <Button size="sm" variant="outline" onClick={() => runCommand(conn, "health_check")} disabled={busy("health_check")}>
                       <RefreshCw className={`h-3.5 w-3.5 mr-1 ${busy("health_check") ? "animate-spin" : ""}`} />Status
                     </Button>
@@ -189,6 +266,44 @@ const Connections = () => {
           })}
         </div>
       )}
+
+      <Dialog open={!!qrConnectionId} onOpenChange={(isOpen) => !isOpen && setQrConnectionId(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Conectar WhatsApp</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 py-2 text-center">
+            <p className="text-sm text-muted-foreground">
+              Abra o WhatsApp, acesse Aparelhos conectados e escaneie o código abaixo.
+            </p>
+
+            {!qrConnection || qrConnection.qr_status !== "available" ? (
+              <div className="flex min-h-72 w-full flex-col items-center justify-center gap-3 rounded-lg border bg-muted/20">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm">Aguardando o n8n gerar o QR Code...</p>
+              </div>
+            ) : qrDisplaySource ? (
+              <div className="rounded-lg border bg-white p-4">
+                <img src={qrDisplaySource} alt="QR Code para conectar o WhatsApp" className="h-72 w-72 object-contain" />
+              </div>
+            ) : (
+              <div className="flex min-h-72 w-full flex-col items-center justify-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-6">
+                <AlertCircle className="h-8 w-8 text-destructive" />
+                <p className="font-medium">QR Code indisponível</p>
+                <p className="text-sm text-muted-foreground">
+                  O status está como disponível, mas data.qr_code veio vazio. Verifique o callback do n8n.
+                </p>
+              </div>
+            )}
+
+            {qrConnection?.qr_expires_at && (
+              <p className="text-xs text-muted-foreground">
+                Expira em {new Date(qrConnection.qr_expires_at).toLocaleString("pt-BR")}.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
