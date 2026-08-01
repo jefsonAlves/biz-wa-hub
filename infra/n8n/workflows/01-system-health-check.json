@@ -1,0 +1,48 @@
+{
+  "name": "Biz WA Hub - System Health Check v2",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "biz-wa-hub/health",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "62db8df5-18b7-4ac4-af3a-155912032355",
+      "name": "Health Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-320, 0],
+      "webhookId": "c02910a8-221c-4860-9dc0-0be04e80bccd"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  ok: true,\n  service: 'biz-wa-hub-automation',\n  version: 1,\n  timestamp: new Date().toISOString(),\n  checks: { n8n: { ok: true }, webhook: { ok: true } },\n} }];"
+      },
+      "id": "aacfdc89-e83e-4a30-a013-50b93bb1b89b",
+      "name": "Build Health Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-80, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "36043f6e-8ecb-46a1-8271-d553ce34c1ab",
+      "name": "Return Health",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [160, 0]
+    }
+  ],
+  "connections": {
+    "Health Webhook": { "main": [[{ "node": "Build Health Status", "type": "main", "index": 0 }]] },
+    "Build Health Status": { "main": [[{ "node": "Return Health", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1", "saveDataErrorExecution": "all", "saveDataSuccessExecution": "none" },
+  "active": false,
+  "tags": []
+}

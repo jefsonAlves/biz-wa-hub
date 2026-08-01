@@ -14,6 +14,7 @@ const INBOUND_TYPES = new Set([
   "whatsapp.message.delivered",
   "whatsapp.message.read",
   "whatsapp.message.failed",
+  "whatsapp.access.requested",
   "automation.reply",
   "automation.internal_note",
   "automation.assign",
@@ -24,6 +25,8 @@ const INBOUND_TYPES = new Set([
 ]);
 
 const MAX_SKEW_SECONDS = 300;
+const MAX_PAYLOAD_BYTES = 256 * 1024;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -31,6 +34,10 @@ serve(async (req) => {
   const svc = serviceClient();
 
   try {
+    const declaredLength = Number(req.headers.get("Content-Length") ?? "0");
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_PAYLOAD_BYTES) {
+      return json({ error: "Payload muito grande" }, 413);
+    }
     const rawBody = await req.text();
     const tenantId = req.headers.get("X-Tenant-Id");
     const eventId = req.headers.get("X-Event-Id");
@@ -39,6 +46,12 @@ serve(async (req) => {
 
     if (!tenantId || !eventId || !timestamp || !signature) {
       return json({ error: "Cabeçalhos obrigatórios ausentes" }, 400);
+    }
+    if (!UUID_PATTERN.test(tenantId) || !UUID_PATTERN.test(eventId)) {
+      return json({ error: "Identificadores inválidos" }, 400);
+    }
+    if (new TextEncoder().encode(rawBody).byteLength > MAX_PAYLOAD_BYTES) {
+      return json({ error: "Payload muito grande" }, 413);
     }
 
     const ts = Number(timestamp);
@@ -117,6 +130,9 @@ serve(async (req) => {
       case "whatsapp.message.received":
         await handleInboundMessage(svc, tenantId, connectionId, data);
         break;
+      case "whatsapp.access.requested":
+        await handleAccessRequest(svc, tenantId, connectionId, payload.conversation_id ?? null, data);
+        break;
       case "whatsapp.message.sent":
       case "whatsapp.message.delivered":
       case "whatsapp.message.read":
@@ -184,6 +200,57 @@ serve(async (req) => {
     return json({ error: "erro no processamento" }, 500);
   }
 });
+
+async function handleAccessRequest(
+  svc: ReturnType<typeof serviceClient>,
+  tenantId: string,
+  connectionId: string | null,
+  conversationId: string | null,
+  data: Record<string, any>,
+) {
+  if (!connectionId || !conversationId) throw new Error("connection_id e conversation_id são obrigatórios");
+
+  const { data: conversation } = await svc.from("conversations")
+    .select("id, contact_id, whatsapp_connection_id")
+    .eq("id", conversationId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  if (!conversation?.contact_id || conversation.whatsapp_connection_id !== connectionId) {
+    throw new Error("conversa ou conexão incompatível");
+  }
+
+  const { data: pending } = await svc.from("whatsapp_access_requests")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("connection_id", connectionId)
+    .eq("contact_id", conversation.contact_id)
+    .eq("status", "pending")
+    .maybeSingle();
+
+  const requestMessage = String(data.request_message ?? "Solicitação de acesso via WhatsApp").slice(0, 500);
+  const requestedRole = data.requested_role === "viewer" ? "viewer" : "agent";
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+  if (pending) {
+    await svc.from("whatsapp_access_requests").update({
+      request_message: requestMessage,
+      requested_role: requestedRole,
+      expires_at: expiresAt,
+    }).eq("id", pending.id);
+    return;
+  }
+
+  await svc.from("whatsapp_access_requests").insert({
+    tenant_id: tenantId,
+    connection_id: connectionId,
+    conversation_id: conversationId,
+    contact_id: conversation.contact_id,
+    requested_role: requestedRole,
+    request_message: requestMessage,
+    expires_at: expiresAt,
+  });
+}
 
 async function handleInboundMessage(
   svc: ReturnType<typeof serviceClient>,

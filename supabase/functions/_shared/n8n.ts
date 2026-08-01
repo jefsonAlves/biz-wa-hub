@@ -207,7 +207,6 @@ export async function deliverEvent(
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
-    const apiKey = n8nApiKey();
     const resp = await fetch(url, {
       method: "POST",
       signal: controller.signal,
@@ -217,7 +216,6 @@ export async function deliverEvent(
         "X-Event-Id": event.event_id,
         "X-Timestamp": timestamp,
         "X-Signature": signature,
-        ...(apiKey ? { "X-N8N-Api-Key": apiKey } : {}),
       },
       body: rawBody,
     });

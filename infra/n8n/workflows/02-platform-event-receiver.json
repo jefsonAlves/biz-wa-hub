@@ -1,0 +1,96 @@
+{
+  "name": "Biz WA Hub - Platform Event Receiver",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "biz-wa-hub/platform",
+        "responseMode": "responseNode",
+        "options": { "rawBody": true }
+      },
+      "id": "be60e640-3318-453f-929f-1a3190df506d",
+      "name": "Platform Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-560, 0],
+      "webhookId": "2f95a545-583b-44bb-828f-8a53fed975d1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst input = $input.first().json;\nconst headers = Object.fromEntries(Object.entries(input.headers ?? {}).map(([k,v]) => [k.toLowerCase(), String(v)]));\nconst tenantId = headers['x-tenant-id'];\nconst eventId = headers['x-event-id'];\nconst timestamp = headers['x-timestamp'];\nconst signature = (headers['x-signature'] ?? '').toLowerCase();\nconst rawBody = typeof input.rawBody === 'string' ? input.rawBody : JSON.stringify(input.body ?? {});\nconst fail = (statusCode, error) => [{ json: { valid: false, statusCode, response: { ok: false, error } } }];\nif (Buffer.byteLength(rawBody, 'utf8') > 262144) return fail(413, 'payload_too_large');\nif (!tenantId || !eventId || !timestamp || !signature) return fail(400, 'missing_headers');\nconst uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nif (!uuid.test(tenantId) || !uuid.test(eventId)) return fail(400, 'invalid_identifiers');\nconst ts = Number(timestamp);\nif (!Number.isFinite(ts) || Math.abs(Math.floor(Date.now()/1000)-ts) > 300) return fail(401, 'expired_timestamp');\nconst secret = $env.N8N_WEBHOOK_SECRET;\nif (!secret) return fail(503, 'webhook_secret_not_configured');\nconst expected = crypto.createHmac('sha256', secret).update(`${timestamp}.${eventId}.${rawBody}`).digest('hex');\nconst a = Buffer.from(expected, 'hex');\nconst b = /^[0-9a-f]{64}$/.test(signature) ? Buffer.from(signature, 'hex') : Buffer.alloc(0);\nif (a.length !== b.length || !crypto.timingSafeEqual(a,b)) return fail(401, 'invalid_signature');\nlet payload;\ntry { payload = JSON.parse(rawBody); } catch { return fail(400, 'invalid_json'); }\nif (payload.tenant_id !== tenantId || payload.event_id !== eventId || typeof payload.event_type !== 'string') return fail(400, 'invalid_event');\nreturn [{ json: { valid: true, statusCode: 202, tenant_id: tenantId, event_id: eventId, event_type: payload.event_type, payload } }];"
+      },
+      "id": "217cd19f-a168-4306-b5f8-910894ba667a",
+      "name": "Validate HMAC and Schema",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-320, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [{
+            "id": "9fc72602-bf7a-449e-90ed-ad8cf9ed5c9e",
+            "leftValue": "={{ $json.valid }}",
+            "rightValue": true,
+            "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+          }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a45a6c8c-cbae-4ca0-95e7-fca687ec15dc",
+      "name": "Signature Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-80, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $json;\nconst accessEvent = e.event_type === 'whatsapp.access.approved' || e.event_type === 'whatsapp.access.rejected';\nreturn [{ json: {\n  statusCode: 202,\n  response: { ok: true, accepted: true, event_id: e.event_id },\n  monitor: { tenant_id: e.tenant_id, event_id: e.event_id, event_type: e.event_type, access_event: accessEvent, received_at: new Date().toISOString() },\n  payload: e.payload,\n} }];"
+      },
+      "id": "eb184858-0005-4c71-9bd5-b5f4e5b44c4b",
+      "name": "Register Monitoring Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [160, -96]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.response }}",
+        "options": { "responseCode": "={{ $json.statusCode }}" }
+      },
+      "id": "2fabf5be-35dd-4375-99ab-49fbe70a1514",
+      "name": "Accept Event",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [400, -96]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.response }}",
+        "options": { "responseCode": "={{ $json.statusCode }}" }
+      },
+      "id": "d1497292-4578-4ad6-b6ec-420a7122742e",
+      "name": "Reject Event",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [160, 96]
+    }
+  ],
+  "connections": {
+    "Platform Webhook": { "main": [[{ "node": "Validate HMAC and Schema", "type": "main", "index": 0 }]] },
+    "Validate HMAC and Schema": { "main": [[{ "node": "Signature Valid?", "type": "main", "index": 0 }]] },
+    "Signature Valid?": { "main": [
+      [{ "node": "Register Monitoring Context", "type": "main", "index": 0 }],
+      [{ "node": "Reject Event", "type": "main", "index": 0 }]
+    ] },
+    "Register Monitoring Context": { "main": [[{ "node": "Accept Event", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1", "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all", "saveExecutionProgress": true },
+  "active": false,
+  "tags": []
+}

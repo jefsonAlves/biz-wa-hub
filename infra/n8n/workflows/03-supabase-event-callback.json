@@ -1,0 +1,55 @@
+{
+  "name": "Biz WA Hub - Supabase Event Callback",
+  "nodes": [
+    {
+      "parameters": { "inputSource": "passthrough" },
+      "id": "8ee0cff5-97fc-4b62-b71d-78d6c0c64a9f",
+      "name": "Called by Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-400, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst input = $input.first().json;\nconst required = ['event_id','event_type','tenant_id'];\nfor (const key of required) if (!input[key]) throw new Error(`missing ${key}`);\nconst rawBody = JSON.stringify({\n  event_id: input.event_id, event_type: input.event_type, tenant_id: input.tenant_id,\n  connection_id: input.connection_id ?? null, conversation_id: input.conversation_id ?? null,\n  occurred_at: input.occurred_at ?? new Date().toISOString(), source: 'n8n', version: 1, data: input.data ?? {},\n});\nconst timestamp = String(Math.floor(Date.now()/1000));\nconst secret = $env.N8N_WEBHOOK_SECRET;\nif (!secret) throw new Error('N8N_WEBHOOK_SECRET not configured');\nconst signature = crypto.createHmac('sha256', secret).update(`${timestamp}.${input.event_id}.${rawBody}`).digest('hex');\nreturn [{ json: { rawBody, timestamp, signature, event_id: input.event_id, tenant_id: input.tenant_id } }];"
+      },
+      "id": "b8875cef-747c-40d8-957f-0476430ec04a",
+      "name": "Sign Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-160, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL + '/functions/v1/n8n-webhook-receiver' }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "Content-Type", "value": "application/json" },
+          { "name": "X-Tenant-Id", "value": "={{ $json.tenant_id }}" },
+          { "name": "X-Event-Id", "value": "={{ $json.event_id }}" },
+          { "name": "X-Timestamp", "value": "={{ $json.timestamp }}" },
+          { "name": "X-Signature", "value": "={{ $json.signature }}" }
+        ] },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.rawBody }}",
+        "options": { "timeout": 15000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "9453edc2-b3db-44db-8f41-80f71e6a48b6",
+      "name": "POST to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [80, 0]
+    }
+  ],
+  "connections": {
+    "Called by Workflow": { "main": [[{ "node": "Sign Callback", "type": "main", "index": 0 }]] },
+    "Sign Callback": { "main": [[{ "node": "POST to Supabase", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1", "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all" },
+  "active": false,
+  "tags": []
+}
