@@ -20,6 +20,7 @@ import AdminTenants from "./pages/AdminTenants";
 import AdminLogs from "./pages/AdminLogs";
 import AdminPlans from "./pages/AdminPlans";
 import NotFound from "./pages/NotFound";
+import OAuthConsent from "./pages/OAuthConsent";
 
 
 const queryClient = new QueryClient();
