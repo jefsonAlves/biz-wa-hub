@@ -222,10 +222,7 @@ const Inbox = () => {
         });
         if (error) throw error;
       } else {
-        const { error } = await supabase.functions.invoke("zapi-send", {
-          body: { conversation_id: selectedConversationId, content: messageInput, type: "text" },
-        });
-        if (error) throw error;
+        await sendMessage({ conversationId: selectedConversationId, content: messageInput });
       }
     },
     onSuccess: () => {
