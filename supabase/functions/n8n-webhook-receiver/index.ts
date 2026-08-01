@@ -5,8 +5,11 @@ import {
 } from "../_shared/n8n.ts";
 
 const INBOUND_TYPES = new Set([
+  "whatsapp.connection.creating",
   "whatsapp.connection.qr.generated",
   "whatsapp.connection.connected",
+  "whatsapp.message.queued",
+  "system.integration.test.ack",
   "whatsapp.connection.disconnected",
   "whatsapp.connection.error",
   "whatsapp.message.received",
