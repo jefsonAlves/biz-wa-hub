@@ -153,6 +153,52 @@ export type Database = {
           },
         ]
       }
+      connection_departments: {
+        Row: {
+          connection_id: string
+          created_at: string
+          department_id: string
+          id: string
+          tenant_id: string
+        }
+        Insert: {
+          connection_id: string
+          created_at?: string
+          department_id: string
+          id?: string
+          tenant_id: string
+        }
+        Update: {
+          connection_id?: string
+          created_at?: string
+          department_id?: string
+          id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connection_departments_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connection_departments_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connection_departments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts: {
         Row: {
           avatar_url: string | null
@@ -336,6 +382,112 @@ export type Database = {
           },
         ]
       }
+      event_outbox: {
+        Row: {
+          aggregate_id: string | null
+          aggregate_type: string | null
+          attempts: number
+          created_at: string
+          event_type: string
+          id: string
+          last_error: string | null
+          max_attempts: number
+          next_retry_at: string
+          payload: Json
+          processed_at: string | null
+          status: Database["public"]["Enums"]["outbox_status"]
+          tenant_id: string
+        }
+        Insert: {
+          aggregate_id?: string | null
+          aggregate_type?: string | null
+          attempts?: number
+          created_at?: string
+          event_type: string
+          id?: string
+          last_error?: string | null
+          max_attempts?: number
+          next_retry_at?: string
+          payload?: Json
+          processed_at?: string | null
+          status?: Database["public"]["Enums"]["outbox_status"]
+          tenant_id: string
+        }
+        Update: {
+          aggregate_id?: string | null
+          aggregate_type?: string | null
+          attempts?: number
+          created_at?: string
+          event_type?: string
+          id?: string
+          last_error?: string | null
+          max_attempts?: number
+          next_retry_at?: string
+          payload?: Json
+          processed_at?: string | null
+          status?: Database["public"]["Enums"]["outbox_status"]
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_outbox_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbound_events: {
+        Row: {
+          error_message: string | null
+          event_type: string
+          external_event_id: string
+          id: string
+          payload: Json
+          payload_hash: string | null
+          processed_at: string | null
+          processing_status: Database["public"]["Enums"]["inbound_status"]
+          received_at: string
+          source: string
+          tenant_id: string | null
+        }
+        Insert: {
+          error_message?: string | null
+          event_type: string
+          external_event_id: string
+          id?: string
+          payload?: Json
+          payload_hash?: string | null
+          processed_at?: string | null
+          processing_status?: Database["public"]["Enums"]["inbound_status"]
+          received_at?: string
+          source: string
+          tenant_id?: string | null
+        }
+        Update: {
+          error_message?: string | null
+          event_type?: string
+          external_event_id?: string
+          id?: string
+          payload?: Json
+          payload_hash?: string | null
+          processed_at?: string | null
+          processing_status?: Database["public"]["Enums"]["inbound_status"]
+          received_at?: string
+          source?: string
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbound_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       internal_notes: {
         Row: {
           conversation_id: string
@@ -486,6 +638,68 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      n8n_integrations: {
+        Row: {
+          base_url: string | null
+          created_at: string
+          credential_reference: string | null
+          environment: string
+          id: string
+          last_error_at: string | null
+          last_error_message: string | null
+          last_success_at: string | null
+          last_tested_at: string | null
+          name: string
+          status: string
+          tenant_id: string
+          updated_at: string
+          webhook_path: string
+          webhook_secret_reference: string | null
+        }
+        Insert: {
+          base_url?: string | null
+          created_at?: string
+          credential_reference?: string | null
+          environment?: string
+          id?: string
+          last_error_at?: string | null
+          last_error_message?: string | null
+          last_success_at?: string | null
+          last_tested_at?: string | null
+          name?: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          webhook_path?: string
+          webhook_secret_reference?: string | null
+        }
+        Update: {
+          base_url?: string | null
+          created_at?: string
+          credential_reference?: string | null
+          environment?: string
+          id?: string
+          last_error_at?: string | null
+          last_error_message?: string | null
+          last_success_at?: string | null
+          last_tested_at?: string | null
+          name?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          webhook_path?: string
+          webhook_secret_reference?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "n8n_integrations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -716,6 +930,54 @@ export type Database = {
         }
         Relationships: []
       }
+      user_connection_access: {
+        Row: {
+          can_manage: boolean
+          can_reply: boolean
+          can_view: boolean
+          connection_id: string
+          created_at: string
+          id: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          can_manage?: boolean
+          can_reply?: boolean
+          can_view?: boolean
+          connection_id: string
+          created_at?: string
+          id?: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          can_manage?: boolean
+          can_reply?: boolean
+          can_view?: boolean
+          connection_id?: string
+          created_at?: string
+          id?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_connection_access_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_connection_access_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -748,54 +1010,131 @@ export type Database = {
           },
         ]
       }
+      webhook_delivery_attempts: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          error_message: string | null
+          event_id: string | null
+          http_status: number | null
+          id: string
+          response_excerpt: string | null
+          success: boolean
+          target: string
+          tenant_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          event_id?: string | null
+          http_status?: number | null
+          id?: string
+          response_excerpt?: string | null
+          success?: boolean
+          target: string
+          tenant_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          event_id?: string | null
+          http_status?: number | null
+          id?: string
+          response_excerpt?: string | null
+          success?: boolean
+          target?: string
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_delivery_attempts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_connections: {
         Row: {
           api_url: string | null
+          connection_error: string | null
           created_at: string
+          credential_reference: string | null
           id: string
           last_connected_at: string | null
+          last_disconnected_at: string | null
+          last_health_check_at: string | null
+          metadata: Json
           name: string
           phone_number: string | null
+          provider_instance_id: string | null
+          provider_session_id: string | null
+          provider_type: Database["public"]["Enums"]["provider_type"]
+          qr_status: string
           status: string
           sync_status: string | null
           tenant_id: string
           updated_at: string
+          webhook_status: string
           webhook_url: string | null
           zapi_client_token: string | null
-          zapi_instance_id: string
-          zapi_token: string
+          zapi_instance_id: string | null
+          zapi_token: string | null
         }
         Insert: {
           api_url?: string | null
+          connection_error?: string | null
           created_at?: string
+          credential_reference?: string | null
           id?: string
           last_connected_at?: string | null
+          last_disconnected_at?: string | null
+          last_health_check_at?: string | null
+          metadata?: Json
           name?: string
           phone_number?: string | null
+          provider_instance_id?: string | null
+          provider_session_id?: string | null
+          provider_type?: Database["public"]["Enums"]["provider_type"]
+          qr_status?: string
           status?: string
           sync_status?: string | null
           tenant_id: string
           updated_at?: string
+          webhook_status?: string
           webhook_url?: string | null
           zapi_client_token?: string | null
-          zapi_instance_id: string
-          zapi_token: string
+          zapi_instance_id?: string | null
+          zapi_token?: string | null
         }
         Update: {
           api_url?: string | null
+          connection_error?: string | null
           created_at?: string
+          credential_reference?: string | null
           id?: string
           last_connected_at?: string | null
+          last_disconnected_at?: string | null
+          last_health_check_at?: string | null
+          metadata?: Json
           name?: string
           phone_number?: string | null
+          provider_instance_id?: string | null
+          provider_session_id?: string | null
+          provider_type?: Database["public"]["Enums"]["provider_type"]
+          qr_status?: string
           status?: string
           sync_status?: string | null
           tenant_id?: string
           updated_at?: string
+          webhook_status?: string
           webhook_url?: string | null
           zapi_client_token?: string | null
-          zapi_instance_id?: string
-          zapi_token?: string
+          zapi_instance_id?: string | null
+          zapi_token?: string | null
         }
         Relationships: [
           {
@@ -812,7 +1151,29 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_access_connection: {
+        Args: { _connection_id: string }
+        Returns: boolean
+      }
       get_user_tenant_id: { Args: never; Returns: string }
+      get_whatsapp_connections_safe: {
+        Args: never
+        Returns: {
+          connection_error: string
+          created_at: string
+          has_credentials: boolean
+          id: string
+          last_connected_at: string
+          last_disconnected_at: string
+          last_health_check_at: string
+          name: string
+          phone_number: string
+          provider_type: Database["public"]["Enums"]["provider_type"]
+          qr_status: string
+          status: string
+          webhook_status: string
+        }[]
+      }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
@@ -829,6 +1190,12 @@ export type Database = {
     Enums: {
       app_role: "super_admin" | "tenant_admin" | "agent" | "viewer"
       conversation_status: "open" | "waiting" | "closed" | "archived"
+      inbound_status:
+        | "received"
+        | "processing"
+        | "processed"
+        | "failed"
+        | "duplicate"
       knowledge_status: "processing" | "indexed" | "error"
       knowledge_type: "text" | "pdf" | "url"
       log_level: "info" | "warn" | "error" | "critical"
@@ -841,7 +1208,9 @@ export type Database = {
         | "video"
         | "sticker"
         | "location"
+      outbox_status: "pending" | "processing" | "sent" | "failed" | "dead"
       plan_tier: "trial" | "free" | "pro" | "enterprise"
+      provider_type: "n8n_unofficial" | "whatsapp_cloud_api" | "custom"
       sales_status: "none" | "lead" | "negotiation" | "won" | "lost"
     }
     CompositeTypes: {
@@ -972,6 +1341,13 @@ export const Constants = {
     Enums: {
       app_role: ["super_admin", "tenant_admin", "agent", "viewer"],
       conversation_status: ["open", "waiting", "closed", "archived"],
+      inbound_status: [
+        "received",
+        "processing",
+        "processed",
+        "failed",
+        "duplicate",
+      ],
       knowledge_status: ["processing", "indexed", "error"],
       knowledge_type: ["text", "pdf", "url"],
       log_level: ["info", "warn", "error", "critical"],
@@ -985,7 +1361,9 @@ export const Constants = {
         "sticker",
         "location",
       ],
+      outbox_status: ["pending", "processing", "sent", "failed", "dead"],
       plan_tier: ["trial", "free", "pro", "enterprise"],
+      provider_type: ["n8n_unofficial", "whatsapp_cloud_api", "custom"],
       sales_status: ["none", "lead", "negotiation", "won", "lost"],
     },
   },

@@ -13,6 +13,8 @@ import Departments from "./pages/Departments";
 import AgentsConfig from "./pages/AgentsConfig";
 import Knowledge from "./pages/Knowledge";
 import Settings from "./pages/Settings";
+import Connections from "./pages/Connections";
+import N8nIntegration from "./pages/N8nIntegration";
 import Team from "./pages/Team";
 import Inbox from "./pages/Inbox";
 import Reports from "./pages/Reports";
@@ -47,6 +49,8 @@ const App = () => (
               <Route path="/agents" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><AgentsConfig /></DashboardLayout></ProtectedRoute>} />
               <Route path="/knowledge" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Knowledge /></DashboardLayout></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Settings /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/connections" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Connections /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/integrations/n8n" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><N8nIntegration /></DashboardLayout></ProtectedRoute>} />
               <Route path="/team" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Team /></DashboardLayout></ProtectedRoute>} />
               <Route path="/reports" element={<ProtectedRoute><DashboardLayout><Reports /></DashboardLayout></ProtectedRoute>} />
               <Route path="/my-conversations" element={<ProtectedRoute><DashboardLayout><Inbox /></DashboardLayout></ProtectedRoute>} />

@@ -14,6 +14,7 @@ import { MessageBubble } from "@/components/inbox/MessageBubble";
 import { InternalNotes } from "@/components/inbox/InternalNotes";
 import { ActionMenu } from "@/components/inbox/ActionMenu";
 import { cn } from "@/lib/utils";
+import { sendMessage } from "@/lib/whatsapp/provider";
 
 // --- Notification sound via Web Audio API ---
 function playNotificationSound() {
@@ -222,10 +223,7 @@ const Inbox = () => {
         });
         if (error) throw error;
       } else {
-        const { error } = await supabase.functions.invoke("zapi-send", {
-          body: { conversation_id: selectedConversationId, content: messageInput, type: "text" },
-        });
-        if (error) throw error;
+        await sendMessage({ conversationId: selectedConversationId, content: messageInput });
       }
     },
     onSuccess: () => {
@@ -241,10 +239,11 @@ const Inbox = () => {
     if (!selectedConversationId) return;
     setAiSuggesting(true);
     try {
-      const { error } = await supabase.functions.invoke("zapi-send", {
-        body: { conversation_id: selectedConversationId, content: "Sugira uma resposta baseada no contexto desta conversa.", type: "text", mode: "suggest" },
+      await sendMessage({
+        conversationId: selectedConversationId,
+        content: "Sugira uma resposta baseada no contexto desta conversa.",
+        mode: "suggest",
       });
-      if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
       toast({ title: "Sugestão da IA gerada" });
     } catch (e: any) {
