@@ -77,13 +77,19 @@ const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const nextPath = safeNext(searchParams.get("next"));
   const { user, loading, signIn, signUp } = useAuth();
 
   useEffect(() => {
     if (!loading && user) {
-      navigate("/dashboard");
+      if (nextPath) {
+        window.location.replace(nextPath);
+      } else {
+        navigate("/dashboard");
+      }
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, nextPath]);
 
   const handleDocumentChange = (value: string) => {
     if (documentType === "cpf") {
