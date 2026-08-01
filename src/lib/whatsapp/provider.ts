@@ -22,6 +22,8 @@ export interface SafeConnection {
   provider_type: string;
   status: string;
   qr_status: string | null;
+  qr_code: string | null;
+  qr_expires_at: string | null;
   webhook_status: string | null;
   has_credentials: boolean;
   last_connected_at: string | null;
@@ -96,5 +98,6 @@ export const CONNECTION_STATUS_LABELS: Record<string, string> = {
   connecting: "Conectando",
   disconnecting: "Desconectando",
   disconnected: "Desconectado",
+  qr_pending: "Aguardando QR",
   error: "Erro",
 };
