@@ -13,6 +13,7 @@ const ALLOWED = new Set([
   "conversation.transferred",
   "automation.requested",
   "human.handoff.requested",
+  "system.integration.test",
 ]);
 
 serve(async (req) => {

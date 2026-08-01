@@ -5,8 +5,11 @@ import {
 } from "../_shared/n8n.ts";
 
 const INBOUND_TYPES = new Set([
+  "whatsapp.connection.creating",
   "whatsapp.connection.qr.generated",
   "whatsapp.connection.connected",
+  "whatsapp.message.queued",
+  "system.integration.test.ack",
   "whatsapp.connection.disconnected",
   "whatsapp.connection.error",
   "whatsapp.message.received",
@@ -99,6 +102,9 @@ serve(async (req) => {
     };
 
     switch (payload.event_type) {
+      case "whatsapp.connection.creating":
+        await updateConnection({ status: "connecting", qr_status: "pending", connection_error: null });
+        break;
       case "whatsapp.connection.qr.generated":
         await updateConnection({ qr_status: "available", status: "qr_pending", connection_error: null,
           metadata: { qr_code: data.qr_code ?? null, qr_expires_at: data.expires_at ?? null } });
@@ -117,6 +123,7 @@ serve(async (req) => {
       case "whatsapp.message.received":
         await handleInboundMessage(svc, tenantId, connectionId, data);
         break;
+      case "whatsapp.message.queued":
       case "whatsapp.message.sent":
       case "whatsapp.message.delivered":
       case "whatsapp.message.read":
