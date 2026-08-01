@@ -24,8 +24,9 @@ const AdminTenants = () => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, field, value }: { id: string; field: string; value: any }) => {
-      const { error } = await supabase.from("tenants").update({ [field]: value }).eq("id", id);
+    mutationFn: async ({ id, field, value }: { id: string; field: "plan" | "status" | "name"; value: any }) => {
+      const patch = { [field]: value } as Record<string, never>;
+      const { error } = await supabase.from("tenants").update(patch).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
