@@ -39,6 +39,7 @@ sh scripts/healthcheck.sh
 No Windows, também é possível iniciar e validar tudo com um único comando executado no PowerShell do seu usuário:
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-local.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -PullDefaultModel
 ```
 
