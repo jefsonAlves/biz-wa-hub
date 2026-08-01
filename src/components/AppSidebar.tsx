@@ -23,6 +23,8 @@ import {
   Shield,
   Headphones,
   FileText,
+  Smartphone,
+  Workflow,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { WhatsAppStatusBadge } from "@/components/WhatsAppStatusBadge";
@@ -50,6 +52,8 @@ export function AppSidebar() {
         { title: "Planos", url: "/admin/plans", icon: FileText },
         { title: "Agentes IA", url: "/agents", icon: Bot },
         { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
+        { title: "Conexões WhatsApp", url: "/connections", icon: Smartphone },
+        { title: "Integração n8n", url: "/integrations/n8n", icon: Workflow },
         { title: "Relatórios", url: "/reports", icon: BarChart3 },
         { title: "Logs", url: "/admin/logs", icon: Shield },
         { title: "Configurações", url: "/settings", icon: Settings },
@@ -63,6 +67,8 @@ export function AppSidebar() {
         { title: "Agentes IA", url: "/agents", icon: Bot },
         { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
         { title: "Departamentos", url: "/departments", icon: Building2 },
+        { title: "Conexões WhatsApp", url: "/connections", icon: Smartphone },
+        { title: "Integração n8n", url: "/integrations/n8n", icon: Workflow },
         { title: "Equipe", url: "/team", icon: Users },
         { title: "Relatórios", url: "/reports", icon: BarChart3 },
         { title: "Configurações", url: "/settings", icon: Settings },
