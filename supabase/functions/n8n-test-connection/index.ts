@@ -1,5 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { authenticate, corsHeaders, getIntegration, isTenantAdmin, json, maskUrl, serviceClient, targetUrl } from "../_shared/n8n.ts";
+import {
+  authenticate,
+  buildEvent,
+  corsHeaders,
+  deliverEvent,
+  getIntegration,
+  isTenantAdmin,
+  json,
+  maskUrl,
+  serviceClient,
+  targetUrl,
+  webhookSecret,
+} from "../_shared/n8n.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -21,45 +33,45 @@ serve(async (req) => {
     if (/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(integration.base_url ?? "")) {
       return json({ error: "URL local não é válida em produção. Use a URL pública do n8n." }, 400);
     }
-
-    const started = Date.now();
-    let httpStatus: number | null = null;
-    let ok = false;
-    let errorMessage: string | null = null;
-
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 10000);
-      const resp = await fetch(url, {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event_type: "integration.ping", tenant_id: auth.tenantId, version: 1 }),
-      });
-      clearTimeout(timer);
-      httpStatus = resp.status;
-      ok = resp.status < 500;
-      if (!ok) errorMessage = `HTTP ${resp.status}`;
-    } catch (e) {
-      errorMessage = e instanceof Error ? e.message : "erro de rede";
+    if (integration.status !== "active") {
+      return json({ error: "Integração inativa. Ative a integração antes de testar." }, 400);
+    }
+    if (!webhookSecret()) {
+      return json({ error: "N8N_WEBHOOK_SECRET não configurado no servidor." }, 400);
     }
 
-    const nowIso = new Date().toISOString();
-    await svc.from("n8n_integrations").update({
-      last_tested_at: nowIso,
-      ...(ok ? { last_success_at: nowIso } : { last_error_at: nowIso, last_error_message: errorMessage }),
-    }).eq("id", integration.id);
-
-    await svc.from("webhook_delivery_attempts").insert({
+    // Envia o mesmo envelope assinado (HMAC SHA-256) usado em produção,
+    // para o teste validar exatamente o contrato real do workflow.
+    const event = buildEvent({
+      event_type: "system.integration.test",
       tenant_id: auth.tenantId,
-      target: maskUrl(url),
-      http_status: httpStatus,
-      duration_ms: Date.now() - started,
-      success: ok,
-      error_message: errorMessage,
+      data: { ping: true, requested_by: auth.userId },
     });
 
-    return json({ success: ok, http_status: httpStatus, target: maskUrl(url), error: errorMessage });
+    const result = await deliverEvent(svc, event, integration);
+
+    await svc
+      .from("n8n_integrations")
+      .update({ last_tested_at: new Date().toISOString() })
+      .eq("id", integration.id);
+
+    if (!result.success) {
+      const detail = result.body ? ` — ${result.body}` : "";
+      return json({
+        success: false,
+        http_status: result.status ?? null,
+        target: maskUrl(url),
+        error: `${result.error ?? "falha na entrega"}${detail}`,
+      });
+    }
+
+    return json({
+      success: true,
+      http_status: result.status ?? 200,
+      target: maskUrl(url),
+      event_type: event.event_type,
+      error: null,
+    });
   } catch (error) {
     console.error("n8n-test-connection error:", error);
     return json({ error: error instanceof Error ? error.message : "erro interno" }, 500);
