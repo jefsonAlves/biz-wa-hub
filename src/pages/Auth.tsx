@@ -155,7 +155,8 @@ const Auth = () => {
             title: "Cadastro realizado!",
             description: "Bem-vindo ao AgentFlow! Verifique seu email para confirmar o cadastro.",
           });
-          navigate("/dashboard");
+          if (nextPath) window.location.replace(nextPath);
+          else navigate("/dashboard");
         }
       }
     } catch (error) {
