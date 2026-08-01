@@ -120,7 +120,8 @@ const Auth = () => {
           toast({ title: "Erro no login", description: msg, variant: "destructive" });
         } else {
           toast({ title: "Login realizado!", description: "Bem-vindo de volta!" });
-          navigate("/dashboard");
+          if (nextPath) window.location.replace(nextPath);
+          else navigate("/dashboard");
         }
       } else {
         if (password.length < 6) {
