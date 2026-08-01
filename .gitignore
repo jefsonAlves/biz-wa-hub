@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Local n8n infrastructure secrets
+infra/n8n/.env
+infra/n8n/backups/
+.codex-cache/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
