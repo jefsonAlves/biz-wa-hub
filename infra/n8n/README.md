@@ -36,6 +36,14 @@ docker compose ps
 sh scripts/healthcheck.sh
 ```
 
+No Windows, também é possível iniciar e validar tudo com um único comando executado no PowerShell do seu usuário:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -PullDefaultModel
+```
+
+Omita `-PullDefaultModel` nas próximas inicializações para não baixar o modelo novamente.
+
 Acesse `http://localhost:5678` e crie o proprietário da instância. O arquivo `.env` é ignorado pelo Git.
 
 ## Ollama
