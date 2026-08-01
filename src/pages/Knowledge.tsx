@@ -48,12 +48,13 @@ const Knowledge = () => {
       let fileUrl: string | null = null;
 
       if (type === "pdf" && file) {
+        // Bucket privado: guardamos apenas o caminho e geramos URLs assinadas sob demanda.
         const filePath = `${tenantId}/knowledge/${Date.now()}_${file.name}`;
         const { error: uploadError } = await supabase.storage.from("media").upload(filePath, file);
         if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from("media").getPublicUrl(filePath);
-        fileUrl = urlData.publicUrl;
+        fileUrl = filePath;
       }
+
 
       const { error } = await supabase.from("knowledge_items").insert({
         tenant_id: tenantId,
