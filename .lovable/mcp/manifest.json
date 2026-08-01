@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "sdk_version": "0.26.1",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://kxihlelxmsteszbecgzq.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "remix-of-waba-flow-connect",
+      "version": "0.1.0",
+      "title": "Remix of Waba Flow Connect"
+    },
+    "tools": [
+      {
+        "name": "list_conversations",
+        "title": "Listar conversas",
+        "description": "Lista as conversas de WhatsApp da empresa do usuário, com contato, status e última mensagem.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "status": {
+              "description": "Filtra pelo status da conversa.",
+              "type": "string",
+              "enum": [
+                "open",
+                "waiting",
+                "closed",
+                "archived"
+              ]
+            },
+            "limit": {
+              "description": "Máximo de conversas (padrão 20).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_conversation_messages",
+        "title": "Ler mensagens de uma conversa",
+        "description": "Retorna o histórico de mensagens de uma conversa de WhatsApp, em ordem cronológica.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "conversation_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "ID da conversa."
+            },
+            "limit": {
+              "description": "Máximo de mensagens (padrão 50).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "include_internal": {
+              "description": "Inclui mensagens internas (padrão false).",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "conversation_id"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "search_contacts",
+        "title": "Buscar contatos",
+        "description": "Busca contatos da empresa por nome, telefone ou e-mail.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Texto para buscar em nome, telefone ou e-mail."
+            },
+            "limit": {
+              "description": "Máximo de contatos (padrão 20).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          "required": [
+            "query"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "search_knowledge",
+        "title": "Consultar base de conhecimento",
+        "description": "Busca itens indexados na base de conhecimento da empresa por título ou conteúdo.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Texto para buscar no título ou conteúdo."
+            },
+            "limit": {
+              "description": "Máximo de itens (padrão 5).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            }
+          },
+          "required": [
+            "query"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_internal_note",
+        "title": "Adicionar nota interna",
+        "description": "Cria uma nota interna em uma conversa. A nota é visível apenas para a equipe e nunca é enviada ao cliente pelo WhatsApp.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "conversation_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "ID da conversa."
+            },
+            "note_text": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Texto da nota interna."
+            }
+          },
+          "required": [
+            "conversation_id",
+            "note_text"
+          ]
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
