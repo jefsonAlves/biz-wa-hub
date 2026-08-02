@@ -12,6 +12,7 @@ const INBOUND_TYPES = new Set([
   "system.integration.test.ack",
   "whatsapp.connection.disconnected",
   "whatsapp.connection.error",
+  "whatsapp.sync.batch",
   "whatsapp.message.received",
   "whatsapp.message.sent",
   "whatsapp.message.delivered",
@@ -123,6 +124,9 @@ serve(async (req) => {
       case "whatsapp.message.received":
         await handleInboundMessage(svc, tenantId, connectionId, data);
         break;
+      case "whatsapp.sync.batch":
+        await handleSyncBatch(svc, tenantId, connectionId, data);
+        break;
       case "whatsapp.message.queued":
       case "whatsapp.message.sent":
       case "whatsapp.message.delivered":
@@ -197,6 +201,7 @@ async function handleInboundMessage(
   tenantId: string,
   connectionId: string | null,
   data: Record<string, any>,
+  options: { enqueueAutomation?: boolean; incrementUnread?: boolean } = {},
 ) {
   const chatId: string | null = data.chat_id ?? null;
   const phone = String(data.phone ?? chatId ?? "").replace(/\D/g, "");
@@ -220,6 +225,7 @@ async function handleInboundMessage(
     ? new Date().toISOString()
     : occurredAtCandidate.toISOString();
   const isOutgoing = data.from_me === true || data.direction === "outgoing";
+  const incrementUnread = options.incrementUnread ?? true;
 
   // Contact upsert
   let { data: contact } = await svc.from("contacts").select("id")
@@ -248,13 +254,13 @@ async function handleInboundMessage(
     const inserted = await svc.from("conversations").insert({
       tenant_id: tenantId, contact_id: contact.id,
       whatsapp_connection_id: connectionId, status: "open",
-      wa_chat_id: chatId, unread_count: isOutgoing ? 0 : 1,
+      wa_chat_id: chatId, unread_count: !incrementUnread || isOutgoing ? 0 : 1,
       last_message_at: messageOccurredAt,
     }).select("id, unread_count").single();
     conversation = inserted.data;
   } else {
     await svc.from("conversations").update({
-      unread_count: isOutgoing
+      unread_count: !incrementUnread || isOutgoing
         ? (conversation.unread_count ?? 0)
         : (conversation.unread_count ?? 0) + 1,
       last_message_at: messageOccurredAt,
@@ -276,6 +282,8 @@ async function handleInboundMessage(
     created_at: messageOccurredAt,
   }).select("id").single();
 
+  if (options.enqueueAutomation === false) return;
+
   // Outbox: let n8n orchestrate automation/AI (never inline in this function)
   await svc.from("event_outbox").insert({
     tenant_id: tenantId,
@@ -294,6 +302,51 @@ async function handleInboundMessage(
       data: { message_id: message?.id ?? null, content: data.content ?? null },
     },
   });
+}
+
+
+async function handleSyncBatch(
+  svc: ReturnType<typeof serviceClient>,
+  tenantId: string,
+  connectionId: string | null,
+  data: Record<string, any>,
+) {
+  const contacts = Array.isArray(data.contacts) ? data.contacts.slice(0, 500) : [];
+  const messages = Array.isArray(data.messages) ? data.messages.slice(0, 500) : [];
+
+  const contactRows = contacts
+    .map((contact: Record<string, any>) => {
+      const chatId = String(contact.chat_id ?? "");
+      const phone = String(contact.phone ?? chatId).replace(/\D/g, "");
+      if (!phone) return null;
+      return {
+        tenant_id: tenantId,
+        phone,
+        name: String(contact.name ?? phone).slice(0, 200),
+        wa_chat_id: chatId || null,
+        avatar_url: contact.avatar_url ?? null,
+        last_message_preview: String(contact.last_message_preview ?? "").slice(0, 100),
+      };
+    })
+    .filter(Boolean);
+
+  if (contactRows.length) {
+    const { error } = await svc.from("contacts").upsert(contactRows, {
+      onConflict: "phone,tenant_id",
+      ignoreDuplicates: false,
+    });
+    if (error) throw error;
+  }
+
+  for (let offset = 0; offset < messages.length; offset += 10) {
+    const batch = messages.slice(offset, offset + 10);
+    await Promise.all(batch.map((message: Record<string, any>) =>
+      handleInboundMessage(svc, tenantId, connectionId, message, {
+        enqueueAutomation: false,
+        incrementUnread: false,
+      })
+    ));
+  }
 }
 
 async function handleAutomationReply(
