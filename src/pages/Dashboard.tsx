@@ -5,6 +5,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { MessageSquare, Users, Clock, TrendingUp } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
+const startOfTodayIso = () => {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  return date.toISOString();
+};
+
 const Dashboard = () => {
   const { profile, isSuperAdmin, isTenantAdmin } = useAuth();
   const tenantId = profile?.tenant_id;
@@ -13,18 +19,36 @@ const Dashboard = () => {
     queryKey: ["dashboard-stats", tenantId],
     queryFn: async () => {
       if (!tenantId) return { conversations: 0, contacts: 0, messagesToday: 0 };
+
       const [convRes, contactRes, msgRes] = await Promise.all([
-        supabase.from("conversations").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).in("status", ["open", "waiting"]),
-        supabase.from("contacts").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId),
-        supabase.from("messages").select("id, conversation_id").eq("role", "contact"),
+        supabase
+          .from("conversations")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
+          .in("status", ["open", "waiting"]),
+        supabase
+          .from("contacts")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId),
+        supabase
+          .from("messages")
+          .select("id, conversations!inner(tenant_id)", { count: "exact", head: true })
+          .eq("conversations.tenant_id", tenantId)
+          .gte("created_at", startOfTodayIso()),
       ]);
+
+      if (convRes.error) throw convRes.error;
+      if (contactRes.error) throw contactRes.error;
+      if (msgRes.error) throw msgRes.error;
+
       return {
-        conversations: convRes.count || 0,
-        contacts: contactRes.count || 0,
-        messagesToday: 0,
+        conversations: convRes.count ?? 0,
+        contacts: contactRes.count ?? 0,
+        messagesToday: msgRes.count ?? 0,
       };
     },
     enabled: !!tenantId,
+    refetchInterval: 15000,
   });
 
   const { data: chartData = [] } = useQuery({
@@ -32,20 +56,38 @@ const Dashboard = () => {
     queryFn: async () => {
       if (!tenantId) return [];
       const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const { data } = await supabase
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+      sevenDaysAgo.setHours(0, 0, 0, 0);
+
+      const { data, error } = await supabase
         .from("messages")
-        .select("created_at")
-        .gte("created_at", sevenDaysAgo.toISOString());
-      if (!data) return [];
-      const grouped: Record<string, number> = {};
-      data.forEach(m => {
-        const day = new Date(m.created_at).toLocaleDateString("pt-BR", { weekday: "short" });
-        grouped[day] = (grouped[day] || 0) + 1;
-      });
-      return Object.entries(grouped).map(([name, total]) => ({ name, total }));
+        .select("created_at, conversations!inner(tenant_id)")
+        .eq("conversations.tenant_id", tenantId)
+        .gte("created_at", sevenDaysAgo.toISOString())
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+
+      const grouped = new Map<string, number>();
+      for (let index = 0; index < 7; index += 1) {
+        const day = new Date(sevenDaysAgo);
+        day.setDate(sevenDaysAgo.getDate() + index);
+        const key = day.toISOString().slice(0, 10);
+        grouped.set(key, 0);
+      }
+
+      for (const message of data ?? []) {
+        const key = new Date(message.created_at).toISOString().slice(0, 10);
+        grouped.set(key, (grouped.get(key) ?? 0) + 1);
+      }
+
+      return Array.from(grouped.entries()).map(([date, total]) => ({
+        name: new Date(`${date}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "short" }),
+        total,
+      }));
     },
     enabled: !!tenantId,
+    refetchInterval: 30000,
   });
 
   return (
@@ -72,6 +114,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.contacts ?? 0}</div>
+            <p className="text-xs text-muted-foreground">Contatos reais salvos para esta empresa</p>
           </CardContent>
         </Card>
         <Card>
@@ -81,7 +124,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">--</div>
-            <p className="text-xs text-muted-foreground">Tempo de resposta</p>
+            <p className="text-xs text-muted-foreground">Disponível após coleta de SLA</p>
           </CardContent>
         </Card>
         <Card>
@@ -91,25 +134,24 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.messagesToday ?? 0}</div>
+            <p className="text-xs text-muted-foreground">Entradas e saídas registradas hoje</p>
           </CardContent>
         </Card>
       </div>
 
-      {chartData.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Mensagens nos últimos 7 dias</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={chartData}>
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="total" fill="hsl(142 76% 36%)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader><CardTitle>Mensagens nos últimos 7 dias</CardTitle></CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={chartData}>
+              <XAxis dataKey="name" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Bar dataKey="total" fill="hsl(142 76% 36%)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader><CardTitle>Primeiros Passos</CardTitle></CardHeader>
@@ -118,7 +160,7 @@ const Dashboard = () => {
           <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
             {(isSuperAdmin || isTenantAdmin) && (
               <>
-                <li>Conecte seu WhatsApp via Z-API nas Configurações</li>
+                <li>Conecte seu WhatsApp pela página Conexões WhatsApp</li>
                 <li>Configure os departamentos</li>
                 <li>Adicione agentes IA</li>
                 <li>Convide membros da equipe</li>
