@@ -9,7 +9,7 @@ const COMMAND_EVENTS: Record<string, string> = {
   reconnect: "whatsapp.connection.reconnect",
   logout: "whatsapp.connection.disconnect",
   health_check: "whatsapp.connection.status.request",
-  sync_messages: "whatsapp.connection.status.request",
+  sync_messages: "whatsapp.messages.sync.request",
 };
 
 serve(async (req) => {
