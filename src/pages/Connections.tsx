@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -48,6 +48,7 @@ const Connections = () => {
   const [sessionId, setSessionId] = useState("");
   const [pending, setPending] = useState<string | null>(null);
   const [qrConnectionId, setQrConnectionId] = useState<string | null>(null);
+  const previousStatuses = useRef<Record<string, string>>({});
 
   const { data: connections = [], isLoading } = useQuery({
     queryKey: ["whatsapp_connections_safe", tenantId],
@@ -59,7 +60,7 @@ const Connections = () => {
         connection.status === "connecting" ||
         connection.status === "qr_pending" ||
         connection.qr_status === "pending"
-      ) ? 2500 : 20000;
+      ) ? 2500 : 15000;
     },
   });
 
@@ -73,11 +74,21 @@ const Connections = () => {
   const qrDisplaySource = qrImageSource ?? qrGeneratorUrl;
 
   useEffect(() => {
-    if (!qrConnectionId) return;
-    const updated = connections.find((connection) => connection.id === qrConnectionId);
-    if (!updated) return;
-    if (updated.qr_status === "available") setQrConnectionId(updated.id);
-  }, [connections, qrConnectionId]);
+    for (const connection of connections) {
+      const previous = previousStatuses.current[connection.id];
+      if (connection.status === "connected" && previous && previous !== "connected") {
+        if (qrConnectionId === connection.id) setQrConnectionId(null);
+        toast({
+          title: "WhatsApp conectado",
+          description: `${connection.name} foi conectado com sucesso. Novas mensagens aparecerão no Inbox.`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-chart", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      }
+      previousStatuses.current[connection.id] = connection.status;
+    }
+  }, [connections, qrConnectionId, queryClient, tenantId, toast]);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -132,7 +143,9 @@ const Connections = () => {
       await queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe"] });
       toast({
         title: res.warning ? "Comando enfileirado" : "Comando enviado ao n8n",
-        description: res.warning ?? "Aguardando o callback assinado com o QR Code.",
+        description: res.warning ?? (command === "generate_qr"
+          ? "Aguardando o callback assinado com o QR Code."
+          : "Aguardando a confirmação do n8n."),
       });
     } catch (e) {
       toast({ title: "Erro no comando", description: (e as Error).message, variant: "destructive" });
@@ -241,14 +254,14 @@ const Connections = () => {
                   )}
 
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" onClick={() => runCommand(conn, "create_session")} disabled={busy("create_session")}>
-                      <PlugZap className="h-3.5 w-3.5 mr-1" />Criar sessão
+                    <Button size="sm" onClick={() => runCommand(conn, "create_session")} disabled={busy("create_session") || conn.status === "connected"}>
+                      <PlugZap className="h-3.5 w-3.5 mr-1" />{conn.status === "connected" ? "Sessão ativa" : "Criar sessão"}
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => runCommand(conn, "generate_qr")} disabled={busy("generate_qr")}>
+                    <Button size="sm" variant="outline" onClick={() => runCommand(conn, "generate_qr")} disabled={busy("generate_qr") || conn.status === "connected"}>
                       {busy("generate_qr") ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <QrCode className="h-3.5 w-3.5 mr-1" />}
                       Gerar QR
                     </Button>
-                    {conn.qr_status === "available" && (
+                    {conn.qr_status === "available" && conn.status !== "connected" && (
                       <Button size="sm" variant="outline" onClick={() => setQrConnectionId(conn.id)}>
                         <QrCode className="h-3.5 w-3.5 mr-1" />Ver QR
                       </Button>
@@ -256,7 +269,7 @@ const Connections = () => {
                     <Button size="sm" variant="outline" onClick={() => runCommand(conn, "health_check")} disabled={busy("health_check")}>
                       <RefreshCw className={`h-3.5 w-3.5 mr-1 ${busy("health_check") ? "animate-spin" : ""}`} />Status
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => runCommand(conn, "disconnect")} disabled={busy("disconnect")}>
+                    <Button size="sm" variant="ghost" onClick={() => runCommand(conn, "disconnect")} disabled={busy("disconnect") || conn.status === "disconnected"}>
                       <Power className="h-3.5 w-3.5 mr-1" />Desconectar
                     </Button>
                   </div>
