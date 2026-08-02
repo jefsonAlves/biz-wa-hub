@@ -1169,6 +1169,8 @@ export type Database = {
           name: string
           phone_number: string
           provider_type: Database["public"]["Enums"]["provider_type"]
+          qr_code: string
+          qr_expires_at: string
           qr_status: string
           status: string
           webhook_status: string
