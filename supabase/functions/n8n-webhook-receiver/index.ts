@@ -219,6 +219,7 @@ async function handleInboundMessage(
   const messageOccurredAt = Number.isNaN(occurredAtCandidate.getTime())
     ? new Date().toISOString()
     : occurredAtCandidate.toISOString();
+  const isOutgoing = data.from_me === true || data.direction === "outgoing";
 
   // Contact upsert
   let { data: contact } = await svc.from("contacts").select("id")
@@ -247,12 +248,15 @@ async function handleInboundMessage(
     const inserted = await svc.from("conversations").insert({
       tenant_id: tenantId, contact_id: contact.id,
       whatsapp_connection_id: connectionId, status: "open",
-      wa_chat_id: chatId, unread_count: 1, last_message_at: messageOccurredAt,
+      wa_chat_id: chatId, unread_count: isOutgoing ? 0 : 1,
+      last_message_at: messageOccurredAt,
     }).select("id, unread_count").single();
     conversation = inserted.data;
   } else {
     await svc.from("conversations").update({
-      unread_count: (conversation.unread_count ?? 0) + 1,
+      unread_count: isOutgoing
+        ? (conversation.unread_count ?? 0)
+        : (conversation.unread_count ?? 0) + 1,
       last_message_at: messageOccurredAt,
     }).eq("id", conversation.id);
   }
@@ -260,15 +264,15 @@ async function handleInboundMessage(
 
   const { data: message } = await svc.from("messages").insert({
     conversation_id: conversation.id,
-    role: "contact",
-    direction: "incoming",
+    role: isOutgoing ? "agent" : "contact",
+    direction: isOutgoing ? "outgoing" : "incoming",
     message_type: data.message_type ?? "text",
     content: data.content ?? null,
     media_url: data.media_url ?? null,
     media_mime_type: data.media_mime_type ?? null,
     wa_message_id: providerMessageId,
     zapi_message_id: providerMessageId,
-    delivery_status: "received",
+    delivery_status: isOutgoing ? "sent" : "received",
     created_at: messageOccurredAt,
   }).select("id").single();
 
