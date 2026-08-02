@@ -202,6 +202,24 @@ async function handleInboundMessage(
   const phone = String(data.phone ?? chatId ?? "").replace(/\D/g, "");
   if (!phone) return;
 
+  const providerMessageId = data.provider_message_id
+    ? String(data.provider_message_id)
+    : null;
+  if (providerMessageId) {
+    const { data: existingMessage } = await svc.from("messages")
+      .select("id")
+      .eq("wa_message_id", providerMessageId)
+      .maybeSingle();
+    if (existingMessage) return;
+  }
+
+  const occurredAtCandidate = data.occurred_at
+    ? new Date(String(data.occurred_at))
+    : new Date();
+  const messageOccurredAt = Number.isNaN(occurredAtCandidate.getTime())
+    ? new Date().toISOString()
+    : occurredAtCandidate.toISOString();
+
   // Contact upsert
   let { data: contact } = await svc.from("contacts").select("id")
     .eq("tenant_id", tenantId).eq("phone", phone).maybeSingle();
@@ -229,13 +247,13 @@ async function handleInboundMessage(
     const inserted = await svc.from("conversations").insert({
       tenant_id: tenantId, contact_id: contact.id,
       whatsapp_connection_id: connectionId, status: "open",
-      wa_chat_id: chatId, unread_count: 1, last_message_at: new Date().toISOString(),
+      wa_chat_id: chatId, unread_count: 1, last_message_at: messageOccurredAt,
     }).select("id, unread_count").single();
     conversation = inserted.data;
   } else {
     await svc.from("conversations").update({
       unread_count: (conversation.unread_count ?? 0) + 1,
-      last_message_at: new Date().toISOString(),
+      last_message_at: messageOccurredAt,
     }).eq("id", conversation.id);
   }
   if (!conversation) return;
@@ -248,9 +266,10 @@ async function handleInboundMessage(
     content: data.content ?? null,
     media_url: data.media_url ?? null,
     media_mime_type: data.media_mime_type ?? null,
-    wa_message_id: data.provider_message_id ?? null,
-    zapi_message_id: data.provider_message_id ?? null,
+    wa_message_id: providerMessageId,
+    zapi_message_id: providerMessageId,
     delivery_status: "received",
+    created_at: messageOccurredAt,
   }).select("id").single();
 
   // Outbox: let n8n orchestrate automation/AI (never inline in this function)
