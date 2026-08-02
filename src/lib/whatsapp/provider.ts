@@ -13,7 +13,8 @@ export type ConnectionCommand =
   | "disconnect"
   | "reconnect"
   | "logout"
-  | "health_check";
+  | "health_check"
+  | "sync_messages";
 
 export interface SafeConnection {
   id: string;
