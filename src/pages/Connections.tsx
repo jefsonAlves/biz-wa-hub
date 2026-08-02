@@ -270,6 +270,15 @@ const Connections = () => {
                     <Button size="sm" variant="outline" onClick={() => runCommand(conn, "health_check")} disabled={busy("health_check")}>
                       <RefreshCw className={`h-3.5 w-3.5 mr-1 ${busy("health_check") ? "animate-spin" : ""}`} />Status
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => runCommand(conn, "sync_messages")}
+                      disabled={busy("sync_messages") || conn.status !== "connected"}
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 mr-1 ${busy("sync_messages") ? "animate-spin" : ""}`} />
+                      Atualizar mensagens
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={() => runCommand(conn, "disconnect")} disabled={busy("disconnect") || conn.status === "disconnected"}>
                       <Power className="h-3.5 w-3.5 mr-1" />Desconectar
                     </Button>
