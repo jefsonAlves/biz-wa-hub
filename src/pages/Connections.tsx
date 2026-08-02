@@ -42,6 +42,7 @@ const Connections = () => {
   const tenantId = profile?.tenant_id;
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
