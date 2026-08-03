@@ -25,6 +25,8 @@ import {
   FileText,
   Smartphone,
   Workflow,
+  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { WhatsAppStatusBadge } from "@/components/WhatsAppStatusBadge";
@@ -51,6 +53,7 @@ export function AppSidebar() {
         { title: "Usuários", url: "/admin/users", icon: Users },
         { title: "Planos", url: "/admin/plans", icon: FileText },
         { title: "Agentes IA", url: "/agents", icon: Bot },
+        { title: "IA no Atendimento", url: "/ai-attendance", icon: Sparkles },
         { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
         { title: "Conexões WhatsApp", url: "/connections", icon: Smartphone },
         { title: "Integração n8n", url: "/integrations/n8n", icon: Workflow },
@@ -65,11 +68,13 @@ export function AppSidebar() {
         { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
         { title: "Inbox", url: "/inbox", icon: MessageSquare },
         { title: "Agentes IA", url: "/agents", icon: Bot },
+        { title: "IA no Atendimento", url: "/ai-attendance", icon: Sparkles },
         { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
         { title: "Departamentos", url: "/departments", icon: Building2 },
         { title: "Conexões WhatsApp", url: "/connections", icon: Smartphone },
         { title: "Integração n8n", url: "/integrations/n8n", icon: Workflow },
         { title: "Equipe", url: "/team", icon: Users },
+        { title: "Funções e Permissões", url: "/roles", icon: ShieldCheck },
         { title: "Relatórios", url: "/reports", icon: BarChart3 },
         { title: "Configurações", url: "/settings", icon: Settings },
       ];
