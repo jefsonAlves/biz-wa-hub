@@ -130,6 +130,27 @@ const Settings = () => {
     if (tenant) setTenantName(tenant.name);
   }, [tenant]);
 
+  useEffect(() => {
+    setDisplayName(profile?.full_name || "");
+  }, [profile?.full_name]);
+
+  const saveProfileMutation = useMutation({
+    mutationFn: async () => {
+      if (!profile?.user_id) throw new Error("Sem perfil");
+      const { error } = await supabase
+        .from("profiles")
+        .update({ full_name: displayName.trim() })
+        .eq("user_id", profile.user_id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["team"] });
+      toast({ title: "Nome atualizado!", description: "Novas mensagens usarão este nome no WhatsApp." });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
+
   const saveHoursMutation = useMutation({
     mutationFn: async () => {
       if (!tenantId) throw new Error("Sem tenant");
