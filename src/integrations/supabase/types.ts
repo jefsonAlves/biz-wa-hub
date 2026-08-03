@@ -209,10 +209,12 @@ export type Database = {
           metadata: Json | null
           name: string | null
           phone: string
+          quarantined_at: string | null
           tags: string[] | null
           tenant_id: string
           updated_at: string
           wa_chat_id: string | null
+          whatsapp_origin_verified: boolean
         }
         Insert: {
           avatar_url?: string | null
@@ -223,10 +225,12 @@ export type Database = {
           metadata?: Json | null
           name?: string | null
           phone: string
+          quarantined_at?: string | null
           tags?: string[] | null
           tenant_id: string
           updated_at?: string
           wa_chat_id?: string | null
+          whatsapp_origin_verified?: boolean
         }
         Update: {
           avatar_url?: string | null
@@ -237,10 +241,12 @@ export type Database = {
           metadata?: Json | null
           name?: string | null
           phone?: string
+          quarantined_at?: string | null
           tags?: string[] | null
           tenant_id?: string
           updated_at?: string
           wa_chat_id?: string | null
+          whatsapp_origin_verified?: boolean
         }
         Relationships: [
           {
