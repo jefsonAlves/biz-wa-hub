@@ -167,10 +167,11 @@ export function ConversationList({
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
-                    <span className={cn("font-medium text-sm truncate", unread > 0 && "font-semibold text-foreground")}>{name}</span>
+                    <span className={cn("text-sm truncate text-foreground", unread > 0 ? "font-semibold" : "font-medium")}>{name}</span>
                     <span className="text-xs text-muted-foreground flex-shrink-0">{time}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground truncate mt-0.5">{preview || phone}</p>
+                  <p className="text-xs text-foreground/70 truncate mt-0.5">{preview || phone}</p>
+
                   <div className="flex items-center gap-1 mt-1">
                     {conv.ai_paused && (
                       <Badge variant="outline" className="text-xs py-0 h-4">IA off</Badge>

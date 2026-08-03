@@ -13,6 +13,8 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { AppearanceMenu } from "@/components/AppearanceMenu";
+
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -56,9 +58,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             </div>
 
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" className="relative">
+              <AppearanceMenu />
+
+              <Button variant="ghost" size="icon" className="relative" aria-label="Notificações">
                 <Bell className="h-5 w-5" />
               </Button>
+
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
