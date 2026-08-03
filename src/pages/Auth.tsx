@@ -72,7 +72,8 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [documentType, setDocumentType] = useState<"cpf" | "cnpj">("cpf");
+  const [companyName, setCompanyName] = useState("");
+  const [documentType, setDocumentType] = useState<"mei" | "cnpj">("cnpj");
   const [documentNumber, setDocumentNumber] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -92,14 +93,14 @@ const Auth = () => {
   }, [user, loading, navigate, nextPath]);
 
   const handleDocumentChange = (value: string) => {
-    if (documentType === "cpf") {
+    if (documentType === "mei") {
       setDocumentNumber(formatCPF(value));
     } else {
       setDocumentNumber(formatCNPJ(value));
     }
   };
 
-  const handleDocumentTypeChange = (value: "cpf" | "cnpj") => {
+  const handleDocumentTypeChange = (value: "mei" | "cnpj") => {
     setDocumentType(value);
     setDocumentNumber("");
   };
@@ -130,25 +131,25 @@ const Auth = () => {
           return;
         }
         if (password !== confirmPassword) {
-          toast({ title: "Senhas diferentes", description: "A senha e a confirmação não coincidem.", variant: "destructive" });
+          toast({ title: "Senhas diferentes", description: "A senha e a confirmaÃ§Ã£o nÃ£o coincidem.", variant: "destructive" });
           setIsLoading(false);
           return;
         }
         const rawDigits = documentNumber.replace(/\D/g, "");
-        if (documentType === "cpf" && !validateCPF(rawDigits)) {
-          toast({ title: "CPF inválido", description: "Verifique o CPF informado.", variant: "destructive" });
+        if (documentType === "mei" && !validateCPF(rawDigits)) {
+          toast({ title: "CPF invÃ¡lido", description: "Verifique o CPF informado.", variant: "destructive" });
           setIsLoading(false);
           return;
         }
         if (documentType === "cnpj" && !validateCNPJ(rawDigits)) {
-          toast({ title: "CNPJ inválido", description: "Verifique o CNPJ informado.", variant: "destructive" });
+          toast({ title: "CNPJ invÃ¡lido", description: "Verifique o CNPJ informado.", variant: "destructive" });
           setIsLoading(false);
           return;
         }
-        const { error } = await signUp(email, password, fullName, documentType, rawDigits);
+        const { error } = await signUp(email, password, fullName, companyName, documentType, rawDigits);
         if (error) {
           let msg = error.message;
-          if (error.message.includes("already registered")) msg = "Este email já está cadastrado. Tente fazer login.";
+          if (error.message.includes("already registered")) msg = "Este email jÃ¡ estÃ¡ cadastrado. Tente fazer login.";
           toast({ title: "Erro no cadastro", description: msg, variant: "destructive" });
         } else {
           toast({
@@ -212,24 +213,36 @@ const Auth = () => {
                   </div>
                 </div>
 
+                <div className="space-y-2">
+                  <Label htmlFor="companyName">Nome da empresa</Label>
+                  <Input
+                    id="companyName"
+                    type="text"
+                    placeholder="RazÃ£o social ou nome empresarial"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    required
+                  />
+                </div>
+
                 {/* Tipo de pessoa */}
                 <div className="space-y-2">
-                  <Label>Tipo de pessoa</Label>
+                  <Label>Tipo de empresa</Label>
                   <RadioGroup
                     value={documentType}
-                    onValueChange={(v) => handleDocumentTypeChange(v as "cpf" | "cnpj")}
+                    onValueChange={(v) => handleDocumentTypeChange(v as "mei" | "cnpj")}
                     className="flex gap-6"
                   >
                     <div className="flex items-center gap-2">
-                      <RadioGroupItem value="cpf" id="pf" />
-                      <Label htmlFor="pf" className="cursor-pointer font-normal">
-                        Pessoa Física (CPF)
+                      <RadioGroupItem value="cnpj" id="pj" />
+                      <Label htmlFor="pj" className="cursor-pointer font-normal">
+                        Empresa (CNPJ)
                       </Label>
                     </div>
                     <div className="flex items-center gap-2">
-                      <RadioGroupItem value="cnpj" id="pj" />
-                      <Label htmlFor="pj" className="cursor-pointer font-normal">
-                        Pessoa Jurídica (CNPJ)
+                      <RadioGroupItem value="mei" id="mei" />
+                      <Label htmlFor="mei" className="cursor-pointer font-normal">
+                        MEI (CPF do titular)
                       </Label>
                     </div>
                   </RadioGroup>
@@ -238,7 +251,7 @@ const Auth = () => {
                 {/* CPF ou CNPJ */}
                 <div className="space-y-2">
                   <Label htmlFor="document">
-                    {documentType === "cpf" ? "CPF" : "CNPJ"}
+                    {documentType === "mei" ? "CPF do titular MEI" : "CNPJ"}
                   </Label>
                   <div className="relative">
                     <FileText className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -246,7 +259,7 @@ const Auth = () => {
                       id="document"
                       type="text"
                       inputMode="numeric"
-                      placeholder={documentType === "cpf" ? "000.000.000-00" : "00.000.000/0000-00"}
+                      placeholder={documentType === "mei" ? "000.000.000-00" : "00.000.000/0000-00"}
                       value={documentNumber}
                       onChange={(e) => handleDocumentChange(e.target.value)}
                       className="pl-10"
@@ -282,7 +295,7 @@ const Auth = () => {
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder={isLogin ? "Sua senha" : "Mínimo 6 caracteres"}
+                  placeholder={isLogin ? "Sua senha" : "MÃ­nimo 6 caracteres"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-10 pr-10"
@@ -298,7 +311,7 @@ const Auth = () => {
               </div>
             </div>
 
-            {/* Confirmar senha – somente no cadastro */}
+            {/* Confirmar senha â€“ somente no cadastro */}
             {!isLogin && (
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirmar senha</Label>
@@ -322,7 +335,7 @@ const Auth = () => {
                   </button>
                 </div>
                 {confirmPassword && password !== confirmPassword && (
-                  <p className="text-xs text-destructive">As senhas não coincidem.</p>
+                  <p className="text-xs text-destructive">As senhas nÃ£o coincidem.</p>
                 )}
               </div>
             )}
@@ -345,12 +358,12 @@ const Auth = () => {
             <Separator className="my-4" />
             <div className="text-center">
               <p className="text-muted-foreground text-sm">
-                {isLogin ? "Não tem uma conta?" : "Já tem uma conta?"}{" "}
+                {isLogin ? "NÃ£o tem uma conta?" : "JÃ¡ tem uma conta?"}{" "}
                 <button
                   onClick={() => setIsLogin(!isLogin)}
                   className="text-primary hover:underline font-medium"
                 >
-                  {isLogin ? "Cadastre-se grátis" : "Fazer login"}
+                  {isLogin ? "Cadastre-se grÃ¡tis" : "Fazer login"}
                 </button>
               </p>
             </div>
@@ -359,7 +372,7 @@ const Auth = () => {
 
         <div className="mt-6 text-center">
           <Link to="/">
-            <Button variant="ghost">← Voltar para página inicial</Button>
+            <Button variant="ghost">â† Voltar para pÃ¡gina inicial</Button>
           </Link>
         </div>
       </div>
@@ -368,3 +381,4 @@ const Auth = () => {
 };
 
 export default Auth;
+
