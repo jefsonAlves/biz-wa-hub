@@ -25,9 +25,12 @@ import {
   FileText,
   Smartphone,
   Workflow,
+  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { WhatsAppStatusBadge } from "@/components/WhatsAppStatusBadge";
+import { usePermissions } from "@/hooks/usePermissions";
 
 
 interface MenuItem {
@@ -41,6 +44,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const { profile, isSuperAdmin, isTenantAdmin, isAgent, roles } = useAuth();
+  const { can } = usePermissions();
 
   const getMenuItems = (): MenuItem[] => {
     if (isSuperAdmin) {
@@ -51,6 +55,7 @@ export function AppSidebar() {
         { title: "Usuários", url: "/admin/users", icon: Users },
         { title: "Planos", url: "/admin/plans", icon: FileText },
         { title: "Agentes IA", url: "/agents", icon: Bot },
+        { title: "IA no Atendimento", url: "/ai-attendance", icon: Sparkles },
         { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
         { title: "Conexões WhatsApp", url: "/connections", icon: Smartphone },
         { title: "Integração n8n", url: "/integrations/n8n", icon: Workflow },
@@ -65,29 +70,31 @@ export function AppSidebar() {
         { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
         { title: "Inbox", url: "/inbox", icon: MessageSquare },
         { title: "Agentes IA", url: "/agents", icon: Bot },
+        { title: "IA no Atendimento", url: "/ai-attendance", icon: Sparkles },
         { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
         { title: "Departamentos", url: "/departments", icon: Building2 },
         { title: "Conexões WhatsApp", url: "/connections", icon: Smartphone },
         { title: "Integração n8n", url: "/integrations/n8n", icon: Workflow },
         { title: "Equipe", url: "/team", icon: Users },
+        { title: "Funções e Permissões", url: "/roles", icon: ShieldCheck },
         { title: "Relatórios", url: "/reports", icon: BarChart3 },
         { title: "Configurações", url: "/settings", icon: Settings },
       ];
     }
 
-    if (isAgent) {
-      return [
-        { title: "Inbox", url: "/inbox", icon: MessageSquare },
-        { title: "Meus Atendimentos", url: "/my-conversations", icon: Headphones },
-        { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-      ];
+    // Agentes e funções personalizadas: menu montado pelas permissões da função
+    const items: MenuItem[] = [{ title: "Dashboard", url: "/dashboard", icon: LayoutDashboard }];
+    if (can("inbox.view")) {
+      items.push({ title: "Inbox", url: "/inbox", icon: MessageSquare });
+      if (isAgent) items.push({ title: "Meus Atendimentos", url: "/my-conversations", icon: Headphones });
     }
-
-    // Viewer
-    return [
-      { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-      { title: "Relatórios", url: "/reports", icon: BarChart3 },
-    ];
+    if (can("departments.manage")) items.push({ title: "Departamentos", url: "/departments", icon: Building2 });
+    if (can("knowledge.manage")) items.push({ title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen });
+    if (can("ai.manage_agents")) items.push({ title: "Agentes IA", url: "/agents", icon: Bot });
+    if (can("connections.manage")) items.push({ title: "Conexões WhatsApp", url: "/connections", icon: Smartphone });
+    if (can("team.manage")) items.push({ title: "Equipe", url: "/team", icon: Users });
+    if (can("reports.view")) items.push({ title: "Relatórios", url: "/reports", icon: BarChart3 });
+    return items;
   };
 
   const menuItems = getMenuItems();

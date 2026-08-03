@@ -12,13 +12,21 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, UserPlus, Trash2 } from "lucide-react";
+import { Plus, Users, UserPlus, Trash2, ShieldCheck } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import type { Database } from "@/integrations/supabase/types";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
-const ROLE_LABELS: Record<string, string> = {
+interface TenantRoleOption {
+  id: string;
+  name: string;
+  base_role: AppRole;
+  permissions: string[];
+}
+
+const BASE_ROLE_LABELS: Record<string, string> = {
   super_admin: "Super Admin",
   tenant_admin: "Admin",
   agent: "Agente",
@@ -35,7 +43,23 @@ const Team = () => {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<AppRole>("agent");
+  const [inviteRoleId, setInviteRoleId] = useState<string>("");
+
+  const { data: tenantRoles = [] } = useQuery({
+    queryKey: ["tenant-roles", tenantId],
+    queryFn: async () => {
+      if (!tenantId) return [];
+      const { data, error } = await supabase
+        .from("tenant_roles")
+        .select("id, name, base_role, permissions")
+        .eq("tenant_id", tenantId)
+        .order("is_system", { ascending: false })
+        .order("name");
+      if (error) throw error;
+      return (data || []) as TenantRoleOption[];
+    },
+    enabled: !!tenantId,
+  });
 
   const { data: members = [], isLoading } = useQuery({
     queryKey: ["team", tenantId],
@@ -44,17 +68,36 @@ const Team = () => {
       const { data: profiles, error } = await supabase.from("profiles").select("*").eq("tenant_id", tenantId);
       if (error) throw error;
       const { data: roles } = await supabase.from("user_roles").select("*").eq("tenant_id", tenantId);
-      return (profiles || []).map(p => ({
-        ...p,
-        roles: (roles || []).filter(r => r.user_id === p.user_id).map(r => r.role),
-      }));
+      return (profiles || []).map(p => {
+        const userRoles = (roles || []).filter(r => r.user_id === p.user_id);
+        return {
+          ...p,
+          roles: userRoles.map(r => r.role),
+          tenant_role_id: userRoles.find(r => r.tenant_role_id)?.tenant_role_id ?? "",
+        };
+      });
     },
     enabled: !!tenantId,
   });
 
+  const assignRole = async (userId: string, roleId: string) => {
+    if (!tenantId) throw new Error("Sem tenant");
+    const selected = tenantRoles.find(r => r.id === roleId);
+    if (!selected) throw new Error("Função inválida");
+    await supabase.from("user_roles").delete().eq("user_id", userId).eq("tenant_id", tenantId);
+    const { error } = await supabase.from("user_roles").insert({
+      user_id: userId,
+      tenant_id: tenantId,
+      role: selected.base_role,
+      tenant_role_id: selected.id,
+    });
+    if (error) throw error;
+  };
+
   const inviteMutation = useMutation({
     mutationFn: async () => {
       if (!tenantId) throw new Error("Sem tenant");
+      if (!inviteRoleId) throw new Error("Selecione uma função");
       // Sign up the user with a temporary password (they'll need to reset)
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: inviteEmail,
@@ -71,11 +114,7 @@ const Team = () => {
       const { error: profileError } = await supabase.from("profiles").update({ tenant_id: tenantId }).eq("user_id", signUpData.user.id);
       if (profileError) throw profileError;
 
-      // Add role
-      const { error: roleError } = await supabase.from("user_roles").insert({
-        user_id: signUpData.user.id, tenant_id: tenantId, role: inviteRole,
-      });
-      if (roleError) throw roleError;
+      await assignRole(signUpData.user.id, inviteRoleId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team"] });
@@ -87,17 +126,15 @@ const Team = () => {
   });
 
   const updateRoleMutation = useMutation({
-    mutationFn: async ({ userId, newRole }: { userId: string; newRole: AppRole }) => {
-      if (!tenantId) throw new Error("Sem tenant");
-      // Delete existing roles for this tenant, add new one
-      await supabase.from("user_roles").delete().eq("user_id", userId).eq("tenant_id", tenantId);
-      const { error } = await supabase.from("user_roles").insert({ user_id: userId, tenant_id: tenantId, role: newRole });
-      if (error) throw error;
+    mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
+      await assignRole(userId, roleId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team"] });
-      toast({ title: "Role atualizado!" });
+      queryClient.invalidateQueries({ queryKey: ["my-permissions"] });
+      toast({ title: "Função atualizada!" });
     },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
   const removeMemberMutation = useMutation({
@@ -119,44 +156,57 @@ const Team = () => {
   });
 
 
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Equipe</h1>
-          <p className="text-muted-foreground">Gerencie os membros da sua equipe</p>
+          <p className="text-muted-foreground">Gerencie os membros e as funções da sua equipe</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button><UserPlus className="h-4 w-4 mr-2" />Convidar Membro</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Convidar Novo Membro</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="email@exemplo.com" type="email" />
+        <div className="flex items-center gap-2">
+          {canManage && (
+            <Button variant="outline" asChild>
+              <Link to="/roles"><ShieldCheck className="h-4 w-4 mr-2" />Funções e permissões</Link>
+            </Button>
+          )}
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button disabled={!canManage}><UserPlus className="h-4 w-4 mr-2" />Convidar Membro</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Convidar Novo Membro</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="email@exemplo.com" type="email" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Função</Label>
+                  <Select value={inviteRoleId} onValueChange={setInviteRoleId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione a função" /></SelectTrigger>
+                    <SelectContent>
+                      {tenantRoles.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.name} · {BASE_ROLE_LABELS[r.base_role]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    O membro poderá definir o próprio nome de exibição no WhatsApp após o primeiro acesso.
+                  </p>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Função</Label>
-                <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as AppRole)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="tenant_admin">Admin</SelectItem>
-                    <SelectItem value="agent">Agente</SelectItem>
-                    <SelectItem value="viewer">Visualizador</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-              <Button onClick={() => inviteMutation.mutate()} disabled={!inviteEmail || inviteMutation.isPending}>
-                {inviteMutation.isPending ? "Convidando..." : "Convidar"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+                <Button onClick={() => inviteMutation.mutate()} disabled={!inviteEmail || !inviteRoleId || inviteMutation.isPending}>
+                  {inviteMutation.isPending ? "Convidando..." : "Convidar"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <Card>
@@ -171,6 +221,7 @@ const Team = () => {
                   <TableHead>Nome exibido no WhatsApp</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Função</TableHead>
+                  <TableHead>Nível</TableHead>
                   <TableHead>Status</TableHead>
                   {canManage && <TableHead className="w-[80px] text-right">Ações</TableHead>}
                 </TableRow>
@@ -182,18 +233,22 @@ const Team = () => {
                     <TableCell>{member.email}</TableCell>
                     <TableCell>
                       <Select
-                        value={member.roles[0] || "viewer"}
-                        onValueChange={(v) => updateRoleMutation.mutate({ userId: member.user_id, newRole: v as AppRole })}
+                        value={member.tenant_role_id || ""}
+                        onValueChange={(v) => updateRoleMutation.mutate({ userId: member.user_id, roleId: v })}
                         disabled={!canManage}
                       >
-                        <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-48"><SelectValue placeholder="Sem função personalizada" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="tenant_admin">Admin</SelectItem>
-                          <SelectItem value="agent">Agente</SelectItem>
-                          <SelectItem value="viewer">Visualizador</SelectItem>
+                          {tenantRoles.map((r) => (
+                            <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{BASE_ROLE_LABELS[member.roles[0]] || "—"}</Badge>
+                    </TableCell>
+
                     <TableCell>
                       <Badge variant={member.is_available ? "default" : "secondary"}>
                         {member.is_available ? "Disponível" : "Indisponível"}
