@@ -56,6 +56,8 @@ export function AppSidebar() {
         { title: "Planos", url: "/admin/plans", icon: FileText },
         { title: "Agentes IA", url: "/agents", icon: Bot },
         { title: "IA no Atendimento", url: "/ai-attendance", icon: Sparkles },
+        { title: "Configuração de IA", url: "/ai-providers", icon: Server },
+
         { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
         { title: "Conexões WhatsApp", url: "/connections", icon: Smartphone },
         { title: "Integração n8n", url: "/integrations/n8n", icon: Workflow },
