@@ -120,9 +120,11 @@ const Departments = () => {
         </Dialog>
       </div>
 
+      <DepartmentMetrics />
+
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />Departamentos ({departments.length})</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />Setores ({departments.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
