@@ -9,6 +9,7 @@ const COMMAND_EVENTS: Record<string, string> = {
   reconnect: "whatsapp.connection.reconnect",
   logout: "whatsapp.connection.disconnect",
   health_check: "whatsapp.connection.status.request",
+  sync_messages: "whatsapp.messages.sync.request",
 };
 
 serve(async (req) => {
@@ -58,6 +59,21 @@ serve(async (req) => {
     });
 
     await enqueueEvent(svc, event, { type: "whatsapp_connection", id: connection.id });
+
+    // A full history sync can take longer than the browser/Edge Function request
+    // window. Leave it in the transactional outbox and acknowledge immediately;
+    // process-event-outbox will deliver it to n8n and apply the normal retry rules.
+    if (command === "sync_messages") {
+      return json(
+        {
+          success: true,
+          queued: true,
+          event_id: event.event_id,
+          message: "Sincronização enfileirada",
+        },
+        202,
+      );
+    }
 
     const integration = await getIntegration(svc, auth.tenantId);
     if (!integration) {
