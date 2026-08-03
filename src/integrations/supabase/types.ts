@@ -83,12 +83,17 @@ export type Database = {
           created_at: string
           default_agent_id: string | null
           fallback_department_id: string | null
+          fallback_provider: Database["public"]["Enums"]["ai_provider"] | null
           first_contact_only: boolean
           greeting_message: string | null
           handoff_keywords: string[]
+          handoff_message: string | null
           id: string
           max_auto_replies: number
+          memory_days: number
+          min_confidence: number
           mode: string
+          primary_provider: Database["public"]["Enums"]["ai_provider"] | null
           response_delay_seconds: number
           tenant_id: string
           updated_at: string
@@ -98,12 +103,17 @@ export type Database = {
           created_at?: string
           default_agent_id?: string | null
           fallback_department_id?: string | null
+          fallback_provider?: Database["public"]["Enums"]["ai_provider"] | null
           first_contact_only?: boolean
           greeting_message?: string | null
           handoff_keywords?: string[]
+          handoff_message?: string | null
           id?: string
           max_auto_replies?: number
+          memory_days?: number
+          min_confidence?: number
           mode?: string
+          primary_provider?: Database["public"]["Enums"]["ai_provider"] | null
           response_delay_seconds?: number
           tenant_id: string
           updated_at?: string
@@ -113,12 +123,17 @@ export type Database = {
           created_at?: string
           default_agent_id?: string | null
           fallback_department_id?: string | null
+          fallback_provider?: Database["public"]["Enums"]["ai_provider"] | null
           first_contact_only?: boolean
           greeting_message?: string | null
           handoff_keywords?: string[]
+          handoff_message?: string | null
           id?: string
           max_auto_replies?: number
+          memory_days?: number
+          min_confidence?: number
           mode?: string
+          primary_provider?: Database["public"]["Enums"]["ai_provider"] | null
           response_delay_seconds?: number
           tenant_id?: string
           updated_at?: string
@@ -142,6 +157,59 @@ export type Database = {
             foreignKeyName: "ai_attendance_settings_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_provider_settings: {
+        Row: {
+          api_key_secret_name: string | null
+          base_url: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          last_validated_at: string | null
+          model: string | null
+          provider: Database["public"]["Enums"]["ai_provider"]
+          status: Database["public"]["Enums"]["provider_status"]
+          tenant_id: string
+          updated_at: string
+          validation_error: string | null
+        }
+        Insert: {
+          api_key_secret_name?: string | null
+          base_url?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_validated_at?: string | null
+          model?: string | null
+          provider: Database["public"]["Enums"]["ai_provider"]
+          status?: Database["public"]["Enums"]["provider_status"]
+          tenant_id: string
+          updated_at?: string
+          validation_error?: string | null
+        }
+        Update: {
+          api_key_secret_name?: string | null
+          base_url?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_validated_at?: string | null
+          model?: string | null
+          provider?: Database["public"]["Enums"]["ai_provider"]
+          status?: Database["public"]["Enums"]["provider_status"]
+          tenant_id?: string
+          updated_at?: string
+          validation_error?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_provider_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -322,10 +390,86 @@ export type Database = {
           },
         ]
       }
+      conversation_archives: {
+        Row: {
+          content_hash: string | null
+          conversation_id: string
+          created_at: string
+          error_message: string | null
+          id: string
+          last_accessed_at: string | null
+          message_count: number
+          messages_deleted_at: string | null
+          pdf_storage_path: string | null
+          period_end: string
+          period_start: string
+          status: Database["public"]["Enums"]["archive_status"]
+          summary: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          content_hash?: string | null
+          conversation_id: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          last_accessed_at?: string | null
+          message_count?: number
+          messages_deleted_at?: string | null
+          pdf_storage_path?: string | null
+          period_end: string
+          period_start: string
+          status?: Database["public"]["Enums"]["archive_status"]
+          summary?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          content_hash?: string | null
+          conversation_id?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          last_accessed_at?: string | null
+          message_count?: number
+          messages_deleted_at?: string | null
+          pdf_storage_path?: string | null
+          period_end?: string
+          period_start?: string
+          status?: Database["public"]["Enums"]["archive_status"]
+          summary?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_archives_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_archives_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
+          ai_classified_at: string | null
+          ai_confidence: number | null
+          ai_intent: string | null
           ai_mode: string | null
           ai_paused: boolean
+          ai_requires_human: boolean
+          ai_sentiment: string | null
+          ai_summary: string | null
+          ai_urgency: string | null
           assigned_agent_id: string | null
           closed_at: string | null
           contact_id: string
@@ -334,6 +478,7 @@ export type Database = {
           department_id: string | null
           id: string
           last_message_at: string | null
+          memory_window_start: string | null
           next_meeting: string | null
           sales_status: Database["public"]["Enums"]["sales_status"]
           status: Database["public"]["Enums"]["conversation_status"]
@@ -345,8 +490,15 @@ export type Database = {
           whatsapp_connection_id: string | null
         }
         Insert: {
+          ai_classified_at?: string | null
+          ai_confidence?: number | null
+          ai_intent?: string | null
           ai_mode?: string | null
           ai_paused?: boolean
+          ai_requires_human?: boolean
+          ai_sentiment?: string | null
+          ai_summary?: string | null
+          ai_urgency?: string | null
           assigned_agent_id?: string | null
           closed_at?: string | null
           contact_id: string
@@ -355,6 +507,7 @@ export type Database = {
           department_id?: string | null
           id?: string
           last_message_at?: string | null
+          memory_window_start?: string | null
           next_meeting?: string | null
           sales_status?: Database["public"]["Enums"]["sales_status"]
           status?: Database["public"]["Enums"]["conversation_status"]
@@ -366,8 +519,15 @@ export type Database = {
           whatsapp_connection_id?: string | null
         }
         Update: {
+          ai_classified_at?: string | null
+          ai_confidence?: number | null
+          ai_intent?: string | null
           ai_mode?: string | null
           ai_paused?: boolean
+          ai_requires_human?: boolean
+          ai_sentiment?: string | null
+          ai_summary?: string | null
+          ai_urgency?: string | null
           assigned_agent_id?: string | null
           closed_at?: string | null
           contact_id?: string
@@ -376,6 +536,7 @@ export type Database = {
           department_id?: string | null
           id?: string
           last_message_at?: string | null
+          memory_window_start?: string | null
           next_meeting?: string | null
           sales_status?: Database["public"]["Enums"]["sales_status"]
           status?: Database["public"]["Enums"]["conversation_status"]
@@ -419,30 +580,55 @@ export type Database = {
       }
       departments: {
         Row: {
+          absence_message: string | null
+          ai_agent_id: string | null
+          business_hours: Json | null
           created_at: string
           description: string | null
           id: string
+          keywords: string[]
           name: string
+          priority: number
+          sla_minutes: number | null
           tenant_id: string
           updated_at: string
         }
         Insert: {
+          absence_message?: string | null
+          ai_agent_id?: string | null
+          business_hours?: Json | null
           created_at?: string
           description?: string | null
           id?: string
+          keywords?: string[]
           name: string
+          priority?: number
+          sla_minutes?: number | null
           tenant_id: string
           updated_at?: string
         }
         Update: {
+          absence_message?: string | null
+          ai_agent_id?: string | null
+          business_hours?: Json | null
           created_at?: string
           description?: string | null
           id?: string
+          keywords?: string[]
           name?: string
+          priority?: number
+          sla_minutes?: number | null
           tenant_id?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "departments_ai_agent_id_fkey"
+            columns: ["ai_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents_config"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "departments_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -660,8 +846,17 @@ export type Database = {
           direction: string | null
           id: string
           is_internal: boolean
+          media_caption: string | null
+          media_duration_seconds: number | null
+          media_filename: string | null
+          media_hash: string | null
+          media_height: number | null
           media_mime_type: string | null
+          media_size_bytes: number | null
+          media_status: string
+          media_storage_path: string | null
           media_url: string | null
+          media_width: number | null
           message_type: Database["public"]["Enums"]["message_type"]
           metadata: Json | null
           role: Database["public"]["Enums"]["message_role"]
@@ -677,8 +872,17 @@ export type Database = {
           direction?: string | null
           id?: string
           is_internal?: boolean
+          media_caption?: string | null
+          media_duration_seconds?: number | null
+          media_filename?: string | null
+          media_hash?: string | null
+          media_height?: number | null
           media_mime_type?: string | null
+          media_size_bytes?: number | null
+          media_status?: string
+          media_storage_path?: string | null
           media_url?: string | null
+          media_width?: number | null
           message_type?: Database["public"]["Enums"]["message_type"]
           metadata?: Json | null
           role?: Database["public"]["Enums"]["message_role"]
@@ -694,8 +898,17 @@ export type Database = {
           direction?: string | null
           id?: string
           is_internal?: boolean
+          media_caption?: string | null
+          media_duration_seconds?: number | null
+          media_filename?: string | null
+          media_hash?: string | null
+          media_height?: number | null
           media_mime_type?: string | null
+          media_size_bytes?: number | null
+          media_status?: string
+          media_storage_path?: string | null
           media_url?: string | null
+          media_width?: number | null
           message_type?: Database["public"]["Enums"]["message_type"]
           metadata?: Json | null
           role?: Database["public"]["Enums"]["message_role"]
@@ -708,6 +921,72 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meta_whatsapp_configs: {
+        Row: {
+          access_token_secret_name: string | null
+          app_id: string | null
+          business_account_id: string | null
+          connection_id: string | null
+          created_at: string
+          graph_api_version: string
+          id: string
+          last_validated_at: string | null
+          phone_number_id: string | null
+          status: Database["public"]["Enums"]["provider_status"]
+          tenant_id: string
+          updated_at: string
+          validation_error: string | null
+          verify_token_secret_name: string | null
+        }
+        Insert: {
+          access_token_secret_name?: string | null
+          app_id?: string | null
+          business_account_id?: string | null
+          connection_id?: string | null
+          created_at?: string
+          graph_api_version?: string
+          id?: string
+          last_validated_at?: string | null
+          phone_number_id?: string | null
+          status?: Database["public"]["Enums"]["provider_status"]
+          tenant_id: string
+          updated_at?: string
+          validation_error?: string | null
+          verify_token_secret_name?: string | null
+        }
+        Update: {
+          access_token_secret_name?: string | null
+          app_id?: string | null
+          business_account_id?: string | null
+          connection_id?: string | null
+          created_at?: string
+          graph_api_version?: string
+          id?: string
+          last_validated_at?: string | null
+          phone_number_id?: string | null
+          status?: Database["public"]["Enums"]["provider_status"]
+          tenant_id?: string
+          updated_at?: string
+          validation_error?: string | null
+          verify_token_secret_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_whatsapp_configs_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_whatsapp_configs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -1009,37 +1288,65 @@ export type Database = {
         Row: {
           billing_cycle_start: string | null
           created_at: string
+          document_number: string | null
+          document_type: Database["public"]["Enums"]["business_doc_type"] | null
           id: string
+          legal_name: string | null
           messages_this_month: number
           name: string
+          owner_name: string | null
+          owner_user_id: string | null
           plan: Database["public"]["Enums"]["plan_tier"]
+          retention_days: number
+          retention_policy: Database["public"]["Enums"]["retention_policy"]
           settings: Json | null
           slug: string | null
           status: string
+          tax_id_verified_at: string | null
           updated_at: string
         }
         Insert: {
           billing_cycle_start?: string | null
           created_at?: string
+          document_number?: string | null
+          document_type?:
+            | Database["public"]["Enums"]["business_doc_type"]
+            | null
           id?: string
+          legal_name?: string | null
           messages_this_month?: number
           name: string
+          owner_name?: string | null
+          owner_user_id?: string | null
           plan?: Database["public"]["Enums"]["plan_tier"]
+          retention_days?: number
+          retention_policy?: Database["public"]["Enums"]["retention_policy"]
           settings?: Json | null
           slug?: string | null
           status?: string
+          tax_id_verified_at?: string | null
           updated_at?: string
         }
         Update: {
           billing_cycle_start?: string | null
           created_at?: string
+          document_number?: string | null
+          document_type?:
+            | Database["public"]["Enums"]["business_doc_type"]
+            | null
           id?: string
+          legal_name?: string | null
           messages_this_month?: number
           name?: string
+          owner_name?: string | null
+          owner_user_id?: string | null
           plan?: Database["public"]["Enums"]["plan_tier"]
+          retention_days?: number
+          retention_policy?: Database["public"]["Enums"]["retention_policy"]
           settings?: Json | null
           slug?: string | null
           status?: string
+          tax_id_verified_at?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -1328,9 +1635,14 @@ export type Database = {
         Returns: boolean
       }
       is_tenant_member: { Args: { _tenant_id: string }; Returns: boolean }
+      is_valid_cnpj: { Args: { _digits: string }; Returns: boolean }
+      is_valid_cpf: { Args: { _digits: string }; Returns: boolean }
     }
     Enums: {
+      ai_provider: "ollama" | "openai" | "gemini"
       app_role: "super_admin" | "tenant_admin" | "agent" | "viewer"
+      archive_status: "pending" | "processing" | "ready" | "failed"
+      business_doc_type: "cnpj" | "mei"
       conversation_status: "open" | "waiting" | "closed" | "archived"
       inbound_status:
         | "received"
@@ -1352,7 +1664,12 @@ export type Database = {
         | "location"
       outbox_status: "pending" | "processing" | "sent" | "failed" | "dead"
       plan_tier: "trial" | "free" | "pro" | "enterprise"
+      provider_status: "not_configured" | "validating" | "active" | "error"
       provider_type: "n8n_unofficial" | "whatsapp_cloud_api" | "custom"
+      retention_policy:
+        | "keep_messages"
+        | "delete_after_pdf"
+        | "summary_and_pdf_only"
       sales_status: "none" | "lead" | "negotiation" | "won" | "lost"
     }
     CompositeTypes: {
@@ -1481,7 +1798,10 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      ai_provider: ["ollama", "openai", "gemini"],
       app_role: ["super_admin", "tenant_admin", "agent", "viewer"],
+      archive_status: ["pending", "processing", "ready", "failed"],
+      business_doc_type: ["cnpj", "mei"],
       conversation_status: ["open", "waiting", "closed", "archived"],
       inbound_status: [
         "received",
@@ -1505,7 +1825,13 @@ export const Constants = {
       ],
       outbox_status: ["pending", "processing", "sent", "failed", "dead"],
       plan_tier: ["trial", "free", "pro", "enterprise"],
+      provider_status: ["not_configured", "validating", "active", "error"],
       provider_type: ["n8n_unofficial", "whatsapp_cloud_api", "custom"],
+      retention_policy: [
+        "keep_messages",
+        "delete_after_pdf",
+        "summary_and_pdf_only",
+      ],
       sales_status: ["none", "lead", "negotiation", "won", "lost"],
     },
   },

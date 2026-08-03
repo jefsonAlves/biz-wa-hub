@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
 import {
+  Server,
   MessageSquare,
   LayoutDashboard,
   Users,
@@ -56,6 +57,8 @@ export function AppSidebar() {
         { title: "Planos", url: "/admin/plans", icon: FileText },
         { title: "Agentes IA", url: "/agents", icon: Bot },
         { title: "IA no Atendimento", url: "/ai-attendance", icon: Sparkles },
+        { title: "Configuração de IA", url: "/ai-providers", icon: Server },
+
         { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
         { title: "Conexões WhatsApp", url: "/connections", icon: Smartphone },
         { title: "Integração n8n", url: "/integrations/n8n", icon: Workflow },
@@ -71,6 +74,8 @@ export function AppSidebar() {
         { title: "Inbox", url: "/inbox", icon: MessageSquare },
         { title: "Agentes IA", url: "/agents", icon: Bot },
         { title: "IA no Atendimento", url: "/ai-attendance", icon: Sparkles },
+        { title: "Configuração de IA", url: "/ai-providers", icon: Server },
+
         { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
         { title: "Departamentos", url: "/departments", icon: Building2 },
         { title: "Conexões WhatsApp", url: "/connections", icon: Smartphone },
