@@ -18,6 +18,7 @@ import N8nIntegration from "./pages/N8nIntegration";
 import Team from "./pages/Team";
 import Roles from "./pages/Roles";
 import AiAttendance from "./pages/AiAttendance";
+import AiProviders from "./pages/AiProviders";
 import Inbox from "./pages/Inbox";
 import Reports from "./pages/Reports";
 import AdminTenants from "./pages/AdminTenants";
