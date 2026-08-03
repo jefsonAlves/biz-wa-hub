@@ -166,10 +166,11 @@ const Team = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nome</TableHead>
+                  <TableHead>Nome exibido no WhatsApp</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Função</TableHead>
                   <TableHead>Status</TableHead>
+                  {canManage && <TableHead className="w-[80px] text-right">Ações</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -181,6 +182,7 @@ const Team = () => {
                       <Select
                         value={member.roles[0] || "viewer"}
                         onValueChange={(v) => updateRoleMutation.mutate({ userId: member.user_id, newRole: v as AppRole })}
+                        disabled={!canManage}
                       >
                         <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -195,8 +197,37 @@ const Team = () => {
                         {member.is_available ? "Disponível" : "Indisponível"}
                       </Badge>
                     </TableCell>
+                    {canManage && (
+                      <TableCell className="text-right">
+                        {member.user_id !== profile?.user_id && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" aria-label={`Remover ${member.full_name || member.email}`}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Remover membro da equipe?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  {member.full_name || member.email} perderá o acesso a esta empresa. O histórico de mensagens é preservado.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => removeMemberMutation.mutate(member.user_id)}>
+                                  Remover
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
+              </TableBody>
+
               </TableBody>
             </Table>
           )}
