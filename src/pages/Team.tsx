@@ -227,8 +227,6 @@ const Team = () => {
                   </TableRow>
                 ))}
               </TableBody>
-
-              </TableBody>
             </Table>
           )}
         </CardContent>
