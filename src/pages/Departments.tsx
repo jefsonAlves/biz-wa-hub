@@ -89,8 +89,8 @@ const Departments = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Departamentos</h1>
-          <p className="text-muted-foreground">Gerencie os departamentos da sua empresa</p>
+          <h1 className="text-3xl font-bold">Setores (Departamentos)</h1>
+          <p className="text-muted-foreground">Gerencie os setores e acompanhe o desempenho de atendimento</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) resetForm(); else setDialogOpen(true); }}>
           <DialogTrigger asChild>
