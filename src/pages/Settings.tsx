@@ -398,6 +398,10 @@ const Settings = () => {
           </Card>
         </TabsContent>
 
+        <TabsContent value="general">
+          <Card>
+
+
 
             <CardHeader><CardTitle className="flex items-center gap-2"><Building className="h-5 w-5" />Dados da Empresa</CardTitle></CardHeader>
             <CardContent className="space-y-4">
