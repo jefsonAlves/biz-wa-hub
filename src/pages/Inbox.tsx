@@ -67,8 +67,9 @@ const Inbox = () => {
 
       let query = supabase
         .from("conversations")
-        .select("*, contacts(name, phone, wa_chat_id, last_message_preview, avatar_url), departments(name)", { count: "exact" })
+        .select("*, contacts!inner(name, phone, wa_chat_id, last_message_preview, avatar_url, quarantined_at), departments(name)", { count: "exact" })
         .eq("tenant_id", tenantId)
+        .is("contacts.quarantined_at", null)
         .order("is_pinned", { ascending: false })
         .order("pinned_at", { ascending: false, nullsFirst: false })
         .order("last_message_at", { ascending: false })
