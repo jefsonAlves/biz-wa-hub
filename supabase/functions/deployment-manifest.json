@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "requested_at": "2026-08-03T00:00:00-03:00",
+  "source_branch": "main",
+  "functions": [
+    "whatsapp-connection-command",
+    "process-event-outbox",
+    "n8n-webhook-receiver",
+    "n8n-test-connection"
+  ],
+  "contract": {
+    "sync_command_event": "whatsapp.messages.sync.request",
+    "sync_command_response_status": 202,
+    "sync_delivery": "event_outbox",
+    "sync_callback_event": "whatsapp.sync.batch",
+    "disconnect_requires_explicit_confirmation": true,
+    "automatic_logout_enabled": false,
+    "n8n_webhook_path": "/webhook/biz-wa-hub/platform"
+  },
+  "security": {
+    "contains_secrets": false,
+    "changes_urls": false,
+    "changes_migrations": false
+  }
+}
