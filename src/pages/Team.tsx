@@ -26,10 +26,12 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const Team = () => {
-  const { profile } = useAuth();
+  const { profile, isTenantAdmin, isSuperAdmin } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const tenantId = profile?.tenant_id;
+  const canManage = isTenantAdmin || isSuperAdmin;
+
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
