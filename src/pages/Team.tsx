@@ -12,13 +12,21 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, UserPlus, Trash2 } from "lucide-react";
+import { Plus, Users, UserPlus, Trash2, ShieldCheck } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import type { Database } from "@/integrations/supabase/types";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
-const ROLE_LABELS: Record<string, string> = {
+interface TenantRoleOption {
+  id: string;
+  name: string;
+  base_role: AppRole;
+  permissions: string[];
+}
+
+const BASE_ROLE_LABELS: Record<string, string> = {
   super_admin: "Super Admin",
   tenant_admin: "Admin",
   agent: "Agente",
@@ -35,7 +43,23 @@ const Team = () => {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<AppRole>("agent");
+  const [inviteRoleId, setInviteRoleId] = useState<string>("");
+
+  const { data: tenantRoles = [] } = useQuery({
+    queryKey: ["tenant-roles", tenantId],
+    queryFn: async () => {
+      if (!tenantId) return [];
+      const { data, error } = await supabase
+        .from("tenant_roles")
+        .select("id, name, base_role, permissions")
+        .eq("tenant_id", tenantId)
+        .order("is_system", { ascending: false })
+        .order("name");
+      if (error) throw error;
+      return (data || []) as TenantRoleOption[];
+    },
+    enabled: !!tenantId,
+  });
 
   const { data: members = [], isLoading } = useQuery({
     queryKey: ["team", tenantId],
@@ -44,17 +68,36 @@ const Team = () => {
       const { data: profiles, error } = await supabase.from("profiles").select("*").eq("tenant_id", tenantId);
       if (error) throw error;
       const { data: roles } = await supabase.from("user_roles").select("*").eq("tenant_id", tenantId);
-      return (profiles || []).map(p => ({
-        ...p,
-        roles: (roles || []).filter(r => r.user_id === p.user_id).map(r => r.role),
-      }));
+      return (profiles || []).map(p => {
+        const userRoles = (roles || []).filter(r => r.user_id === p.user_id);
+        return {
+          ...p,
+          roles: userRoles.map(r => r.role),
+          tenant_role_id: userRoles.find(r => r.tenant_role_id)?.tenant_role_id ?? "",
+        };
+      });
     },
     enabled: !!tenantId,
   });
 
+  const assignRole = async (userId: string, roleId: string) => {
+    if (!tenantId) throw new Error("Sem tenant");
+    const selected = tenantRoles.find(r => r.id === roleId);
+    if (!selected) throw new Error("Função inválida");
+    await supabase.from("user_roles").delete().eq("user_id", userId).eq("tenant_id", tenantId);
+    const { error } = await supabase.from("user_roles").insert({
+      user_id: userId,
+      tenant_id: tenantId,
+      role: selected.base_role,
+      tenant_role_id: selected.id,
+    });
+    if (error) throw error;
+  };
+
   const inviteMutation = useMutation({
     mutationFn: async () => {
       if (!tenantId) throw new Error("Sem tenant");
+      if (!inviteRoleId) throw new Error("Selecione uma função");
       // Sign up the user with a temporary password (they'll need to reset)
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: inviteEmail,
@@ -71,11 +114,7 @@ const Team = () => {
       const { error: profileError } = await supabase.from("profiles").update({ tenant_id: tenantId }).eq("user_id", signUpData.user.id);
       if (profileError) throw profileError;
 
-      // Add role
-      const { error: roleError } = await supabase.from("user_roles").insert({
-        user_id: signUpData.user.id, tenant_id: tenantId, role: inviteRole,
-      });
-      if (roleError) throw roleError;
+      await assignRole(signUpData.user.id, inviteRoleId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team"] });
@@ -87,17 +126,15 @@ const Team = () => {
   });
 
   const updateRoleMutation = useMutation({
-    mutationFn: async ({ userId, newRole }: { userId: string; newRole: AppRole }) => {
-      if (!tenantId) throw new Error("Sem tenant");
-      // Delete existing roles for this tenant, add new one
-      await supabase.from("user_roles").delete().eq("user_id", userId).eq("tenant_id", tenantId);
-      const { error } = await supabase.from("user_roles").insert({ user_id: userId, tenant_id: tenantId, role: newRole });
-      if (error) throw error;
+    mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
+      await assignRole(userId, roleId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team"] });
-      toast({ title: "Role atualizado!" });
+      queryClient.invalidateQueries({ queryKey: ["my-permissions"] });
+      toast({ title: "Função atualizada!" });
     },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
   const removeMemberMutation = useMutation({
@@ -117,6 +154,7 @@ const Team = () => {
     },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
+
 
 
   return (
