@@ -367,7 +367,7 @@ const Settings = () => {
           </Card>
         </TabsContent>
 
-        </TabsContent>
+
 
         <TabsContent value="profile">
           <Card>
