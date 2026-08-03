@@ -96,6 +96,25 @@ const Team = () => {
     },
   });
 
+  const removeMemberMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      if (!tenantId) throw new Error("Sem tenant");
+      if (userId === profile?.user_id) throw new Error("Você não pode remover a si mesmo");
+      const { error: roleError } = await supabase
+        .from("user_roles").delete().eq("user_id", userId).eq("tenant_id", tenantId);
+      if (roleError) throw roleError;
+      const { error: profileError } = await supabase
+        .from("profiles").update({ tenant_id: null }).eq("user_id", userId).eq("tenant_id", tenantId);
+      if (profileError) throw profileError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["team"] });
+      toast({ title: "Membro removido da equipe!" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
