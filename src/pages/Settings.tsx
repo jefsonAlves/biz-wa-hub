@@ -367,8 +367,38 @@ const Settings = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="general">
+        </TabsContent>
+
+        <TabsContent value="profile">
           <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Circle className="h-5 w-5" />Meu perfil</CardTitle>
+              <CardDescription>
+                O nome exibido é o nome que aparece para o contato no WhatsApp em cada mensagem que você envia.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="display-name">Nome exibido no WhatsApp</Label>
+                <Input
+                  id="display-name"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Ex: Ana do Suporte"
+                  maxLength={60}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Suas mensagens serão enviadas como “*{displayName.trim() || "Seu nome"}*: mensagem”.
+                </p>
+              </div>
+              <Button onClick={() => saveProfileMutation.mutate()} disabled={!displayName.trim() || saveProfileMutation.isPending}>
+                {saveProfileMutation.isPending ? "Salvando..." : "Salvar nome"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+
             <CardHeader><CardTitle className="flex items-center gap-2"><Building className="h-5 w-5" />Dados da Empresa</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
