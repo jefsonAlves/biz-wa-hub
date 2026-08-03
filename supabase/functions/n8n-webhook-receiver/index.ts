@@ -28,6 +28,7 @@ const INBOUND_TYPES = new Set([
 ]);
 
 const MAX_SKEW_SECONDS = 300;
+const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -227,6 +228,30 @@ async function handleInboundMessage(
   const isOutgoing = data.from_me === true || data.direction === "outgoing";
   const incrementUnread = options.incrementUnread ?? true;
 
+  let storedMediaPath: string | null = null;
+  const encodedMedia = typeof data.media_base64 === "string"
+    ? data.media_base64.replace(/^data:[^;]+;base64,/, "")
+    : null;
+  if (encodedMedia) {
+    const mimeType = String(data.media_mime_type ?? "application/octet-stream").toLowerCase();
+    const allowedMime = /^(image\/(jpeg|png|webp|gif)|audio\/(ogg|mpeg|mp4|webm)|video\/(mp4|webm)|application\/(pdf|octet-stream))$/;
+    if (!allowedMime.test(mimeType)) throw new Error("media_mime_type_not_allowed");
+    const binary = Uint8Array.from(atob(encodedMedia), (character) => character.charCodeAt(0));
+    if (binary.byteLength > MAX_MEDIA_BYTES) throw new Error("media_too_large");
+    const extensionByMime: Record<string, string> = {
+      "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+      "audio/ogg": "ogg", "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/webm": "webm",
+      "video/mp4": "mp4", "video/webm": "webm", "application/pdf": "pdf",
+    };
+    const extension = extensionByMime[mimeType] ?? "bin";
+    storedMediaPath = `${tenantId}/whatsapp/${providerMessageId ?? crypto.randomUUID()}.${extension}`;
+    const { error: uploadError } = await svc.storage.from("media").upload(storedMediaPath, binary, {
+      contentType: mimeType,
+      upsert: true,
+    });
+    if (uploadError) throw uploadError;
+  }
+
   // Contact upsert
   let { data: contact } = await svc.from("contacts").select("id")
     .eq("tenant_id", tenantId).eq("phone", phone).maybeSingle();
@@ -287,7 +312,7 @@ async function handleInboundMessage(
     direction: isOutgoing ? "outgoing" : "incoming",
     message_type: data.message_type ?? "text",
     content: data.content ?? null,
-    media_url: data.media_url ?? null,
+    media_url: storedMediaPath ?? data.media_url ?? null,
     media_mime_type: data.media_mime_type ?? null,
     wa_message_id: providerMessageId,
     zapi_message_id: providerMessageId,
