@@ -11,7 +11,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Calendar, Tag, ArrowLeftRight, CheckSquare } from "lucide-react";
+import { Plus, Calendar, ArrowLeftRight, CheckSquare, Pin, PinOff, Archive, ArchiveRestore } from "lucide-react";
 
 interface ActionMenuProps {
   conversation: any;
@@ -36,7 +36,7 @@ export function ActionMenu({ conversation, departments, tenantId, onStatusChange
       const runAt = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
       const contact = conversation.contacts;
       const chatId = contact?.wa_chat_id || (contact?.phone ? `${contact.phone.replace(/\D/g, "")}@c.us` : null);
-      if (!chatId) throw new Error("Chat ID não encontrado");
+      if (!chatId) throw new Error("Chat ID nÃ£o encontrado");
 
       const { error } = await supabase.from("schedules").insert({
         tenant_id: tenantId,
@@ -52,7 +52,7 @@ export function ActionMenu({ conversation, departments, tenantId, onStatusChange
     onSuccess: () => {
       setScheduleOpen(false);
       setScheduleDate(""); setScheduleTime(""); setScheduleMsg("");
-      toast({ title: "Mensagem agendada!", description: "Será enviada no horário configurado." });
+      toast({ title: "Mensagem agendada!", description: "SerÃ¡ enviada no horÃ¡rio configurado." });
     },
     onError: (e: any) => toast({ title: "Erro ao agendar", description: e.message, variant: "destructive" }),
   });
@@ -69,6 +69,21 @@ export function ActionMenu({ conversation, departments, tenantId, onStatusChange
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       toast({ title: `Conversa marcada como ${status}` });
       onStatusChange?.(status);
+    },
+  });
+
+  const togglePin = useMutation({
+    mutationFn: async () => {
+      const shouldPin = !conversation.is_pinned;
+      const { error } = await supabase.from("conversations").update({
+        is_pinned: shouldPin,
+        pinned_at: shouldPin ? new Date().toISOString() : null,
+      }).eq("id", conversation.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast({ title: conversation.is_pinned ? "Conversa desafixada" : "Conversa fixada" });
     },
   });
 
@@ -98,6 +113,14 @@ export function ActionMenu({ conversation, departments, tenantId, onStatusChange
             <Calendar className="h-4 w-4 mr-2" />
             Agendar mensagem
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => togglePin.mutate()}>
+            {conversation.is_pinned ? <PinOff className="h-4 w-4 mr-2" /> : <Pin className="h-4 w-4 mr-2" />}
+            {conversation.is_pinned ? "Desafixar conversa" : "Fixar conversa"}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => changeStatus.mutate(conversation.status === "archived" ? "open" : "archived")}>
+            {conversation.status === "archived" ? <ArchiveRestore className="h-4 w-4 mr-2" /> : <Archive className="h-4 w-4 mr-2" />}
+            {conversation.status === "archived" ? "Desarquivar" : "Arquivar conversa"}
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => changeStatus.mutate("waiting")}>
             <CheckSquare className="h-4 w-4 mr-2" />
@@ -117,7 +140,7 @@ export function ActionMenu({ conversation, departments, tenantId, onStatusChange
               {departments.map((dept) => (
                 <DropdownMenuItem key={dept.id} onClick={() => transferToDept.mutate(dept.id)}>
                   <ArrowLeftRight className="h-4 w-4 mr-2" />
-                  → {dept.name}
+                  â†’ {dept.name}
                 </DropdownMenuItem>
               ))}
             </>
@@ -141,7 +164,7 @@ export function ActionMenu({ conversation, departments, tenantId, onStatusChange
                 <Input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} className="h-9" />
               </div>
               <div>
-                <Label className="text-xs">Horário</Label>
+                <Label className="text-xs">HorÃ¡rio</Label>
                 <Input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} className="h-9" />
               </div>
             </div>
@@ -170,3 +193,4 @@ export function ActionMenu({ conversation, departments, tenantId, onStatusChange
     </>
   );
 }
+
