@@ -7,10 +7,15 @@ ALTER TABLE public.conversations
 CREATE INDEX IF NOT EXISTS conversations_inbox_order_idx
   ON public.conversations (tenant_id, is_pinned DESC, pinned_at DESC, last_message_at DESC);
 
--- Remove only contacts that have neither a WhatsApp identity nor any message
--- carrying an ID assigned by the WhatsApp provider. This targets demo/manual
--- records and preserves every contact proven to have come from WhatsApp.
-DELETE FROM public.contacts AS contact
+ALTER TABLE public.contacts
+  ADD COLUMN IF NOT EXISTS whatsapp_origin_verified boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS quarantined_at timestamptz;
+
+-- Quarantine only contacts that have neither a WhatsApp identity nor any
+-- provider-assigned message. Hiding is reversible and safer than deleting.
+UPDATE public.contacts AS contact
+SET whatsapp_origin_verified = false,
+    quarantined_at = now()
 WHERE nullif(trim(contact.wa_chat_id), '') IS NULL
   AND NOT EXISTS (
     SELECT 1
@@ -19,6 +24,11 @@ WHERE nullif(trim(contact.wa_chat_id), '') IS NULL
     WHERE conversation.contact_id = contact.id
       AND (message.wa_message_id IS NOT NULL OR message.zapi_message_id IS NOT NULL)
   );
+
+UPDATE public.contacts
+SET whatsapp_origin_verified = true,
+    quarantined_at = NULL
+WHERE nullif(trim(wa_chat_id), '') IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION public.set_conversation_pinned(
   target_conversation_id uuid,
@@ -36,5 +46,4 @@ BEGIN
     AND public.is_tenant_member(tenant_id);
 END;
 $$;
-
 
