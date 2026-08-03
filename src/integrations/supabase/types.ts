@@ -77,6 +77,76 @@ export type Database = {
           },
         ]
       }
+      ai_attendance_settings: {
+        Row: {
+          business_hours_only: boolean
+          created_at: string
+          default_agent_id: string | null
+          fallback_department_id: string | null
+          first_contact_only: boolean
+          greeting_message: string | null
+          handoff_keywords: string[]
+          id: string
+          max_auto_replies: number
+          mode: string
+          response_delay_seconds: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          business_hours_only?: boolean
+          created_at?: string
+          default_agent_id?: string | null
+          fallback_department_id?: string | null
+          first_contact_only?: boolean
+          greeting_message?: string | null
+          handoff_keywords?: string[]
+          id?: string
+          max_auto_replies?: number
+          mode?: string
+          response_delay_seconds?: number
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          business_hours_only?: boolean
+          created_at?: string
+          default_agent_id?: string | null
+          fallback_department_id?: string | null
+          first_contact_only?: boolean
+          greeting_message?: string | null
+          handoff_keywords?: string[]
+          id?: string
+          max_auto_replies?: number
+          mode?: string
+          response_delay_seconds?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_attendance_settings_default_agent_id_fkey"
+            columns: ["default_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents_config"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_attendance_settings_fallback_department_id_fkey"
+            columns: ["fallback_department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_attendance_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_providers: {
         Row: {
           api_key_encrypted: string | null
@@ -891,6 +961,50 @@ export type Database = {
           },
         ]
       }
+      tenant_roles: {
+        Row: {
+          base_role: Database["public"]["Enums"]["app_role"]
+          created_at: string
+          description: string | null
+          id: string
+          is_system: boolean
+          name: string
+          permissions: string[]
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          base_role?: Database["public"]["Enums"]["app_role"]
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_system?: boolean
+          name: string
+          permissions?: string[]
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          base_role?: Database["public"]["Enums"]["app_role"]
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_system?: boolean
+          name?: string
+          permissions?: string[]
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_roles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           billing_cycle_start: string | null
@@ -984,6 +1098,7 @@ export type Database = {
           id: string
           role: Database["public"]["Enums"]["app_role"]
           tenant_id: string | null
+          tenant_role_id: string | null
           user_id: string
         }
         Insert: {
@@ -991,6 +1106,7 @@ export type Database = {
           id?: string
           role: Database["public"]["Enums"]["app_role"]
           tenant_id?: string | null
+          tenant_role_id?: string | null
           user_id: string
         }
         Update: {
@@ -998,6 +1114,7 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           tenant_id?: string | null
+          tenant_role_id?: string | null
           user_id?: string
         }
         Relationships: [
@@ -1006,6 +1123,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_tenant_role_id_fkey"
+            columns: ["tenant_role_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_roles"
             referencedColumns: ["id"]
           },
         ]
@@ -1155,6 +1279,7 @@ export type Database = {
         Args: { _connection_id: string }
         Returns: boolean
       }
+      get_my_permissions: { Args: never; Returns: string[] }
       get_user_tenant_id: { Args: never; Returns: string }
       get_whatsapp_connections_safe: {
         Args: never
