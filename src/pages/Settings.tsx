@@ -36,6 +36,8 @@ const Settings = () => {
   const [hours, setHours] = useState<any>(null);
   const [outsideMessage, setOutsideMessage] = useState("");
   const [tenantName, setTenantName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+
 
   const { data: connections = [] } = useQuery({
     queryKey: ["whatsapp_connections_safe", tenantId],
