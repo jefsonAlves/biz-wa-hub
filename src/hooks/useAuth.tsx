@@ -22,7 +22,7 @@ interface AuthContextType {
   roles: AppRole[];
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string, documentType?: string, documentNumber?: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName: string, companyName: string, documentType: "cnpj" | "mei", documentNumber: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   hasRole: (role: AppRole) => boolean;
   isSuperAdmin: boolean;
@@ -52,11 +52,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!data.tenant_id && retryCount < 3) {
         setTimeout(() => fetchProfile(userId, retryCount + 1), 1500);
       } else if (data.tenant_id) {
-        // Garantir que os roles foram carregados quando o tenant_id estiver disponível
+        // Garantir que os roles foram carregados quando o tenant_id estiver disponÃ­vel
         fetchRoles(userId);
       }
     } else if (retryCount < 2) {
-      // Profile ainda não existe, aguardar trigger criar
+      // Profile ainda nÃ£o existe, aguardar trigger criar
       setTimeout(() => fetchProfile(userId, retryCount + 1), 1500);
     }
   };
@@ -109,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error as Error | null };
   };
 
-  const signUp = async (email: string, password: string, fullName: string, documentType?: string, documentNumber?: string) => {
+  const signUp = async (email: string, password: string, fullName: string, companyName: string, documentType: "cnpj" | "mei", documentNumber: string) => {
     const redirectUrl = `${window.location.origin}/`;
     const { error } = await supabase.auth.signUp({
       email,
@@ -118,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         emailRedirectTo: redirectUrl,
         data: {
           full_name: fullName,
+          company_name: companyName,
           document_type: documentType,
           document_number: documentNumber,
         },
@@ -157,3 +158,4 @@ export function useAuth() {
   if (!context) throw new Error("useAuth must be used within AuthProvider");
   return context;
 }
+
