@@ -135,12 +135,16 @@ const Connections = () => {
     onError: (e: Error) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
-  const runCommand = async (connection: SafeConnection, command: ConnectionCommand) => {
+  const runCommand = async (
+    connection: SafeConnection,
+    command: ConnectionCommand,
+    confirmDisconnect = false,
+  ) => {
     setPending(`${connection.id}:${command}`);
     if (command === "generate_qr") setQrConnectionId(connection.id);
 
     try {
-      const res = await sendConnectionCommand(connection.id, command);
+      const res = await sendConnectionCommand(connection.id, command, { confirmDisconnect });
       await queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe"] });
       toast({
         title: res.warning ? "Comando enfileirado" : "Comando enviado ao n8n",
@@ -279,7 +283,17 @@ const Connections = () => {
                       <RefreshCw className={`h-3.5 w-3.5 mr-1 ${busy("sync_messages") ? "animate-spin" : ""}`} />
                       Atualizar mensagens
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => runCommand(conn, "disconnect")} disabled={busy("disconnect") || conn.status === "disconnected"}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        const confirmed = window.confirm(
+                          `Desconectar ${conn.name}? A sessão permanecerá conectada se você cancelar.`,
+                        );
+                        if (confirmed) void runCommand(conn, "disconnect", true);
+                      }}
+                      disabled={busy("disconnect") || conn.status === "disconnected"}
+                    >
                       <Power className="h-3.5 w-3.5 mr-1" />Desconectar
                     </Button>
                   </div>
