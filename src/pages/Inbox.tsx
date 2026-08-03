@@ -69,14 +69,18 @@ const Inbox = () => {
         .from("conversations")
         .select("*, contacts(name, phone, wa_chat_id, last_message_preview, avatar_url), departments(name)", { count: "exact" })
         .eq("tenant_id", tenantId)
+        .order("is_pinned", { ascending: false })
+        .order("pinned_at", { ascending: false, nullsFirst: false })
         .order("last_message_at", { ascending: false })
         .range(from, to);
 
       // Apply filters
       if (filter === "open") query = query.eq("status", "open");
       else if (filter === "waiting") query = query.eq("status", "waiting");
+      else if (filter === "archived") query = query.eq("status", "archived");
       else if (filter === "mine" && user?.id) query = query.eq("assigned_agent_id", user.id);
       else if (filter === "unassigned") query = query.is("assigned_agent_id", null);
+      else query = query.neq("status", "archived");
 
       if (salesStatusFilter !== "all") query = query.eq("sales_status", salesStatusFilter as any);
       if (departmentFilter !== "all") query = query.eq("department_id", departmentFilter);
@@ -146,7 +150,7 @@ const Inbox = () => {
       let toggle = true;
       titleIntervalRef.current = setInterval(() => {
         document.title = toggle
-          ? `💬 (${unreadBadge}) Nova${unreadBadge > 1 ? "s" : ""} mensagem${unreadBadge > 1 ? "ns" : ""}`
+          ? `ðŸ’¬ (${unreadBadge}) Nova${unreadBadge > 1 ? "s" : ""} mensagem${unreadBadge > 1 ? "ns" : ""}`
           : originalTitleRef.current;
         toggle = !toggle;
       }, 1200);
@@ -245,9 +249,9 @@ const Inbox = () => {
         mode: "suggest",
       });
       queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId] });
-      toast({ title: "Sugestão da IA gerada" });
+      toast({ title: "SugestÃ£o da IA gerada" });
     } catch (e: any) {
-      toast({ title: "Erro na sugestão", description: e.message, variant: "destructive" });
+      toast({ title: "Erro na sugestÃ£o", description: e.message, variant: "destructive" });
     } finally { setAiSuggesting(false); }
   }, [selectedConversationId, queryClient, toast]);
 
@@ -266,7 +270,7 @@ const Inbox = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      toast({ title: "Conversa atribuída a você!" });
+      toast({ title: "Conversa atribuÃ­da a vocÃª!" });
     },
   });
 
@@ -325,7 +329,7 @@ const Inbox = () => {
               <MessageSquare className="h-14 w-14 mx-auto opacity-30" />
               <div>
                 <p className="font-medium">Selecione uma conversa</p>
-                <p className="text-sm text-muted-foreground mt-1">Escolha uma conversa na lista à esquerda</p>
+                <p className="text-sm text-muted-foreground mt-1">Escolha uma conversa na lista Ã  esquerda</p>
               </div>
             </div>
           </div>
@@ -444,3 +448,4 @@ const Inbox = () => {
 };
 
 export default Inbox;
+
