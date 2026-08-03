@@ -1635,6 +1635,8 @@ export type Database = {
         Returns: boolean
       }
       is_tenant_member: { Args: { _tenant_id: string }; Returns: boolean }
+      is_valid_cnpj: { Args: { _digits: string }; Returns: boolean }
+      is_valid_cpf: { Args: { _digits: string }; Returns: boolean }
     }
     Enums: {
       ai_provider: "ollama" | "openai" | "gemini"
