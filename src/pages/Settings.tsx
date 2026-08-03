@@ -197,11 +197,13 @@ const Settings = () => {
       </div>
 
       <Tabs defaultValue="whatsapp">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="whatsapp"><Wifi className="h-4 w-4 mr-1" />Canais</TabsTrigger>
           <TabsTrigger value="hours"><Clock className="h-4 w-4 mr-1" />Horários</TabsTrigger>
+          <TabsTrigger value="profile"><Circle className="h-4 w-4 mr-1" />Meu perfil</TabsTrigger>
           <TabsTrigger value="general"><Building className="h-4 w-4 mr-1" />Geral</TabsTrigger>
         </TabsList>
+
 
         <TabsContent value="whatsapp" className="space-y-4">
           <Card>
