@@ -257,7 +257,20 @@ async function handleInboundMessage(
       wa_chat_id: chatId, unread_count: !incrementUnread || isOutgoing ? 0 : 1,
       last_message_at: messageOccurredAt,
     }).select("id, unread_count").single();
+    if (inserted.error && inserted.error.code !== "23505") throw inserted.error;
     conversation = inserted.data;
+
+    // Concurrent messages may try to create the same active conversation.
+    // The database constraint elects one winner and every message reuses it.
+    if (!conversation) {
+      const existing = await svc.from("conversations").select("id, unread_count")
+        .eq("tenant_id", tenantId).eq("contact_id", contact.id)
+        .in("status", ["open", "waiting"])
+        .order("last_message_at", { ascending: false })
+        .limit(1).single();
+      if (existing.error) throw existing.error;
+      conversation = existing.data;
+    }
   } else {
     await svc.from("conversations").update({
       unread_count: !incrementUnread || isOutgoing
@@ -338,14 +351,12 @@ async function handleSyncBatch(
     if (error) throw error;
   }
 
-  for (let offset = 0; offset < messages.length; offset += 10) {
-    const batch = messages.slice(offset, offset + 10);
-    await Promise.all(batch.map((message: Record<string, any>) =>
-      handleInboundMessage(svc, tenantId, connectionId, message, {
-        enqueueAutomation: false,
-        incrementUnread: false,
-      })
-    ));
+  // Keep provider order and avoid racing messages from the same contact.
+  for (const message of messages) {
+    await handleInboundMessage(svc, tenantId, connectionId, message, {
+      enqueueAutomation: false,
+      incrementUnread: false,
+    });
   }
 }
 
