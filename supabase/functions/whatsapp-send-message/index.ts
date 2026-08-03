@@ -88,6 +88,16 @@ serve(async (req) => {
       return json({ success: true, message_id: draft.id, mode: "suggest" });
     }
 
+    // Display name registered by the team member — this is what the WhatsApp contact sees
+    const { data: senderProfile } = await svc
+      .from("profiles")
+      .select("full_name, email")
+      .eq("user_id", auth.userId)
+      .maybeSingle();
+    const agentName = (senderProfile?.full_name?.trim() ||
+      senderProfile?.email?.split("@")[0] || "").slice(0, 60);
+    const outboundContent = agentName && content ? `*${agentName}*:\n${content}` : content;
+
     const { data: message, error: msgError } = await svc.from("messages").insert({
       conversation_id: conversation.id,
       role: "agent",
@@ -97,8 +107,10 @@ serve(async (req) => {
       media_url: mediaUrl,
       author_id: auth.userId,
       delivery_status: "pending",
+      metadata: { agent_name: agentName, outbound_content: outboundContent },
     }).select("id").single();
     if (msgError) throw msgError;
+
 
     const event = buildEvent({
       event_type: mediaUrl ? "whatsapp.media.send" : "whatsapp.message.send",
