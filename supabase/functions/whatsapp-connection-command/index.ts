@@ -22,9 +22,13 @@ serve(async (req) => {
     const body = await req.json().catch(() => null);
     const command = body?.command as string | undefined;
     const connectionId = body?.connection_id as string | undefined;
+    const disconnectConfirmed = body?.confirm_disconnect === true;
 
     if (!command || !COMMAND_EVENTS[command]) return json({ error: "Comando inválido" }, 400);
     if (!connectionId) return json({ error: "connection_id é obrigatório" }, 400);
+    if ((command === "disconnect" || command === "logout") && !disconnectConfirmed) {
+      return json({ error: "Confirmação explícita obrigatória para desconectar" }, 409);
+    }
 
     const svc = serviceClient();
     const { data: connection } = await svc
@@ -59,6 +63,17 @@ serve(async (req) => {
     });
 
     await enqueueEvent(svc, event, { type: "whatsapp_connection", id: connection.id });
+
+    // A full history sync can exceed the browser request window. Keep it in
+    // the outbox and acknowledge immediately; the worker delivers it with retries.
+    if (command === "sync_messages") {
+      return json({
+        success: true,
+        queued: true,
+        event_id: event.event_id,
+        message: "Sincronização enfileirada",
+      }, 202);
+    }
 
     const integration = await getIntegration(svc, auth.tenantId);
     if (!integration) {
