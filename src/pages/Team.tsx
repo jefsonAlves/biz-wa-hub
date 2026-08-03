@@ -159,42 +159,54 @@ const Team = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Equipe</h1>
-          <p className="text-muted-foreground">Gerencie os membros da sua equipe</p>
+          <p className="text-muted-foreground">Gerencie os membros e as funções da sua equipe</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button><UserPlus className="h-4 w-4 mr-2" />Convidar Membro</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Convidar Novo Membro</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="email@exemplo.com" type="email" />
+        <div className="flex items-center gap-2">
+          {canManage && (
+            <Button variant="outline" asChild>
+              <Link to="/roles"><ShieldCheck className="h-4 w-4 mr-2" />Funções e permissões</Link>
+            </Button>
+          )}
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button disabled={!canManage}><UserPlus className="h-4 w-4 mr-2" />Convidar Membro</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Convidar Novo Membro</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="email@exemplo.com" type="email" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Função</Label>
+                  <Select value={inviteRoleId} onValueChange={setInviteRoleId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione a função" /></SelectTrigger>
+                    <SelectContent>
+                      {tenantRoles.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.name} · {BASE_ROLE_LABELS[r.base_role]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    O membro poderá definir o próprio nome de exibição no WhatsApp após o primeiro acesso.
+                  </p>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Função</Label>
-                <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as AppRole)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="tenant_admin">Admin</SelectItem>
-                    <SelectItem value="agent">Agente</SelectItem>
-                    <SelectItem value="viewer">Visualizador</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-              <Button onClick={() => inviteMutation.mutate()} disabled={!inviteEmail || inviteMutation.isPending}>
-                {inviteMutation.isPending ? "Convidando..." : "Convidar"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+                <Button onClick={() => inviteMutation.mutate()} disabled={!inviteEmail || !inviteRoleId || inviteMutation.isPending}>
+                  {inviteMutation.isPending ? "Convidando..." : "Convidar"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <Card>
@@ -209,6 +221,7 @@ const Team = () => {
                   <TableHead>Nome exibido no WhatsApp</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Função</TableHead>
+                  <TableHead>Nível</TableHead>
                   <TableHead>Status</TableHead>
                   {canManage && <TableHead className="w-[80px] text-right">Ações</TableHead>}
                 </TableRow>
@@ -220,18 +233,22 @@ const Team = () => {
                     <TableCell>{member.email}</TableCell>
                     <TableCell>
                       <Select
-                        value={member.roles[0] || "viewer"}
-                        onValueChange={(v) => updateRoleMutation.mutate({ userId: member.user_id, newRole: v as AppRole })}
+                        value={member.tenant_role_id || ""}
+                        onValueChange={(v) => updateRoleMutation.mutate({ userId: member.user_id, roleId: v })}
                         disabled={!canManage}
                       >
-                        <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-48"><SelectValue placeholder="Sem função personalizada" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="tenant_admin">Admin</SelectItem>
-                          <SelectItem value="agent">Agente</SelectItem>
-                          <SelectItem value="viewer">Visualizador</SelectItem>
+                          {tenantRoles.map((r) => (
+                            <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{BASE_ROLE_LABELS[member.roles[0]] || "—"}</Badge>
+                    </TableCell>
+
                     <TableCell>
                       <Badge variant={member.is_available ? "default" : "secondary"}>
                         {member.is_available ? "Disponível" : "Indisponível"}
