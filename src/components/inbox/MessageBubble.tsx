@@ -50,10 +50,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {/* Role label */}
         <div className="flex items-center gap-1 mb-0.5 opacity-70">
           <RoleIcon role={message.role} />
-          <span className="text-xs font-medium">{roleLabel(message.role)}</span>
+          <span className="text-xs font-medium">
+            {message.metadata?.agent_name || roleLabel(message.role)}
+          </span>
           {isInternal && <Badge variant="outline" className="text-xs h-4 py-0">Interno</Badge>}
           {isDraft && <Badge variant="outline" className="text-xs h-4 py-0 border-primary/40 text-primary">Sugestão IA</Badge>}
         </div>
+
 
         {/* Media */}
         {message.media_url && (
