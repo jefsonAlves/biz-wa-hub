@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Building2 } from "lucide-react";
+import { DepartmentMetrics } from "@/components/departments/DepartmentMetrics";
 
 const Departments = () => {
   const { profile } = useAuth();
@@ -88,8 +89,8 @@ const Departments = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Departamentos</h1>
-          <p className="text-muted-foreground">Gerencie os departamentos da sua empresa</p>
+          <h1 className="text-3xl font-bold">Setores (Departamentos)</h1>
+          <p className="text-muted-foreground">Gerencie os setores e acompanhe o desempenho de atendimento</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) resetForm(); else setDialogOpen(true); }}>
           <DialogTrigger asChild>
@@ -119,9 +120,11 @@ const Departments = () => {
         </Dialog>
       </div>
 
+      <DepartmentMetrics />
+
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />Departamentos ({departments.length})</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" />Setores ({departments.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
