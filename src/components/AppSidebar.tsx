@@ -74,6 +74,8 @@ export function AppSidebar() {
         { title: "Inbox", url: "/inbox", icon: MessageSquare },
         { title: "Agentes IA", url: "/agents", icon: Bot },
         { title: "IA no Atendimento", url: "/ai-attendance", icon: Sparkles },
+        { title: "Configuração de IA", url: "/ai-providers", icon: Server },
+
         { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
         { title: "Departamentos", url: "/departments", icon: Building2 },
         { title: "Conexões WhatsApp", url: "/connections", icon: Smartphone },
