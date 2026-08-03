@@ -1279,6 +1279,21 @@ export type Database = {
         Args: { _connection_id: string }
         Returns: boolean
       }
+      get_department_metrics: {
+        Args: { _from: string; _to: string }
+        Returns: {
+          avg_wait_seconds: number
+          awaiting_response: number
+          conversations_count: number
+          department_id: string
+          department_name: string
+          max_wait_seconds: number
+          messages_received: number
+          messages_sent: number
+          new_conversations: number
+          new_inbound_conversations: number
+        }[]
+      }
       get_my_permissions: { Args: never; Returns: string[] }
       get_user_tenant_id: { Args: never; Returns: string }
       get_whatsapp_connections_safe: {
