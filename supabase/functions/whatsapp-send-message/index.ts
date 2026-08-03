@@ -120,12 +120,15 @@ serve(async (req) => {
       data: {
         message_id: message.id,
         chat_id: chatId,
-        content,
+        content: outboundContent,
+        raw_content: content,
+        agent_name: agentName,
         message_type: messageType,
         media_url: mediaUrl,
         provider_instance_id: connection.provider_instance_id,
         provider_session_id: connection.provider_session_id,
         sent_by: auth.userId,
+
       },
     });
 
