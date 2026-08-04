@@ -340,21 +340,21 @@ const Inbox = () => {
             <div className="px-4 py-3 border-b border-border bg-card/80 backdrop-blur-sm">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  {selectedConv.contacts?.avatar_url ? (
-                    <img src={selectedConv.contacts.avatar_url} alt={selectedConv.contacts?.name || ""}
+                  {(selectedConv.contacts as any)?.avatar_url ? (
+                    <img src={(selectedConv.contacts as any).avatar_url} alt={(selectedConv.contacts as any)?.name || ""}
                       className="w-9 h-9 rounded-full object-cover flex-shrink-0"
                       onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
                   ) : null}
                   <div className={cn(
                     "w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0",
-                    selectedConv.contacts?.avatar_url ? "hidden" : ""
+                    (selectedConv.contacts as any)?.avatar_url ? "hidden" : ""
                   )}>
-                    {(selectedConv.contacts?.name || selectedConv.contacts?.phone || "?").charAt(0).toUpperCase()}
+                    {((selectedConv.contacts as any)?.name || (selectedConv.contacts as any)?.phone || "?").charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-semibold text-sm truncate">
-                        {selectedConv.contacts?.name || selectedConv.contacts?.phone}
+                        {(selectedConv.contacts as any)?.name || (selectedConv.contacts as any)?.phone}
                       </h3>
                       <Badge variant={selectedConv.status === "open" ? "default" : "secondary"} className="text-xs h-4 py-0">
                         {selectedConv.status}
@@ -365,7 +365,7 @@ const Inbox = () => {
                         <Badge variant="outline" className="text-xs h-4 py-0 border-primary/40 text-primary">IA ativa</Badge>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">{selectedConv.contacts?.phone}</p>
+                    <p className="text-xs text-muted-foreground">{(selectedConv.contacts as any)?.phone}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">

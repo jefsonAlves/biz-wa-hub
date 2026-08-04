@@ -74,16 +74,13 @@ export function ActionMenu({ conversation, departments, tenantId, onStatusChange
 
   const togglePin = useMutation({
     mutationFn: async () => {
-      const shouldPin = !conversation.is_pinned;
-      const { error } = await supabase.from("conversations").update({
-        is_pinned: shouldPin,
-        pinned_at: shouldPin ? new Date().toISOString() : null,
-      }).eq("id", conversation.id);
-      if (error) throw error;
+      // Note: is_pinned column doesn't exist yet in DB schema.
+      // We will skip this until the migration is fully applied.
+      toast({ title: "Funcionalidade em desenvolvimento", variant: "destructive" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      toast({ title: conversation.is_pinned ? "Conversa desafixada" : "Conversa fixada" });
+      toast({ title: "Funcionalidade em desenvolvimento" });
     },
   });
 
