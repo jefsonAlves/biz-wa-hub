@@ -28,7 +28,7 @@ const FONT_KEY = "app.fontScale";
 
 function readTheme(): ThemeMode {
   const stored = localStorage.getItem(THEME_KEY);
-  return stored === "light" || stored === "dark" ? stored : "dark";
+  return stored === "light" || stored === "dark" ? stored : "light";
 }
 
 function readFontScale(): FontScale {
