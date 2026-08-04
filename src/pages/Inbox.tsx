@@ -78,6 +78,9 @@ const Inbox = () => {
       // Apply filters
       if (filter === "open") query = query.eq("status", "open");
       else if (filter === "waiting") query = query.eq("status", "waiting");
+      else if (filter === "unread") query = query.gt("unread_count", 0).neq("status", "archived");
+      else if (filter === "awaiting") query = query.eq("awaiting_reply", true).neq("status", "archived");
+      else if (filter === "answered") query = query.eq("last_message_direction", "outgoing").neq("status", "archived");
       else if (filter === "archived") query = query.eq("status", "archived");
       else if (filter === "mine" && user?.id) query = query.eq("assigned_agent_id", user.id);
       else if (filter === "unassigned") query = query.is("assigned_agent_id", null);
@@ -101,12 +104,34 @@ const Inbox = () => {
   const conversations = conversationsData?.data || [];
   const totalCount = conversationsData?.count || 0;
 
+  const { data: inboxMetrics = { unread: 0, awaiting: 0, answered: 0 } } = useQuery({
+    queryKey: ["inbox-metrics", tenantId],
+    queryFn: async () => {
+      if (!tenantId) return { unread: 0, awaiting: 0, answered: 0 };
+      const [unreadResult, awaitingResult, answeredResult] = await Promise.all([
+        supabase.from("conversations").select("unread_count").eq("tenant_id", tenantId).neq("status", "archived").gt("unread_count", 0),
+        supabase.from("conversations").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).neq("status", "archived").eq("awaiting_reply", true),
+        supabase.from("conversations").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).neq("status", "archived").eq("last_message_direction", "outgoing"),
+      ]);
+      if (unreadResult.error) throw unreadResult.error;
+      if (awaitingResult.error) throw awaitingResult.error;
+      if (answeredResult.error) throw answeredResult.error;
+      return {
+        unread: (unreadResult.data ?? []).reduce((sum, row) => sum + (row.unread_count ?? 0), 0),
+        awaiting: awaitingResult.count ?? 0,
+        answered: answeredResult.count ?? 0,
+      };
+    },
+    enabled: !!tenantId,
+  });
+
   // Messages
   const { data: messages = [], isLoading: msgsLoading } = useQuery({
     queryKey: ["messages", selectedConversationId],
     queryFn: async () => {
       if (!selectedConversationId) return [];
       await supabase.from("conversations").update({ unread_count: 0 }).eq("id", selectedConversationId);
+      queryClient.invalidateQueries({ queryKey: ["inbox-metrics", tenantId] });
       const { data, error } = await supabase
         .from("messages")
         .select("*")
@@ -174,10 +199,14 @@ const Inbox = () => {
     const channel = supabase
       .channel(`inbox-realtime-${tenantId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "conversations", filter: `tenant_id=eq.${tenantId}` },
-        () => { queryClient.invalidateQueries({ queryKey: ["conversations"] }); })
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          queryClient.invalidateQueries({ queryKey: ["inbox-metrics"] });
+        })
       .on("postgres_changes", { event: "*", schema: "public", table: "messages" },
         (payload: any) => {
           queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          queryClient.invalidateQueries({ queryKey: ["inbox-metrics"] });
           const newMsg = payload.new;
           const convId = newMsg?.conversation_id || payload.old?.conversation_id;
           const isIncoming = newMsg?.direction === "incoming" && newMsg?.role === "contact";
@@ -294,6 +323,11 @@ const Inbox = () => {
             <Badge variant="secondary" className="text-xs">
               {totalCount} conversa{totalCount !== 1 ? "s" : ""}
             </Badge>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1">
+            <Badge variant="destructive" className="text-[10px]">{inboxMetrics.unread} não lidas</Badge>
+            <Badge variant="outline" className="text-[10px]">{inboxMetrics.awaiting} aguardando</Badge>
+            <Badge variant="secondary" className="text-[10px]">{inboxMetrics.answered} respondidas</Badge>
           </div>
         </div>
         {convsLoading ? (
