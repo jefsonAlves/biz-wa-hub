@@ -102,9 +102,8 @@ const Index = () => {
 
       <footer className="border-t border-border/10 bg-background/80 backdrop-blur-sm py-8">
         <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center">
-          <div className="flex items-center gap-2 mb-4 md:mb-0">
-            <DsaLogo size={24} />
-            <span className="font-semibold">DSA WA Hub</span>
+          <div className="flex items-center mb-4 md:mb-0">
+            <DsaLogo size={80} />
           </div>
           <p className="text-muted-foreground text-sm">© 2026 DSA Projetos e Consultoria. Todos os direitos reservados.</p>
         </div>
