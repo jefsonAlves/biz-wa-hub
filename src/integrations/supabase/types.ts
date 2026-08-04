@@ -471,12 +471,16 @@ export type Database = {
           ai_summary: string | null
           ai_urgency: string | null
           assigned_agent_id: string | null
+          awaiting_reply: boolean
           closed_at: string | null
           contact_id: string
           created_at: string
           deal_value: number | null
           department_id: string | null
           id: string
+          last_agent_message_at: string | null
+          last_customer_message_at: string | null
+          last_message_direction: string | null
           last_message_at: string | null
           memory_window_start: string | null
           next_meeting: string | null
@@ -500,12 +504,16 @@ export type Database = {
           ai_summary?: string | null
           ai_urgency?: string | null
           assigned_agent_id?: string | null
+          awaiting_reply?: boolean
           closed_at?: string | null
           contact_id: string
           created_at?: string
           deal_value?: number | null
           department_id?: string | null
           id?: string
+          last_agent_message_at?: string | null
+          last_customer_message_at?: string | null
+          last_message_direction?: string | null
           last_message_at?: string | null
           memory_window_start?: string | null
           next_meeting?: string | null
@@ -529,12 +537,16 @@ export type Database = {
           ai_summary?: string | null
           ai_urgency?: string | null
           assigned_agent_id?: string | null
+          awaiting_reply?: boolean
           closed_at?: string | null
           contact_id?: string
           created_at?: string
           deal_value?: number | null
           department_id?: string | null
           id?: string
+          last_agent_message_at?: string | null
+          last_customer_message_at?: string | null
+          last_message_direction?: string | null
           last_message_at?: string | null
           memory_window_start?: string | null
           next_meeting?: string | null
