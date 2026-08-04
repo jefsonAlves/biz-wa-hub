@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { authenticate, buildEvent, corsHeaders, deliverEvent, enqueueEvent, getIntegration, json, serviceClient } from "../_shared/n8n.ts";
+import { authenticate, buildEvent, corsHeaders, enqueueEvent, getIntegration, json, serviceClient } from "../_shared/n8n.ts";
 
 const COMMAND_EVENTS: Record<string, string> = {
   create_session: "whatsapp.connection.create",
@@ -22,13 +22,13 @@ serve(async (req) => {
     const body = await req.json().catch(() => null);
     const command = body?.command as string | undefined;
     const connectionId = body?.connection_id as string | undefined;
-    const disconnectConfirmed = body?.confirm_disconnect === true;
 
-    if (!command || !COMMAND_EVENTS[command]) return json({ error: "Comando inválido" }, 400);
-    if (!connectionId) return json({ error: "connection_id é obrigatório" }, 400);
-    if ((command === "disconnect" || command === "logout") && !disconnectConfirmed) {
-      return json({ error: "Confirmação explícita obrigatória para desconectar" }, 409);
+    if ((command === "disconnect" || command === "logout") && body?.confirm_disconnect !== true) {
+      return json({ error: "confirm_disconnect_required" }, 409);
     }
+
+    if (!command || !COMMAND_EVENTS[command]) return json({ error: "Comando invÃ¡lido" }, 400);
+    if (!connectionId) return json({ error: "connection_id Ã© obrigatÃ³rio" }, 400);
 
     const svc = serviceClient();
     const { data: connection } = await svc
@@ -37,10 +37,10 @@ serve(async (req) => {
       .eq("id", connectionId)
       .eq("tenant_id", auth.tenantId)
       .maybeSingle();
-    if (!connection) return json({ error: "Conexão não encontrada" }, 404);
+    if (!connection) return json({ error: "ConexÃ£o nÃ£o encontrada" }, 404);
 
     if (connection.provider_type !== "n8n_unofficial") {
-      return json({ error: `Provedor ${connection.provider_type} ainda não suportado para comandos` }, 400);
+      return json({ error: `Provedor ${connection.provider_type} ainda nÃ£o suportado para comandos` }, 400);
     }
 
     // Optimistic local state so the UI has feedback
@@ -64,32 +64,17 @@ serve(async (req) => {
 
     await enqueueEvent(svc, event, { type: "whatsapp_connection", id: connection.id });
 
-    // A full history sync can exceed the browser request window. Keep it in
-    // the outbox and acknowledge immediately; the worker delivers it with retries.
-    if (command === "sync_messages") {
-      return json({
-        success: true,
-        queued: true,
-        event_id: event.event_id,
-        message: "Sincronização enfileirada",
-      }, 202);
-    }
-
     const integration = await getIntegration(svc, auth.tenantId);
-    if (!integration) {
-      return json({ success: true, queued: true, event_id: event.event_id, warning: "Integração n8n não configurada" });
-    }
-
-    const result = await deliverEvent(svc, event, integration);
-    await svc.from("event_outbox").update(
-      result.success
-        ? { status: "sent", attempts: 1, processed_at: new Date().toISOString() }
-        : { status: "pending", attempts: 1, last_error: result.error, next_retry_at: new Date(Date.now() + 30000).toISOString() },
-    ).eq("id", event.event_id);
-
-    return json({ success: result.success, event_id: event.event_id, error: result.error });
+    return json({
+      success: true,
+      queued: true,
+      event_id: event.event_id,
+      message: command === "sync_messages" ? "SincronizaÃ§Ã£o enfileirada" : "Comando enfileirado",
+      warning: integration ? undefined : "IntegraÃ§Ã£o n8n nÃ£o configurada",
+    }, 202);
   } catch (error) {
     console.error("whatsapp-connection-command error:", error);
     return json({ error: error instanceof Error ? error.message : "erro interno" }, 500);
   }
 });
+
