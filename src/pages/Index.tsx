@@ -7,6 +7,7 @@ import {
   MessageSquare, Users, Shield, Bot, Clock, BarChart3,
   CheckCircle, ArrowRight, Building2
 } from "lucide-react";
+import { DsaLogo } from "@/components/DsaLogo";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -29,11 +30,11 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-hero">
-      <header className="border-b border-border/10 bg-background/80 backdrop-blur-sm">
+      <header className="border-b border-border/50 bg-background/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <MessageSquare className="h-8 w-8 text-primary" />
-            <span className="text-xl font-bold">DSA WA Hub</span>
+            <DsaLogo size={32} />
+            <span className="text-xl font-bold tracking-tight">DSA WA Hub</span>
           </div>
           <div className="flex items-center gap-4">
             <Button variant="ghost" onClick={() => navigate("/auth")}>Entrar</Button>
@@ -103,7 +104,7 @@ const Index = () => {
       <footer className="border-t border-border/10 bg-background/80 backdrop-blur-sm py-8">
         <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center gap-2 mb-4 md:mb-0">
-            <MessageSquare className="h-6 w-6 text-primary" />
+            <DsaLogo size={24} />
             <span className="font-semibold">DSA WA Hub</span>
           </div>
           <p className="text-muted-foreground text-sm">© 2026 DSA Projetos e Consultoria. Todos os direitos reservados.</p>

@@ -41,7 +41,7 @@ All colors MUST be HSL.
 
     /* Professional DSA gradients */
     --gradient-primary: linear-gradient(135deg, #0B66E4, #00B3FF);
-    --gradient-hero: linear-gradient(135deg, #071530, #0B66E4);
+    --gradient-hero: linear-gradient(135deg, #f8fafc, #eff6ff);
     --gradient-card: linear-gradient(145deg, #ffffff, #f1f5f9);
 
     /* Shadows */
