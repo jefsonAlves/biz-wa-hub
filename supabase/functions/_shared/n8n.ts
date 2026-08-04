@@ -186,7 +186,7 @@ export async function deliverEvent(
   svc: SupabaseClient,
   event: PlatformEvent,
   integration: { base_url: string | null; webhook_path: string | null; status: string },
-): Promise<{ success: boolean; status?: number; error?: string; body?: string }> {
+): Promise<{ success: boolean; status?: number; error?: string; body?: string; url?: string }> {
   const url = targetUrl(integration);
   if (!url) return { success: false, error: "n8n base_url not configured" };
   if (integration.status !== "active") return { success: false, error: "n8n integration is inactive" };
@@ -248,5 +248,5 @@ export async function deliverEvent(
     .update(success ? { last_success_at: nowIso } : { last_error_at: nowIso, last_error_message: errorMessage })
     .eq("tenant_id", event.tenant_id);
 
-  return { success, status: httpStatus ?? undefined, error: errorMessage ?? undefined, body: excerpt ?? undefined };
+  return { success, status: httpStatus ?? undefined, error: errorMessage ?? undefined, body: excerpt ?? undefined, url };
 }

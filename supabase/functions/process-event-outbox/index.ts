@@ -35,10 +35,17 @@ serve(async (req) => {
 
       if (!integration) {
         await svc.from("event_outbox").update({
-          attempts, status: attempts >= row.max_attempts ? "dead" : "pending",
-          last_error: "IntegraÃ§Ã£o n8n nÃ£o configurada",
+          attempts, status: attempts >= (row.max_attempts ?? 5) ? "dead" : "pending",
+          last_error: "Integração n8n não configurada",
           next_retry_at: new Date(Date.now() + backoffMs(attempts)).toISOString(),
         }).eq("id", row.id);
+        
+        if (row.payload?.connection_id) {
+          await svc.from("whatsapp_connections")
+            .update({ connection_error: "n8n não configurado para este tenant" })
+            .eq("id", row.payload.connection_id);
+        }
+        
         failed++;
         continue;
       }
@@ -49,15 +56,33 @@ serve(async (req) => {
         await svc.from("event_outbox").update({
           status: "sent", attempts, processed_at: new Date().toISOString(), last_error: null,
         }).eq("id", row.id);
+        
+        // Clear previous errors if successful
+        if (row.payload?.connection_id) {
+           await svc.from("whatsapp_connections")
+            .update({ connection_error: null })
+            .eq("id", row.payload.connection_id);
+        }
+        
         sent++;
       } else {
         const dead = attempts >= (row.max_attempts ?? 5);
+        const errorMessage = result.error ? `${result.error}${result.body ? `: ${result.body}` : ""}` : "Erro desconhecido";
+        
         await svc.from("event_outbox").update({
           status: dead ? "dead" : "pending",
           attempts,
-          last_error: (result.error ?? "erro desconhecido").slice(0, 500),
+          last_error: errorMessage.slice(0, 500),
           next_retry_at: new Date(Date.now() + backoffMs(attempts)).toISOString(),
         }).eq("id", row.id);
+
+        if (row.payload?.connection_id) {
+          await svc.from("whatsapp_connections")
+            .update({ 
+              connection_error: `Falha n8n (${result.status ?? "ERR"}): ${errorMessage.slice(0, 150)}`
+            })
+            .eq("id", row.payload.connection_id);
+        }
         failed++;
       }
     }
@@ -73,4 +98,3 @@ function backoffMs(attempts: number) {
   // 30s, 1m, 2m, 4m, 8m... (capped at 2h)
   return Math.min(30_000 * Math.pow(2, attempts - 1), 7_200_000);
 }
-

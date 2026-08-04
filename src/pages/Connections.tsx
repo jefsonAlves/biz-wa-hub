@@ -152,6 +152,14 @@ const Connections = () => {
           ? "Aguardando o callback assinado com o QR Code."
           : "Aguardando a confirmação do n8n."),
       });
+      
+      if (res.warning) {
+        toast({
+          title: "Aviso de Configuração",
+          description: res.warning,
+          variant: "destructive",
+        });
+      }
     } catch (e) {
       toast({ title: "Erro no comando", description: (e as Error).message, variant: "destructive" });
     } finally {
@@ -245,9 +253,12 @@ const Connections = () => {
                   </div>
 
                   {conn.connection_error && (
-                    <div className="flex items-start gap-2 text-xs text-destructive">
-                      <AlertCircle className="h-4 w-4 shrink-0" />
-                      {conn.connection_error}
+                    <div className="flex flex-col gap-1 p-2 rounded bg-destructive/10 border border-destructive/20 text-xs text-destructive">
+                      <div className="flex items-center gap-2 font-semibold">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        Erro na Conexão / n8n
+                      </div>
+                      <p className="opacity-90">{conn.connection_error}</p>
                     </div>
                   )}
 
@@ -267,8 +278,8 @@ const Connections = () => {
                       Gerar QR
                     </Button>
                     {conn.qr_status === "available" && conn.status !== "connected" && (
-                      <Button size="sm" variant="outline" onClick={() => setQrConnectionId(conn.id)}>
-                        <QrCode className="h-3.5 w-3.5 mr-1" />Ver QR
+                      <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => setQrConnectionId(conn.id)}>
+                        <QrCode className="h-3.5 w-3.5 mr-1" />Escanear QR
                       </Button>
                     )}
                     <Button size="sm" variant="outline" onClick={() => runCommand(conn, "health_check")} disabled={busy("health_check")}>
@@ -310,9 +321,14 @@ const Connections = () => {
             <DialogTitle>Conectar WhatsApp</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center gap-4 py-2 text-center">
-            <p className="text-sm text-muted-foreground">
-              Abra o WhatsApp, acesse Aparelhos conectados e escaneie o código abaixo.
-            </p>
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Instruções:</p>
+              <p className="text-sm text-muted-foreground">
+                1. Abra o WhatsApp no seu celular.<br/>
+                2. Vá em Configurações &gt; Aparelhos conectados.<br/>
+                3. Toque em Conectar um aparelho e aponte a câmera para este código.
+              </p>
+            </div>
 
             {!qrConnection || qrConnection.qr_status !== "available" ? (
               <div className="flex min-h-72 w-full flex-col items-center justify-center gap-3 rounded-lg border bg-muted/20">

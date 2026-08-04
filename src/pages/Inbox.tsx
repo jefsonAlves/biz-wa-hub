@@ -65,9 +65,9 @@ const Inbox = () => {
       const from = page * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      let query = supabase
+      let query = (supabase
         .from("conversations")
-        .select("*, contacts!inner(name, phone, wa_chat_id, last_message_preview, avatar_url, quarantined_at), departments(name)", { count: "exact" })
+        .select("*, contacts!inner(name, phone, wa_chat_id, last_message_preview, avatar_url, quarantined_at), departments(name)", { count: "exact" }) as any)
         .eq("tenant_id", tenantId)
         .is("contacts.quarantined_at", null)
         .order("is_pinned", { ascending: false })
@@ -109,9 +109,9 @@ const Inbox = () => {
     queryFn: async () => {
       if (!tenantId) return { unread: 0, awaiting: 0, answered: 0 };
       const [unreadResult, awaitingResult, answeredResult] = await Promise.all([
-        supabase.from("conversations").select("unread_count").eq("tenant_id", tenantId).neq("status", "archived").gt("unread_count", 0),
-        supabase.from("conversations").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).neq("status", "archived").eq("awaiting_reply", true),
-        supabase.from("conversations").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).neq("status", "archived").eq("last_message_direction", "outgoing"),
+        (supabase.from("conversations").select("unread_count") as any).eq("tenant_id", tenantId).neq("status", "archived").gt("unread_count", 0),
+        (supabase.from("conversations").select("id", { count: "exact", head: true }) as any).eq("tenant_id", tenantId).neq("status", "archived").eq("awaiting_reply", true),
+        (supabase.from("conversations").select("id", { count: "exact", head: true }) as any).eq("tenant_id", tenantId).neq("status", "archived").eq("last_message_direction", "outgoing"),
       ]);
       if (unreadResult.error) throw unreadResult.error;
       if (awaitingResult.error) throw awaitingResult.error;
