@@ -115,17 +115,14 @@ export function AppSidebar() {
   const isActive = (path: string) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
 
-  const getNavCls = ({ isActive }: { isActive: boolean }) =>
-    isActive
-      ? "bg-sidebar-accent text-sidebar-primary font-medium border-r-2 border-sidebar-primary"
-      : "hover:bg-sidebar-accent/50 text-sidebar-foreground";
 
   return (
     <Sidebar className="border-r border-sidebar-border bg-sidebar transition-all duration-200" collapsible="icon">
       <SidebarContent>
-        <div className={`p-4 border-b border-sidebar-border ${collapsed ? "px-2" : ""}`}>
+        <div className={`p-4 ${collapsed ? "px-2" : ""}`}>
           <div className="flex items-center gap-2">
-            <DsaLogo size={32} />
+            <DsaLogo size={28} />
+            {!collapsed && <span className="font-bold text-lg tracking-tight text-primary">DSA HUB</span>}
           </div>
           {!collapsed && (
             <div className="mt-2 flex items-center gap-2 flex-wrap">
@@ -146,7 +143,13 @@ export function AppSidebar() {
               {menuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink to={item.url} className={getNavCls}>
+                    <NavLink to={item.url} className={({ isActive }) => 
+                      `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                        isActive 
+                          ? "bg-blue-50 text-blue-600 font-semibold shadow-sm border border-blue-100/50" 
+                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      }`
+                    }>
                       <item.icon className="h-4 w-4 flex-shrink-0" />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>
@@ -158,8 +161,8 @@ export function AppSidebar() {
         </SidebarGroup>
 
         {!collapsed && profile && (
-          <div className="mt-auto p-4 border-t border-sidebar-border">
-            <div className="bg-sidebar-accent/20 rounded-lg p-3">
+          <div className="mt-auto p-4">
+            <div className="bg-secondary rounded-lg p-3">
               <p className="text-sm font-medium text-sidebar-foreground truncate">
                 {profile.full_name || profile.email}
               </p>

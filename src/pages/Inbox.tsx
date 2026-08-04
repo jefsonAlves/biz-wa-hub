@@ -285,7 +285,7 @@ const Inbox = () => {
   }, []);
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] gap-0 overflow-hidden rounded-xl border border-border">
+    <div className="flex h-[calc(100vh-8rem)] gap-0 overflow-hidden rounded-xl border border-slate-200 shadow-sm bg-white">
       {/* Sidebar */}
       <div className="w-80 flex flex-col border-r border-border bg-card flex-shrink-0">
         <div className="p-3 border-b border-border">
@@ -337,7 +337,7 @@ const Inbox = () => {
         ) : (
           <>
             {/* Chat Header */}
-            <div className="px-4 py-3 border-b border-border bg-card/80 backdrop-blur-sm">
+            <div className="px-4 py-3 border-b border-slate-100 bg-white shadow-sm z-10">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   {(selectedConv.contacts as any)?.avatar_url ? (
@@ -383,7 +383,7 @@ const Inbox = () => {
             </div>
 
             {/* Messages */}
-            <ScrollArea className="flex-1 p-4">
+            <ScrollArea className="flex-1 p-4 bg-[#f8fafc]">
               {msgsLoading ? (
                 <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
               ) : groupedMessages.length === 0 ? (

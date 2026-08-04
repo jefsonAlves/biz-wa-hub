@@ -9,11 +9,12 @@ All colors MUST be HSL.
 @layer base {
   :root {
     /* Light mode - DSA Blue/Cyan system */
-    --background: 210 40% 98%;
+    --background: 210 20% 98%;
     --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
+    --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
 
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
@@ -41,7 +42,7 @@ All colors MUST be HSL.
 
     /* Professional DSA gradients */
     --gradient-primary: linear-gradient(135deg, #0B66E4, #00B3FF);
-    --gradient-hero: linear-gradient(135deg, #071530, #0B66E4);
+    --gradient-hero: linear-gradient(135deg, #f8fafc, #eff6ff);
     --gradient-card: linear-gradient(145deg, #ffffff, #f1f5f9);
 
     /* Shadows */
@@ -49,13 +50,13 @@ All colors MUST be HSL.
     --shadow-glow: 0 0 40px rgba(0, 179, 255, 0.15);
 
     /* Sidebar tokens */
-    --sidebar-background: 222 47% 11%; /* #071530 */
-    --sidebar-foreground: 210 40% 98%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 215 25% 27%;
     --sidebar-primary: 200 100% 50%; /* #00B3FF */
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 217 91% 47%; /* #0B66E4 */
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 222 47% 20%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 217 91% 47%;
+    --sidebar-border: 214 32% 91%;
     --sidebar-ring: 200 100% 50%;
   }
 
