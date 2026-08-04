@@ -65,9 +65,9 @@ const Inbox = () => {
       const from = page * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      let query = supabase
+      let query = (supabase
         .from("conversations")
-        .select("*, contacts!inner(name, phone, wa_chat_id, last_message_preview, avatar_url, quarantined_at), departments(name)", { count: "exact" })
+        .select("*, contacts!inner(name, phone, wa_chat_id, last_message_preview, avatar_url, quarantined_at), departments(name)", { count: "exact" }) as any)
         .eq("tenant_id", tenantId)
         .is("contacts.quarantined_at", null)
         .order("is_pinned", { ascending: false })
