@@ -109,9 +109,9 @@ const Inbox = () => {
     queryFn: async () => {
       if (!tenantId) return { unread: 0, awaiting: 0, answered: 0 };
       const [unreadResult, awaitingResult, answeredResult] = await Promise.all([
-        supabase.from("conversations").select("unread_count").eq("tenant_id", tenantId).neq("status", "archived").gt("unread_count", 0) as any,
-        supabase.from("conversations").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).neq("status", "archived").eq("awaiting_reply", true) as any,
-        supabase.from("conversations").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).neq("status", "archived").eq("last_message_direction", "outgoing") as any,
+        (supabase.from("conversations").select("unread_count").eq("tenant_id", tenantId).neq("status", "archived").gt("unread_count", 0) as any),
+        (supabase.from("conversations").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).neq("status", "archived").eq("awaiting_reply", true) as any),
+        (supabase.from("conversations").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).neq("status", "archived").eq("last_message_direction", "outgoing") as any),
       ]);
       if (unreadResult.error) throw unreadResult.error;
       if (awaitingResult.error) throw awaitingResult.error;
