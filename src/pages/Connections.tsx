@@ -275,8 +275,8 @@ const Connections = () => {
                       Gerar QR
                     </Button>
                     {conn.qr_status === "available" && conn.status !== "connected" && (
-                      <Button size="sm" variant="outline" onClick={() => setQrConnectionId(conn.id)}>
-                        <QrCode className="h-3.5 w-3.5 mr-1" />Ver QR
+                      <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => setQrConnectionId(conn.id)}>
+                        <QrCode className="h-3.5 w-3.5 mr-1" />Escanear QR
                       </Button>
                     )}
                     <Button size="sm" variant="outline" onClick={() => runCommand(conn, "health_check")} disabled={busy("health_check")}>
