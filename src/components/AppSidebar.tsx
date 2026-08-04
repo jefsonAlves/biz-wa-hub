@@ -123,7 +123,6 @@ export function AppSidebar() {
           <div className="flex items-center">
             <DsaLogo size={collapsed ? 24 : 120} />
           </div>
-        </div>
           {!collapsed && (
             <div className="mt-2 flex items-center gap-2 flex-wrap">
               {getRoleBadge()}
