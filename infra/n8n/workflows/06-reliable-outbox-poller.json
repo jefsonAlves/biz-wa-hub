@@ -1,0 +1,37 @@
+{
+  "name": "Biz WA Hub - Reliable Outbox Poller",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "seconds", "secondsInterval": 10 }] } },
+      "id": "9e19f1a4-1d69-4c20-8ce9-b78d8da24ddb",
+      "name": "Every 10 seconds",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-240, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\nconst secret = $env.N8N_WEBHOOK_SECRET;\nconst backendUrl = ($env.SUPABASE_URL || '').replace(/\\/+$/, '');\nconst receiverUrl = 'http://n8n:5678/webhook/biz-wa-hub/platform';\nif (!secret || !backendUrl) throw new Error('poller_configuration_missing');\n\nconst signedHeaders = (rawBody) => {\n  const timestamp = String(Math.floor(Date.now() / 1000));\n  const eventId = crypto.randomUUID();\n  const signature = crypto.createHmac('sha256', secret).update(`${timestamp}.${eventId}.${rawBody}`).digest('hex');\n  return {'Content-Type':'application/json','X-Event-Id':eventId,'X-Timestamp':timestamp,'X-Signature':signature};\n};\nconst callBackend = async (payload) => {\n  const rawBody = JSON.stringify(payload);\n  const response = await fetch(`${backendUrl}/functions/v1/n8n-poll-events`, {method:'POST',headers:signedHeaders(rawBody),body:rawBody});\n  const text = await response.text();\n  if (!response.ok) throw new Error(`poll_backend_http_${response.status}:${text.slice(0,160)}`);\n  return text ? JSON.parse(text) : {};\n};\n\nconst claim = await callBackend({action:'claim',limit:10});\nconst results = [];\nfor (const entry of claim.events || []) {\n  const event = entry.payload;\n  const rawBody = JSON.stringify(event);\n  const timestamp = String(Math.floor(Date.now() / 1000));\n  const signature = crypto.createHmac('sha256', secret).update(`${timestamp}.${event.event_id}.${rawBody}`).digest('hex');\n  try {\n    const response = await fetch(receiverUrl, {method:'POST',headers:{'Content-Type':'application/json','X-Tenant-Id':event.tenant_id,'X-Event-Id':event.event_id,'X-Timestamp':timestamp,'X-Signature':signature},body:rawBody});\n    const responseText = await response.text();\n    results.push({event_id:event.event_id,success:response.ok,error:response.ok?null:`platform_http_${response.status}:${responseText.slice(0,200)}`});\n  } catch (error) {\n    results.push({event_id:event.event_id,success:false,error:error instanceof Error?error.message:'platform_request_failed'});\n  }\n}\nif (results.length) await callBackend({action:'ack',results});\nreturn results.map((result) => ({json:result}));\n"
+      },
+      "id": "a931af96-f7db-41c3-9f14-a349a1765cf9",
+      "name": "Poll and Dispatch Outbox",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 0]
+    }
+  ],
+  "connections": {
+    "Every 10 seconds": { "main": [[{ "node": "Poll and Dispatch Outbox", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false
+  },
+  "active": false,
+  "versionId": "4d2e4449-0e15-4fd9-84fe-2b4f11c762ae",
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}
+
