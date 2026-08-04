@@ -152,6 +152,14 @@ const Connections = () => {
           ? "Aguardando o callback assinado com o QR Code."
           : "Aguardando a confirmação do n8n."),
       });
+      
+      if (res.warning) {
+        toast({
+          title: "Aviso de Configuração",
+          description: res.warning,
+          variant: "destructive",
+        });
+      }
     } catch (e) {
       toast({ title: "Erro no comando", description: (e as Error).message, variant: "destructive" });
     } finally {
