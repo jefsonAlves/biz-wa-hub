@@ -117,13 +117,13 @@ export function AppSidebar() {
 
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
     isActive
-      ? "bg-sidebar-accent text-sidebar-primary font-medium border-r-2 border-sidebar-primary"
+      ? "bg-primary text-primary-foreground font-medium rounded-md shadow-sm"
       : "hover:bg-sidebar-accent/50 text-sidebar-foreground";
 
   return (
     <Sidebar className="border-r border-sidebar-border bg-sidebar transition-all duration-200" collapsible="icon">
       <SidebarContent>
-        <div className={`p-4 border-b border-sidebar-border ${collapsed ? "px-2" : ""}`}>
+        <div className={`p-4 ${collapsed ? "px-2" : ""}`}>
           <div className="flex items-center gap-2">
             <DsaLogo size={32} />
           </div>
@@ -158,8 +158,8 @@ export function AppSidebar() {
         </SidebarGroup>
 
         {!collapsed && profile && (
-          <div className="mt-auto p-4 border-t border-sidebar-border">
-            <div className="bg-sidebar-accent/20 rounded-lg p-3">
+          <div className="mt-auto p-4">
+            <div className="bg-secondary rounded-lg p-3">
               <p className="text-sm font-medium text-sidebar-foreground truncate">
                 {profile.full_name || profile.email}
               </p>

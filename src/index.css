@@ -9,7 +9,7 @@ All colors MUST be HSL.
 @layer base {
   :root {
     /* Light mode - DSA Blue/Cyan system */
-    --background: 210 40% 98%;
+    --background: 0 0% 98%;
     --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
@@ -49,13 +49,13 @@ All colors MUST be HSL.
     --shadow-glow: 0 0 40px rgba(0, 179, 255, 0.15);
 
     /* Sidebar tokens */
-    --sidebar-background: 222 47% 11%; /* #071530 */
-    --sidebar-foreground: 210 40% 98%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
     --sidebar-primary: 200 100% 50%; /* #00B3FF */
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 217 91% 47%; /* #0B66E4 */
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 222 47% 20%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
     --sidebar-ring: 200 100% 50%;
   }
 
