@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const http = require('http');
+const https = require('https');
 
 const secret = $env.N8N_WEBHOOK_SECRET;
 const backendUrl = ($env.SUPABASE_URL || '').replace(/\/+$/, '');
@@ -21,16 +23,35 @@ const signedHeaders = (rawBody) => {
   };
 };
 
+const request = (urlString, headers, rawBody) => new Promise((resolve, reject) => {
+  const transport = urlString.startsWith('https://') ? https : http;
+  const req = transport.request(urlString, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Length': Buffer.byteLength(rawBody) },
+  }, (response) => {
+    const chunks = [];
+    response.on('data', (chunk) => chunks.push(chunk));
+    response.on('end', () => resolve({
+      ok: (response.statusCode || 0) >= 200 && (response.statusCode || 0) < 300,
+      status: response.statusCode || 0,
+      text: Buffer.concat(chunks).toString('utf8'),
+    }));
+  });
+  req.setTimeout(15000, () => req.destroy(new Error('request_timeout')));
+  req.on('error', reject);
+  req.write(rawBody);
+  req.end();
+});
+
 const callBackend = async (payload) => {
   const rawBody = JSON.stringify(payload);
-  const response = await fetch(`${backendUrl}/functions/v1/n8n-poll-events`, {
-    method: 'POST',
-    headers: signedHeaders(rawBody),
-    body: rawBody,
-  });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`poll_backend_http_${response.status}:${text.slice(0, 160)}`);
-  return text ? JSON.parse(text) : {};
+  const response = await request(
+    `${backendUrl}/functions/v1/n8n-poll-events`,
+    signedHeaders(rawBody),
+    rawBody,
+  );
+  if (!response.ok) throw new Error(`poll_backend_http_${response.status}:${response.text.slice(0, 160)}`);
+  return response.text ? JSON.parse(response.text) : {};
 };
 
 const claim = await callBackend({ action: 'claim', limit: 10 });
@@ -43,22 +64,17 @@ for (const entry of claim.events || []) {
     .update(`${timestamp}.${event.event_id}.${rawBody}`)
     .digest('hex');
   try {
-    const response = await fetch(receiverUrl, {
-      method: 'POST',
-      headers: {
+    const response = await request(receiverUrl, {
         'Content-Type': 'application/json',
         'X-Tenant-Id': event.tenant_id,
         'X-Event-Id': event.event_id,
         'X-Timestamp': timestamp,
         'X-Signature': signature,
-      },
-      body: rawBody,
-    });
-    const responseText = await response.text();
+      }, rawBody);
     results.push({
       event_id: event.event_id,
       success: response.ok,
-      error: response.ok ? null : `platform_http_${response.status}:${responseText.slice(0, 200)}`,
+      error: response.ok ? null : `platform_http_${response.status}:${response.text.slice(0, 200)}`,
     });
   } catch (error) {
     results.push({
