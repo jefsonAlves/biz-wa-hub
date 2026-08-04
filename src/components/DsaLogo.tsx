@@ -12,7 +12,7 @@ export const DsaLogo = ({ className = "", size = 32, showText = true }: DsaLogoP
       <img 
         src={logoAsset.url} 
         alt="DSA Logo" 
-        style={{ height: size, width: 'auto' }}
+        style={{ height: size, width: 'auto', maxWidth: '100%' }}
         className="object-contain"
       />
     </div>
