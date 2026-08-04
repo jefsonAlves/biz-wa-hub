@@ -61,24 +61,24 @@ All colors MUST be HSL.
   }
 
   .dark {
-    /* Dark mode - Deep Navy DSA Theme */
-    --background: 222 47% 6%;
-    --foreground: 210 40% 98%;
+    /* Dark mode - Redefined to be light-like as per user request */
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
 
-    --card: 222 47% 8%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
 
-    --popover: 222 47% 8%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
 
     --primary: 217 91% 47%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 222 47% 12%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
 
-    --muted: 222 47% 12%;
-    --muted-foreground: 215 16% 65%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
 
     --accent: 200 100% 50%;
     --accent-foreground: 0 0% 100%;
@@ -86,27 +86,23 @@ All colors MUST be HSL.
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 222 47% 16%;
-    --input: 222 47% 16%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
     --ring: 217 91% 47%;
 
-    /* Professional gradients for dark mode */
+    /* Same professional gradients for "dark" mode to keep it white */
     --gradient-primary: linear-gradient(135deg, #0B66E4, #00B3FF);
-    --gradient-hero: linear-gradient(135deg, #071530, #0B66E4);
-    --gradient-card: linear-gradient(145deg, #0c182d, #071530);
+    --gradient-hero: linear-gradient(135deg, #f8fafc, #eff6ff);
+    --gradient-card: linear-gradient(145deg, #ffffff, #f1f5f9);
 
-    /* Enhanced shadows for dark mode */
-    --shadow-elegant: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
-    --shadow-glow: 0 0 40px rgba(0, 179, 255, 0.25);
-
-    /* Sidebar dark mode */
-    --sidebar-background: 222 47% 6%;
-    --sidebar-foreground: 210 40% 98%;
+    /* Sidebar "dark" mode redefined as light */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 215 25% 27%;
     --sidebar-primary: 200 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 47% 12%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222 47% 10%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 217 91% 47%;
+    --sidebar-border: 214 32% 91%;
     --sidebar-ring: 200 100% 50%;
   }
 }

@@ -287,8 +287,8 @@ const Inbox = () => {
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-0 overflow-hidden rounded-xl border border-slate-200 shadow-sm bg-white">
       {/* Sidebar */}
-      <div className="w-80 flex flex-col border-r border-border bg-card flex-shrink-0">
-        <div className="p-3 border-b border-border">
+      <div className="w-80 flex flex-col border-r border-border bg-white flex-shrink-0">
+        <div className="p-3 border-b border-border bg-white">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-sm">Inbox</h2>
             <Badge variant="secondary" className="text-xs">
@@ -323,7 +323,7 @@ const Inbox = () => {
       </div>
 
       {/* Chat Panel */}
-      <div className="flex-1 flex flex-col bg-card min-w-0">
+      <div className="flex-1 flex flex-col bg-white min-w-0">
         {!selectedConv ? (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
             <div className="text-center space-y-3">
