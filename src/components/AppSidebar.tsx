@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
+import { DsaLogo } from "./DsaLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { WhatsAppStatusBadge } from "@/components/WhatsAppStatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -124,13 +125,7 @@ export function AppSidebar() {
       <SidebarContent>
         <div className={`p-4 border-b border-sidebar-border ${collapsed ? "px-2" : ""}`}>
           <div className="flex items-center gap-2">
-            <MessageSquare className="h-8 w-8 text-sidebar-primary flex-shrink-0" />
-            {!collapsed && (
-              <div className="flex flex-col">
-                <span className="font-bold text-sidebar-foreground">AgentFlow</span>
-                <span className="text-xs text-sidebar-foreground/70">SaaS</span>
-              </div>
-            )}
+            <DsaLogo size={32} />
           </div>
           {!collapsed && (
             <div className="mt-2 flex items-center gap-2 flex-wrap">
