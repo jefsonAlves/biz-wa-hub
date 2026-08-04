@@ -7,16 +7,18 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const svc = serviceClient();
-    const nowIso = new Date().toISOString();
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const authorization = req.headers.get("Authorization");
+    if (!serviceRoleKey || authorization !== `Bearer ${serviceRoleKey}`) {
+      return json({ error: "Unauthorized" }, 401);
+    }
 
-    const { data: pending, error } = await svc
-      .from("event_outbox")
-      .select("*")
-      .in("status", ["pending"])
-      .lte("next_retry_at", nowIso)
-      .order("created_at", { ascending: true })
-      .limit(BATCH);
+    const svc = serviceClient();
+    // Atomically leases rows so overlapping cron invocations cannot send the
+    // same event concurrently. Expired processing leases are reclaimed by SQL.
+    const { data: pending, error } = await svc.rpc("claim_event_outbox", {
+      batch_size: BATCH,
+    });
     if (error) throw error;
 
     let sent = 0;
@@ -34,7 +36,7 @@ serve(async (req) => {
       if (!integration) {
         await svc.from("event_outbox").update({
           attempts, status: attempts >= row.max_attempts ? "dead" : "pending",
-          last_error: "Integração n8n não configurada",
+          last_error: "IntegraÃ§Ã£o n8n nÃ£o configurada",
           next_retry_at: new Date(Date.now() + backoffMs(attempts)).toISOString(),
         }).eq("id", row.id);
         failed++;
@@ -68,6 +70,7 @@ serve(async (req) => {
 });
 
 function backoffMs(attempts: number) {
-  // 30s, 1m, 4m, 16m, 64m (capped at 2h)
-  return Math.min(30_000 * Math.pow(4, attempts - 1), 7_200_000);
+  // 30s, 1m, 2m, 4m, 8m... (capped at 2h)
+  return Math.min(30_000 * Math.pow(2, attempts - 1), 7_200_000);
 }
+
