@@ -131,30 +131,30 @@ const Auth = () => {
           return;
         }
         if (password !== confirmPassword) {
-          toast({ title: "Senhas diferentes", description: "A senha e a confirmaÃ§Ã£o nÃ£o coincidem.", variant: "destructive" });
+          toast({ title: "Senhas diferentes", description: "A senha e a confirmação não coincidem.", variant: "destructive" });
           setIsLoading(false);
           return;
         }
         const rawDigits = documentNumber.replace(/\D/g, "");
         if (documentType === "mei" && !validateCPF(rawDigits)) {
-          toast({ title: "CPF invÃ¡lido", description: "Verifique o CPF informado.", variant: "destructive" });
+          toast({ title: "CPF inválido", description: "Verifique o CPF informado.", variant: "destructive" });
           setIsLoading(false);
           return;
         }
         if (documentType === "cnpj" && !validateCNPJ(rawDigits)) {
-          toast({ title: "CNPJ invÃ¡lido", description: "Verifique o CNPJ informado.", variant: "destructive" });
+          toast({ title: "CNPJ inválido", description: "Verifique o CNPJ informado.", variant: "destructive" });
           setIsLoading(false);
           return;
         }
         const { error } = await signUp(email, password, fullName, companyName, documentType, rawDigits);
         if (error) {
           let msg = error.message;
-          if (error.message.includes("already registered")) msg = "Este email jÃ¡ estÃ¡ cadastrado. Tente fazer login.";
+          if (error.message.includes("already registered")) msg = "Este email já está cadastrado. Tente fazer login.";
           toast({ title: "Erro no cadastro", description: msg, variant: "destructive" });
         } else {
           toast({
             title: "Cadastro realizado!",
-            description: "Bem-vindo ao AgentFlow! Verifique seu email para confirmar o cadastro.",
+            description: "Bem-vindo ao DSA WA Hub! Verifique seu email para confirmar o cadastro.",
           });
           if (nextPath) window.location.replace(nextPath);
           else navigate("/dashboard");
@@ -180,7 +180,7 @@ const Auth = () => {
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-2 mb-8">
           <MessageSquare className="h-8 w-8 text-primary" />
-          <span className="text-2xl font-bold text-foreground">AgentFlow</span>
+          <span className="text-2xl font-bold text-foreground">DSA WA Hub</span>
         </div>
 
         <Card className="p-8 bg-gradient-card border-border/50 shadow-elegant">
@@ -189,7 +189,7 @@ const Auth = () => {
               {isLogin ? "Bem-vindo de volta" : "Crie sua conta"}
             </h1>
             <p className="text-muted-foreground">
-              {isLogin ? "Acesse sua plataforma de atendimento" : "Comece a usar o AgentFlow"}
+              {isLogin ? "Acesse sua plataforma de atendimento" : "Comece a usar o DSA WA Hub"}
             </p>
           </div>
 
@@ -218,7 +218,7 @@ const Auth = () => {
                   <Input
                     id="companyName"
                     type="text"
-                    placeholder="RazÃ£o social ou nome empresarial"
+                    placeholder="Razão social ou nome empresarial"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
                     required
@@ -295,7 +295,7 @@ const Auth = () => {
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder={isLogin ? "Sua senha" : "MÃ­nimo 6 caracteres"}
+                  placeholder={isLogin ? "Sua senha" : "Mínimo 6 caracteres"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-10 pr-10"
@@ -335,7 +335,7 @@ const Auth = () => {
                   </button>
                 </div>
                 {confirmPassword && password !== confirmPassword && (
-                  <p className="text-xs text-destructive">As senhas nÃ£o coincidem.</p>
+                  <p className="text-xs text-destructive">As senhas não coincidem.</p>
                 )}
               </div>
             )}
@@ -358,12 +358,12 @@ const Auth = () => {
             <Separator className="my-4" />
             <div className="text-center">
               <p className="text-muted-foreground text-sm">
-                {isLogin ? "NÃ£o tem uma conta?" : "JÃ¡ tem uma conta?"}{" "}
+                {isLogin ? "Não tem uma conta?" : "Já tem uma conta?"}{" "}
                 <button
                   onClick={() => setIsLogin(!isLogin)}
                   className="text-primary hover:underline font-medium"
                 >
-                  {isLogin ? "Cadastre-se grÃ¡tis" : "Fazer login"}
+                  {isLogin ? "Cadastre-se grátis" : "Fazer login"}
                 </button>
               </p>
             </div>
@@ -372,7 +372,7 @@ const Auth = () => {
 
         <div className="mt-6 text-center">
           <Link to="/">
-            <Button variant="ghost">â† Voltar para pÃ¡gina inicial</Button>
+            <Button variant="ghost">← Voltar para página inicial</Button>
           </Link>
         </div>
       </div>

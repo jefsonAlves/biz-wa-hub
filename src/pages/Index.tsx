@@ -33,7 +33,7 @@ const Index = () => {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <MessageSquare className="h-8 w-8 text-primary" />
-            <span className="text-xl font-bold">AgentFlow</span>
+            <span className="text-xl font-bold">DSA WA Hub</span>
           </div>
           <div className="flex items-center gap-4">
             <Button variant="ghost" onClick={() => navigate("/auth")}>Entrar</Button>
@@ -104,9 +104,9 @@ const Index = () => {
         <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center gap-2 mb-4 md:mb-0">
             <MessageSquare className="h-6 w-6 text-primary" />
-            <span className="font-semibold">AgentFlow</span>
+            <span className="font-semibold">DSA WA Hub</span>
           </div>
-          <p className="text-muted-foreground text-sm">© 2025 AgentFlow. Todos os direitos reservados.</p>
+          <p className="text-muted-foreground text-sm">© 2026 DSA Projetos e Consultoria. Todos os direitos reservados.</p>
         </div>
       </footer>
     </div>
