@@ -89,7 +89,7 @@ export default function OAuthConsent() {
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-2 mb-8">
           <MessageSquare className="h-8 w-8 text-primary" aria-hidden="true" />
-          <span className="text-2xl font-bold text-foreground">AgentFlow</span>
+          <span className="text-2xl font-bold text-foreground">DSA WA Hub</span>
         </div>
 
         <Card className="p-8 bg-gradient-card border-border/50 shadow-elegant space-y-4">
@@ -107,7 +107,7 @@ export default function OAuthConsent() {
             <>
               <h1 className="text-xl font-bold">Conectar {clientName} à sua conta</h1>
               <p className="text-sm text-muted-foreground">
-                {clientName} poderá usar as ferramentas do AgentFlow como você: ler conversas,
+                {clientName} poderá usar as ferramentas do DSA WA Hub como você: ler conversas,
                 contatos e a base de conhecimento da sua empresa e criar notas internas. O acesso
                 respeita suas permissões e o isolamento da sua empresa.
               </p>
