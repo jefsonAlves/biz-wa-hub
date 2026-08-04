@@ -180,9 +180,8 @@ const Auth = () => {
     <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
         <div className="p-8 pb-0">
-          <div className="flex items-center justify-center gap-2 mb-8">
-            <DsaLogo size={32} />
-            <span className="text-2xl font-bold text-primary tracking-tight">DSA WA Hub</span>
+          <div className="flex items-center justify-center mb-8">
+            <DsaLogo size={120} />
           </div>
         </div>
 

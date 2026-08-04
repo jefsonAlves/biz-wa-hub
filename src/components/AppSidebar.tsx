@@ -120,9 +120,8 @@ export function AppSidebar() {
     <Sidebar className="border-r border-sidebar-border bg-sidebar transition-all duration-200" collapsible="icon">
       <SidebarContent>
         <div className={`p-4 ${collapsed ? "px-2" : ""}`}>
-          <div className="flex items-center gap-2">
-            <DsaLogo size={28} />
-            {!collapsed && <span className="font-bold text-lg tracking-tight text-primary">DSA HUB</span>}
+          <div className="flex items-center">
+            <DsaLogo size={collapsed ? 24 : 120} />
           </div>
           {!collapsed && (
             <div className="mt-2 flex items-center gap-2 flex-wrap">
