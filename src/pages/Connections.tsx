@@ -253,9 +253,12 @@ const Connections = () => {
                   </div>
 
                   {conn.connection_error && (
-                    <div className="flex items-start gap-2 text-xs text-destructive">
-                      <AlertCircle className="h-4 w-4 shrink-0" />
-                      {conn.connection_error}
+                    <div className="flex flex-col gap-1 p-2 rounded bg-destructive/10 border border-destructive/20 text-xs text-destructive">
+                      <div className="flex items-center gap-2 font-semibold">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        Erro na Conexão / n8n
+                      </div>
+                      <p className="opacity-90">{conn.connection_error}</p>
                     </div>
                   )}
 
