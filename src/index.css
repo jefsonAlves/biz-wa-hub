@@ -9,11 +9,12 @@ All colors MUST be HSL.
 @layer base {
   :root {
     /* Light mode - DSA Blue/Cyan system */
-    --background: 0 0% 98%;
+    --background: 210 20% 98%;
     --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
+    --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
 
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
@@ -50,11 +51,11 @@ All colors MUST be HSL.
 
     /* Sidebar tokens */
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 222 47% 11%;
+    --sidebar-foreground: 215 25% 27%;
     --sidebar-primary: 200 100% 50%; /* #00B3FF */
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 210 40% 96%;
-    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-accent-foreground: 217 91% 47%;
     --sidebar-border: 214 32% 91%;
     --sidebar-ring: 200 100% 50%;
   }

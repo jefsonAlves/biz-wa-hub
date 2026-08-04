@@ -47,7 +47,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
         <div className="flex-1 flex flex-col">
-          <header className="h-16 border-b border-border bg-background/80 backdrop-blur-sm flex items-center justify-between px-6">
+          <header className="h-16 border-b border-border bg-white flex items-center justify-between px-6 sticky top-0 z-40">
             <div className="flex items-center gap-4">
               <SidebarTrigger />
               <div className="hidden md:block">
@@ -98,7 +98,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             </div>
           </header>
 
-          <main className="flex-1 p-6 overflow-auto">{children}</main>
+          <main className="flex-1 p-8 overflow-auto bg-[#f8fafc]">{children}</main>
         </div>
       </div>
     </SidebarProvider>
