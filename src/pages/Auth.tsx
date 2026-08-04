@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { MessageSquare, Eye, EyeOff, Mail, Lock, User, FileText } from "lucide-react";
+import { DsaLogo } from "@/components/DsaLogo";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -176,14 +177,16 @@ const Auth = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-hero flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <MessageSquare className="h-8 w-8 text-primary" />
-          <span className="text-2xl font-bold text-foreground">DSA WA Hub</span>
+    <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div className="p-8 pb-0">
+          <div className="flex items-center justify-center gap-2 mb-8">
+            <DsaLogo size={32} />
+            <span className="text-2xl font-bold text-primary tracking-tight">DSA WA Hub</span>
+          </div>
         </div>
 
-        <Card className="p-8 bg-gradient-card border-border/50 shadow-elegant">
+        <div className="p-8 pt-4">
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold mb-2">
               {isLogin ? "Bem-vindo de volta" : "Crie sua conta"}
@@ -368,12 +371,6 @@ const Auth = () => {
               </p>
             </div>
           </div>
-        </Card>
-
-        <div className="mt-6 text-center">
-          <Link to="/">
-            <Button variant="ghost">← Voltar para página inicial</Button>
-          </Link>
         </div>
       </div>
     </div>
