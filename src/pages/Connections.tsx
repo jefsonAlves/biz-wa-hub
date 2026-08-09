@@ -38,7 +38,7 @@ const toQrGeneratorUrl = (value: string | null) => {
 };
 
 const Connections = () => {
-  const { profile } = useAuth();
+  const { profile, isSuperAdmin } = useAuth();
   const tenantId = profile?.tenant_id;
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -204,7 +204,7 @@ const Connections = () => {
         </Dialog>
       </div>
 
-      {profile?.role === "super_admin" && (
+      {isSuperAdmin && (
         <Card className="border-primary/20 bg-primary/5">
           <CardContent className="flex items-start gap-3 py-4 text-sm">
             <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
@@ -245,7 +245,7 @@ const Connections = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {profile?.role === "super_admin" && (
+                  {isSuperAdmin && (
                     <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                       <span>QR: {conn.qr_status ?? "—"}</span>
                       <span>Webhook: {conn.webhook_status ?? "—"}</span>
