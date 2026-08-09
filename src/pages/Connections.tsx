@@ -330,21 +330,29 @@ const Connections = () => {
               </p>
             </div>
 
-            {!qrConnection || qrConnection.qr_status !== "available" ? (
-              <div className="flex min-h-72 w-full flex-col items-center justify-center gap-3 rounded-lg border bg-muted/20">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm">Aguardando o n8n gerar o QR Code...</p>
-              </div>
-            ) : qrDisplaySource ? (
+            {qrConnection?.qr_status === "available" && qrDisplaySource ? (
               <div className="rounded-lg border bg-white p-4">
                 <img src={qrDisplaySource} alt="QR Code para conectar o WhatsApp" className="h-72 w-72 object-contain" />
               </div>
-            ) : (pending === `${qrConnectionId}:generate_qr`) || qrConnection?.qr_status === "requested" ? (
+            ) : (pending === `${qrConnectionId}:generate_qr`) || qrConnection?.qr_status === "requested" || qrConnection?.qr_status === "pending" ? (
               <div className="flex min-h-72 w-full flex-col items-center justify-center gap-3 rounded-lg border bg-muted/20">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="text-sm">O n8n está processando o QR Code...</p>
               </div>
+            ) : qrConnection?.qr_status === "available" && !qrDisplaySource ? (
+              <div className="flex min-h-72 w-full flex-col items-center justify-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-6">
+                <AlertCircle className="h-8 w-8 text-destructive" />
+                <p className="font-medium">QR Code indisponível</p>
+                <p className="text-sm text-muted-foreground">
+                  O status está como disponível, mas data.qr_code veio vazio. Verifique o callback do n8n.
+                </p>
+              </div>
             ) : (
+              <div className="flex min-h-72 w-full flex-col items-center justify-center gap-3 rounded-lg border bg-muted/20">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm">Aguardando o n8n gerar o QR Code...</p>
+              </div>
+            )}
               <div className="flex min-h-72 w-full flex-col items-center justify-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-6">
                 <AlertCircle className="h-8 w-8 text-destructive" />
                 <p className="font-medium">QR Code indisponível</p>
