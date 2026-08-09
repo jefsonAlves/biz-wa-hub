@@ -144,16 +144,32 @@ export function maskUrl(url: string | null | undefined) {
   }
 }
 
-/** Loads the active n8n integration for a tenant (service role only). */
-export async function getIntegration(svc: SupabaseClient, tenantId: string) {
-  const { data } = await svc
+/** Loads the active n8n integration (global or tenant-specific). */
+export async function getIntegration(svc: SupabaseClient, tenantId?: string) {
+  // First try to find a global active integration
+  const { data: global } = await svc
     .from("n8n_integrations")
     .select("*")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false })
-    .limit(1)
+    .is("tenant_id", null)
+    .eq("status", "active")
     .maybeSingle();
-  return data;
+  
+  if (global) return global;
+
+  // Fallback to tenant-specific (deprecated but maintained for backward compat)
+  if (tenantId) {
+    const { data: tenantSpecific } = await svc
+      .from("n8n_integrations")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return tenantSpecific;
+  }
+  
+  return null;
 }
 
 export function targetUrl(integration: { base_url: string | null; webhook_path: string | null }) {

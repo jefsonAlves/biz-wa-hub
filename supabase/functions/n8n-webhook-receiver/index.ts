@@ -78,13 +78,9 @@ serve(async (req) => {
       return json({ error: "Tenant incompatÃ­vel" }, 401);
     }
 
-    const { data: integration } = await svc
-      .from("n8n_integrations")
-      .select("id, status")
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
+    const integration = await getIntegration(svc, tenantId);
     if (!integration || integration.status !== "active") {
-      return json({ error: "IntegraÃ§Ã£o inativa" }, 403);
+      return json({ error: "Integração inativa" }, 403);
     }
 
     // Idempotency: unique (source, external_event_id)
@@ -116,8 +112,13 @@ serve(async (req) => {
 
     switch (payload.event_type) {
       case "whatsapp.connection.qr.generated":
-        await updateConnection({ qr_status: "available", status: "qr_pending", connection_error: null,
-          metadata: { qr_code: data.qr_code ?? null, qr_expires_at: data.expires_at ?? null } });
+        const qrCode = data.qr_code ?? data.qrcode ?? data.base64 ?? data.code ?? data.qr ?? null;
+        await updateConnection({ 
+          qr_status: qrCode ? "available" : "failed", 
+          status: qrCode ? "qr_pending" : "error", 
+          connection_error: qrCode ? null : "qr_code_empty",
+          metadata: { qr_code: qrCode, qr_expires_at: data.expires_at ?? null } 
+        });
         break;
       case "whatsapp.connection.connected":
         await updateConnection({ status: "connected", qr_status: "idle", connection_error: null,

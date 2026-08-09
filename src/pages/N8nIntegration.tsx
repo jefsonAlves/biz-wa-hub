@@ -13,8 +13,8 @@ import { Workflow, ShieldCheck, Loader2, Copy } from "lucide-react";
 import { testN8nIntegration } from "@/lib/whatsapp/provider";
 
 const N8nIntegration = () => {
-  const { profile } = useAuth();
-  const tenantId = profile?.tenant_id;
+  const { profile, isSuperAdmin } = useAuth();
+  const tenantId = null; // Global config uses NULL tenant_id
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -27,13 +27,12 @@ const N8nIntegration = () => {
   const receiverUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/n8n-webhook-receiver`;
 
   const { data: integration, isLoading } = useQuery({
-    queryKey: ["n8n_integration", tenantId],
+    queryKey: ["n8n_integration_global"],
     queryFn: async () => {
-      if (!tenantId) return null;
       const { data } = await supabase
         .from("n8n_integrations")
         .select("*")
-        .eq("tenant_id", tenantId)
+        .is("tenant_id", null)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -53,7 +52,7 @@ const N8nIntegration = () => {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!tenantId) throw new Error("Sem empresa vinculada");
+      if (!isSuperAdmin) throw new Error("Apenas Super Admin pode configurar n8n");
       const payload = {
         base_url: baseUrl.trim().replace(/\/+$/, ""),
         webhook_path: webhookPath.trim() || "/webhook/platform",
@@ -65,7 +64,7 @@ const N8nIntegration = () => {
         if (error) throw error;
       } else {
         const { error } = await supabase.from("n8n_integrations").insert({
-          tenant_id: tenantId,
+          tenant_id: null,
           name: "n8n self-hosted",
           ...payload,
         });
@@ -97,6 +96,8 @@ const N8nIntegration = () => {
     navigator.clipboard.writeText(value);
     toast({ title: "Copiado" });
   };
+
+  if (!isSuperAdmin) return <div className="p-8 text-center">Acesso restrito ao Administrador Master.</div>;
 
   return (
     <div className="space-y-6">

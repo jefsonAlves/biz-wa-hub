@@ -130,7 +130,7 @@ const Inbox = () => {
     queryKey: ["messages", selectedConversationId],
     queryFn: async () => {
       if (!selectedConversationId) return [];
-      await supabase.from("conversations").update({ unread_count: 0 }).eq("id", selectedConversationId);
+      await supabase.rpc("mark_conversation_read", { conv_id: selectedConversationId });
       queryClient.invalidateQueries({ queryKey: ["inbox-metrics", tenantId] });
       const { data, error } = await supabase
         .from("messages")
