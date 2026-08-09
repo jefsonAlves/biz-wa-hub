@@ -353,14 +353,6 @@ const Connections = () => {
                 <p className="text-sm">Aguardando o n8n gerar o QR Code...</p>
               </div>
             )}
-              <div className="flex min-h-72 w-full flex-col items-center justify-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-6">
-                <AlertCircle className="h-8 w-8 text-destructive" />
-                <p className="font-medium">QR Code indisponível</p>
-                <p className="text-sm text-muted-foreground">
-                  O status está como disponível, mas data.qr_code veio vazio. Verifique o callback do n8n.
-                </p>
-              </div>
-            )}
 
             {qrConnection?.qr_expires_at && (
               <p className="text-xs text-muted-foreground">
