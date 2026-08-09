@@ -339,6 +339,11 @@ const Connections = () => {
               <div className="rounded-lg border bg-white p-4">
                 <img src={qrDisplaySource} alt="QR Code para conectar o WhatsApp" className="h-72 w-72 object-contain" />
               </div>
+            ) : busy("generate_qr") || qrConnection?.qr_status === "requested" ? (
+              <div className="flex min-h-72 w-full flex-col items-center justify-center gap-3 rounded-lg border bg-muted/20">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm">O n8n está processando o QR Code...</p>
+              </div>
             ) : (
               <div className="flex min-h-72 w-full flex-col items-center justify-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-6">
                 <AlertCircle className="h-8 w-8 text-destructive" />

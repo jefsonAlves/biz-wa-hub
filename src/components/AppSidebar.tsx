@@ -62,7 +62,7 @@ export function AppSidebar() {
 
         { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
         { title: "Conexões WhatsApp", url: "/connections", icon: Smartphone },
-        { title: "Integração n8n", url: "/integrations/n8n", icon: Workflow },
+        { title: "Integração n8n", url: "/admin/n8n", icon: Workflow },
         { title: "Relatórios", url: "/reports", icon: BarChart3 },
         { title: "Logs", url: "/admin/logs", icon: Shield },
         { title: "Configurações", url: "/settings", icon: Settings },
@@ -80,7 +80,7 @@ export function AppSidebar() {
         { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
         { title: "Departamentos", url: "/departments", icon: Building2 },
         { title: "Conexões WhatsApp", url: "/connections", icon: Smartphone },
-        { title: "Integração n8n", url: "/integrations/n8n", icon: Workflow },
+        
         { title: "Equipe", url: "/team", icon: Users },
         { title: "Funções e Permissões", url: "/roles", icon: ShieldCheck },
         { title: "Relatórios", url: "/reports", icon: BarChart3 },
