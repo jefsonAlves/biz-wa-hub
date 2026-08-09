@@ -1004,7 +1004,7 @@ export type Database = {
           last_tested_at: string | null
           name: string
           status: string
-          tenant_id: string
+          tenant_id: string | null
           updated_at: string
           webhook_path: string
           webhook_secret_reference: string | null
@@ -1021,7 +1021,7 @@ export type Database = {
           last_tested_at?: string | null
           name?: string
           status?: string
-          tenant_id: string
+          tenant_id?: string | null
           updated_at?: string
           webhook_path?: string
           webhook_secret_reference?: string | null
@@ -1038,7 +1038,7 @@ export type Database = {
           last_tested_at?: string | null
           name?: string
           status?: string
-          tenant_id?: string
+          tenant_id?: string | null
           updated_at?: string
           webhook_path?: string
           webhook_secret_reference?: string | null
@@ -1615,7 +1615,7 @@ export type Database = {
           last_health_check_at: string
           name: string
           phone_number: string
-          provider_type: Database["public"]["Enums"]["provider_type"]
+          provider_type: string
           qr_code: string
           qr_expires_at: string
           qr_status: string
@@ -1637,6 +1637,7 @@ export type Database = {
       is_tenant_member: { Args: { _tenant_id: string }; Returns: boolean }
       is_valid_cnpj: { Args: { _digits: string }; Returns: boolean }
       is_valid_cpf: { Args: { _digits: string }; Returns: boolean }
+      mark_conversation_read: { Args: { conv_id: string }; Returns: undefined }
     }
     Enums: {
       ai_provider: "ollama" | "openai" | "gemini"
