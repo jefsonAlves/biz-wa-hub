@@ -54,7 +54,7 @@ const App = () => (
               <Route path="/knowledge" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Knowledge /></DashboardLayout></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Settings /></DashboardLayout></ProtectedRoute>} />
               <Route path="/connections" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Connections /></DashboardLayout></ProtectedRoute>} />
-              <Route path="/integrations/n8n" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><N8nIntegration /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/admin/n8n" element={<ProtectedRoute requiredRoles={["super_admin"]}><DashboardLayout><N8nIntegration /></DashboardLayout></ProtectedRoute>} />
               <Route path="/team" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Team /></DashboardLayout></ProtectedRoute>} />
               <Route path="/roles" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Roles /></DashboardLayout></ProtectedRoute>} />
               <Route path="/ai-attendance" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><AiAttendance /></DashboardLayout></ProtectedRoute>} />
