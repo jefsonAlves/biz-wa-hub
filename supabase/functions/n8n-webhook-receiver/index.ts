@@ -78,13 +78,9 @@ serve(async (req) => {
       return json({ error: "Tenant incompatÃ­vel" }, 401);
     }
 
-    const { data: integration } = await svc
-      .from("n8n_integrations")
-      .select("id, status")
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
+    const integration = await getIntegration(svc, tenantId);
     if (!integration || integration.status !== "active") {
-      return json({ error: "IntegraÃ§Ã£o inativa" }, 403);
+      return json({ error: "Integração inativa" }, 403);
     }
 
     // Idempotency: unique (source, external_event_id)
