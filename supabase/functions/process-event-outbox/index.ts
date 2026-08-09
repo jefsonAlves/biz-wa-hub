@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, deliverEvent, json, PlatformEvent, serviceClient } from "../_shared/n8n.ts";
+import { corsHeaders, deliverEvent, getIntegration, json, PlatformEvent, serviceClient } from "../_shared/n8n.ts";
 
 const BATCH = 25;
 
