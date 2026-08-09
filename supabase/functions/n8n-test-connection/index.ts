@@ -1,18 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import {
-  authenticate,
-  buildEvent,
-  corsHeaders,
-  deliverEvent,
-  getIntegration,
-  isTenantAdmin,
-  json,
-  maskUrl,
-  serviceClient,
-  targetUrl,
-  webhookSecret,
-} from "../_shared/n8n.ts";
+import { authenticate, corsHeaders, getIntegration, json, serviceClient, deliverEvent, buildEvent } from "../_shared/n8n.ts";
 
+/**
+ * Edge Function: n8n-test-connection
+ * Permite que um super_admin ou tenant_admin valide a conectividade com o n8n.
+ * Tenta disparar um evento de "ping" imediato para o n8n ignorando a fila do outbox.
+ */
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -21,59 +14,48 @@ serve(async (req) => {
     if ("error" in auth) return json({ error: auth.error }, 401);
 
     const svc = serviceClient();
-    if (!(await isTenantAdmin(svc, auth.userId, auth.tenantId))) {
-      return json({ error: "Forbidden" }, 403);
-    }
+    
+    // Verificar permissão
+    const { data: roleData } = await svc
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", auth.userId)
+      .maybeSingle();
+      
+    const isAdmin = roleData?.role === 'super_admin' || roleData?.role === 'admin' || roleData?.role === 'tenant_admin';
+    if (!isAdmin) return json({ error: "Permissões insuficientes" }, 403);
 
     const integration = await getIntegration(svc, auth.tenantId);
-    if (!integration) return json({ error: "Integração n8n não configurada" }, 400);
-
-    const url = targetUrl(integration);
-    if (!url) return json({ error: "URL base do n8n não configurada" }, 400);
-    if (/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(integration.base_url ?? "")) {
-      return json({ error: "URL local não é válida em produção. Use a URL pública do n8n." }, 400);
-    }
-    if (integration.status !== "active") {
-      return json({ error: "Integração inativa. Ative a integração antes de testar." }, 400);
-    }
-    if (!webhookSecret()) {
-      return json({ error: "N8N_WEBHOOK_SECRET não configurado no servidor." }, 400);
+    if (!integration) {
+      return json({ 
+        success: false, 
+        error: "Nenhuma configuração de n8n ativa encontrada." 
+      }, 404);
     }
 
-    // Envia o mesmo envelope assinado (HMAC SHA-256) usado em produção,
-    // para o teste validar exatamente o contrato real do workflow.
-    const event = buildEvent({
-      event_type: "system.integration.test",
+    // Criar um evento de teste
+    const testEvent = buildEvent({
+      event_type: "platform.ping",
       tenant_id: auth.tenantId,
-      data: { ping: true, requested_by: auth.userId },
+      data: {
+        timestamp: new Date().toISOString(),
+        triggered_by: auth.userId,
+        test: true
+      }
     });
 
-    const result = await deliverEvent(svc, event, integration);
-
-    await svc
-      .from("n8n_integrations")
-      .update({ last_tested_at: new Date().toISOString() })
-      .eq("id", integration.id);
-
-    if (!result.success) {
-      const detail = result.body ? ` — ${result.body}` : "";
-      return json({
-        success: false,
-        http_status: result.status ?? null,
-        target: maskUrl(url),
-        error: `${result.error ?? "falha na entrega"}${detail}`,
-      });
-    }
+    // Tentar entrega imediata (ignora outbox para feedback instantâneo)
+    const result = await deliverEvent(svc, testEvent, integration);
 
     return json({
-      success: true,
-      http_status: result.status ?? 200,
-      target: maskUrl(url),
-      event_type: event.event_type,
-      error: null,
+      success: result.success,
+      status: result.status,
+      error: result.error,
+      body: result.body,
+      target: integration.base_url
     });
   } catch (error) {
     console.error("n8n-test-connection error:", error);
-    return json({ error: error instanceof Error ? error.message : "erro interno" }, 500);
+    return json({ error: error instanceof Error ? error.message : "Erro interno" }, 500);
   }
 });
