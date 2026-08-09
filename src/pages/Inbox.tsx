@@ -132,6 +132,7 @@ const Inbox = () => {
       if (!selectedConversationId) return [];
       await supabase.rpc("mark_conversation_read", { conv_id: selectedConversationId });
       queryClient.invalidateQueries({ queryKey: ["inbox-metrics", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["conversations", tenantId] });
       const { data, error } = await supabase
         .from("messages")
         .select("*")
