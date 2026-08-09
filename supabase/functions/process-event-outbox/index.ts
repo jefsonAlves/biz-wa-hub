@@ -25,11 +25,8 @@ serve(async (req) => {
     let failed = 0;
 
     for (const row of pending ?? []) {
-      const { data: integration } = await svc
-        .from("n8n_integrations")
-        .select("base_url, webhook_path, status")
-        .eq("tenant_id", row.tenant_id)
-        .maybeSingle();
+      const integration = await getIntegration(svc, row.tenant_id);
+
 
       const attempts = (row.attempts ?? 0) + 1;
 
