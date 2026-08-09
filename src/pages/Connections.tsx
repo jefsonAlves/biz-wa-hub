@@ -204,15 +204,17 @@ const Connections = () => {
         </Dialog>
       </div>
 
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="flex items-start gap-3 py-4 text-sm">
-          <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-          <p className="text-muted-foreground">
-            Credenciais de sessão nunca são expostas ao navegador. Todos os comandos passam por Edge Functions
-            e são entregues ao n8n com assinatura HMAC SHA-256.
-          </p>
-        </CardContent>
-      </Card>
+      {profile?.role === "super_admin" && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="flex items-start gap-3 py-4 text-sm">
+            <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+            <p className="text-muted-foreground">
+              Credenciais de sessão nunca são expostas ao navegador. Todos os comandos passam por Edge Functions
+              e são entregues ao n8n com assinatura HMAC SHA-256.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {isLoading ? (
         <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Carregando conexões...</div>
@@ -243,14 +245,16 @@ const Connections = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                    <span>QR: {conn.qr_status ?? "—"}</span>
-                    <span>Webhook: {conn.webhook_status ?? "—"}</span>
-                    <span>Credenciais: {conn.has_credentials ? "configuradas" : "pendentes"}</span>
-                    <span>
-                      Checagem: {conn.last_health_check_at ? new Date(conn.last_health_check_at).toLocaleString("pt-BR") : "—"}
-                    </span>
-                  </div>
+                  {profile?.role === "super_admin" && (
+                    <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                      <span>QR: {conn.qr_status ?? "—"}</span>
+                      <span>Webhook: {conn.webhook_status ?? "—"}</span>
+                      <span>Credenciais: {conn.has_credentials ? "configuradas" : "pendentes"}</span>
+                      <span>
+                        Checagem: {conn.last_health_check_at ? new Date(conn.last_health_check_at).toLocaleString("pt-BR") : "—"}
+                      </span>
+                    </div>
+                  )}
 
                   {conn.connection_error && (
                     <div className="flex flex-col gap-1 p-2 rounded bg-destructive/10 border border-destructive/20 text-xs text-destructive">
