@@ -1783,7 +1783,7 @@ export type Database = {
       mark_conversation_read: { Args: { conv_id: string }; Returns: undefined }
     }
     Enums: {
-      ai_provider: "ollama" | "openai" | "gemini"
+      ai_provider: "ollama" | "openai" | "gemini" | "groq"
       app_role: "super_admin" | "tenant_admin" | "agent" | "viewer"
       archive_status: "pending" | "processing" | "ready" | "failed"
       business_doc_type: "cnpj" | "mei"
@@ -1942,7 +1942,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      ai_provider: ["ollama", "openai", "gemini"],
+      ai_provider: ["ollama", "openai", "gemini", "groq"],
       app_role: ["super_admin", "tenant_admin", "agent", "viewer"],
       archive_status: ["pending", "processing", "ready", "failed"],
       business_doc_type: ["cnpj", "mei"],
