@@ -61,13 +61,13 @@ const Index = () => {
         </div>
         <div className="container relative z-10 mx-auto px-4 text-center lg:text-left lg:grid lg:grid-cols-2 lg:items-center gap-12">
           <div>
-            <Badge className="mb-6 bg-blue-100 text-blue-700 border-blue-200">Automação e Gestão Inteligente via WhatsApp</Badge>
+            <Badge className="mb-6 bg-blue-100 text-blue-700 border-blue-200">Plataforma SaaS Otimizada para VPS</Badge>
             <h1 className="text-4xl md:text-6xl font-extrabold mb-6 leading-tight text-[#0a1b3d]">
               Atendimento por setores,<br />
-              <span className="text-primary">mais controle, mais agilidade</span> e mais segurança.
+              <span className="text-primary">Gestão 360°</span> e Automação Inteligente.
             </h1>
             <p className="text-xl text-muted-foreground mb-10 max-w-xl">
-              Gerencie múltiplos atendentes, setores e automações inteligentes em um único lugar.
+              Adequamos o código para alta performance com o menor consumo de recursos, replicando as melhores funcionalidades de mercado em uma estrutura escalável.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Button size="lg" variant="hero" className="text-lg px-8 h-14" onClick={() => navigate("/auth")}>
