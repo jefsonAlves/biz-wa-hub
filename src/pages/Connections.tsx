@@ -116,14 +116,17 @@ const Connections = () => {
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!tenantId) throw new Error("Sem empresa vinculada");
-      const { error } = await supabase.from("whatsapp_connections").insert({
-        tenant_id: tenantId,
-        name: name.trim() || "Novo número",
-        provider_type: "n8n_unofficial",
-        provider_session_id: sessionId.trim() || null,
-        status: "disconnected",
+      
+      const { data, error } = await supabase.functions.invoke("whatsapp-connection-command", {
+        body: {
+          command: "create_connection_entry",
+          name: name.trim() || "Novo número",
+          provider_session_id: sessionId.trim() || null,
+        },
       });
+      
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
     },
     onSuccess: () => {
       setOpen(false);
