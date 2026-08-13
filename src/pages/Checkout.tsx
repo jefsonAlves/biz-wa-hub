@@ -1,95 +1,23 @@
-import { createFileRoute, useSearch, useRouter, Link } from "@tanstack/react-router";
+import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import { useState } from "react";
 import { z } from "zod";
-import { createServerFn } from "@tanstack/react-start";
+import { supabase } from "@/integrations/supabase/client";
 import { Loader2, CheckCircle2, AlertCircle, Zap, ArrowLeft } from "lucide-react";
 import logoAsset from "@/assets/logo.png.asset.json";
 
-export const createAsaasPayment = createServerFn({ method: "POST" })
-  .validator((data) => z.object({
-    planId: z.string(),
-    paymentMethod: z.enum(["PIX", "CREDIT_CARD"]),
-    customer: z.object({
-      name: z.string().min(3),
-      email: z.string().email(),
-      cpfCnpj: z.string().min(11),
-    })
-  }).parse(data))
-  .handler(async ({ data }) => {
-    const apiKey = process.env['ASAAS_API_KEY'];
-    if (!apiKey) {
-      throw new Error("Configuração do Asaas ausente no servidor.");
-    }
-
-    const ASAAS_URL = "https://www.asaas.com/api/v3";
-    
-    try {
-      // 1. Criar ou buscar cliente
-      const customerResponse = await fetch(`${ASAAS_URL}/customers`, {
-        method: "POST",
-        headers: {
-          "access_token": apiKey,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          name: data.customer.name,
-          email: data.customer.email,
-          cpfCnpj: data.customer.cpfCnpj
-        })
-      });
-
-      const customer = await customerResponse.json();
-      if (customer.errors) throw new Error(customer.errors[0].description);
-
-      // 2. Definir valor do plano
-      const planPrices: Record<string, number> = {
-        "starter": 250.00,
-        "profissional": 397.00,
-        "enterprise": 597.00
-      };
-      
-      const value = planPrices[data.planId] || 250.00;
-
-      // 3. Criar a cobrança
-      const paymentResponse = await fetch(`${ASAAS_URL}/payments`, {
-        method: "POST",
-        headers: {
-          "access_token": apiKey,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          customer: customer.id,
-          billingType: data.paymentMethod === "PIX" ? "PIX" : "CREDIT_CARD",
-          value: value,
-          dueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-          description: `Assinatura Chat Zap Flow IA - Plano ${data.planId.toUpperCase()}`,
-          externalReference: `plan_${data.planId}_${Date.now()}`
-        })
-      });
-
-      const payment = await paymentResponse.json();
-      if (payment.errors) throw new Error(payment.errors[0].description);
-
-      return { 
-        success: true,
-        paymentUrl: payment.invoiceUrl || payment.bankSlipUrl || "https://chat.zapflowia.online/obrigado",
-        paymentId: payment.id
-      };
-    } catch (error: any) {
-      console.error("Erro na integração Asaas:", error);
-      throw new Error(error.message || "Falha na comunicação com o Asaas");
-    }
+const createAsaasPayment = async (data: any) => {
+  const { data: result, error } = await supabase.functions.invoke("asaas-payment", {
+    body: data
   });
+  if (error) throw error;
+  return result;
+};
 
-export const Route = createFileRoute("/checkout")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    plan: z.string().optional().catch(undefined).parse(search['plan']),
-  }),
-  component: CheckoutPage,
-});
-
-function CheckoutPage() {
-  const { plan } = useSearch({ from: "/checkout" });
+export default function CheckoutPage() {
+  const [searchParams] = useSearchParams();
+  const plan = searchParams.get("plan");
+  const navigate = useNavigate();
+  
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
