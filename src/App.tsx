@@ -28,6 +28,7 @@ import AdminPlans from "./pages/AdminPlans";
 import NotFound from "./pages/NotFound";
 import OAuthConsent from "./pages/OAuthConsent";
 import Checkout from "./pages/Checkout";
+import Subscription from "./pages/Subscription";
 
 
 const queryClient = new QueryClient();
@@ -63,6 +64,7 @@ const App = () => (
 
               <Route path="/reports" element={<ProtectedRoute><DashboardLayout><Reports /></DashboardLayout></ProtectedRoute>} />
               <Route path="/my-conversations" element={<ProtectedRoute><DashboardLayout><Inbox /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/subscription" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><Subscription /></ProtectedRoute>} />
 
               {/* Admin routes */}
               <Route path="/admin/tenants" element={<ProtectedRoute requiredRoles={["super_admin"]}><DashboardLayout><AdminTenants /></DashboardLayout></ProtectedRoute>} />

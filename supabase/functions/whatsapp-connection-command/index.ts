@@ -26,11 +26,15 @@ serve(async (req) => {
 
     // SPECIAL COMMAND: Create a new connection entry using service role to bypass RLS issues
     if (command === "create_connection_entry") {
+      const providerType = body?.provider_type || "n8n_unofficial";
       const { data, error } = await svc.from("whatsapp_connections").insert({
         tenant_id: auth.tenantId,
         name: body?.name || "Novo número",
-        provider_type: "n8n_unofficial",
+        provider_type: providerType,
         provider_session_id: body?.provider_session_id || null,
+        provider_token: body?.provider_token || null,
+        phone_number_id: body?.phone_number_id || null,
+        waba_id: body?.waba_id || null,
         status: "disconnected",
       }).select("id").single();
 
@@ -56,7 +60,14 @@ serve(async (req) => {
       .maybeSingle();
     if (!connection) return json({ error: "Conexão não encontrada" }, 404);
 
-    if (connection.provider_type !== "n8n_unofficial") {
+    if (connection.provider_type === "meta") {
+      if (command === "get_status" || command === "health_check") {
+        return json({ success: true, status: connection.status });
+      }
+      return json({ error: "Comandos Meta Cloud API são processados via webhook" }, 400);
+    }
+
+    if (connection.provider_type !== "n8n_unofficial" && connection.provider_type !== "n8n") {
       return json({ error: `Provedor ${connection.provider_type} ainda não suportado para comandos` }, 400);
     }
 

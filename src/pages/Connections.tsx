@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Smartphone, Plus, QrCode, RefreshCw, PlugZap, Power, Loader2, ShieldCheck, AlertCircle } from "lucide-react";
+import { Smartphone, Plus, QrCode, RefreshCw, PlugZap, Power, Loader2, ShieldCheck, AlertCircle, Building2 } from "lucide-react";
 import {
   listConnections,
   sendConnectionCommand,
@@ -47,6 +47,8 @@ const Connections = () => {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [sessionId, setSessionId] = useState("");
+  const [providerType, setProviderType] = useState<"n8n" | "meta">("n8n");
+  const [metaConfig, setMetaConfig] = useState({ phone_number_id: "", waba_id: "", token: "" });
   const [pending, setPending] = useState<string | null>(null);
   const [qrConnectionId, setQrConnectionId] = useState<string | null>(null);
   const previousStatuses = useRef<Record<string, string>>({});
@@ -121,7 +123,11 @@ const Connections = () => {
         body: {
           command: "create_connection_entry",
           name: name.trim() || "Novo número",
-          provider_session_id: sessionId.trim() || null,
+          provider_type: providerType === "meta" ? "meta_cloud" : "n8n_unofficial",
+          provider_session_id: providerType === "n8n" ? (sessionId.trim() || null) : null,
+          provider_token: providerType === "meta" ? metaConfig.token : null,
+          phone_number_id: providerType === "meta" ? metaConfig.phone_number_id : null,
+          waba_id: providerType === "meta" ? metaConfig.waba_id : null,
         },
       });
       
@@ -132,6 +138,7 @@ const Connections = () => {
       setOpen(false);
       setName("");
       setSessionId("");
+      setMetaConfig({ phone_number_id: "", waba_id: "", token: "" });
       queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe"] });
       toast({ title: "Conexão criada", description: "Gere a sessão para conectar o número." });
     },
@@ -185,18 +192,78 @@ const Connections = () => {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Nova conexão</DialogTitle></DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+              <div className="space-y-2">
+                <Label>Provedor</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button 
+                    variant={providerType === "n8n" ? "default" : "outline"}
+                    onClick={() => setProviderType("n8n")}
+                    className="w-full"
+                  >
+                    n8n (Unofficial)
+                  </Button>
+                  <Button 
+                    variant={providerType === "meta" ? "default" : "outline"}
+                    onClick={() => setProviderType("meta")}
+                    className="w-full"
+                  >
+                    Meta Cloud API
+                  </Button>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label>Nome do número</Label>
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Comercial" />
               </div>
-              <div className="space-y-2">
-                <Label>Identificador da sessão no n8n (opcional)</Label>
-                <Input value={sessionId} onChange={(e) => setSessionId(e.target.value)} placeholder="Ex: comercial-01" />
-                <p className="text-xs text-muted-foreground">
-                  Usado pelo fluxo do n8n para identificar a sessão. Nenhuma credencial é armazenada no navegador.
-                </p>
-              </div>
+
+              {providerType === "n8n" ? (
+                <div className="space-y-2">
+                  <Label>Identificador da sessão no n8n (opcional)</Label>
+                  <Input value={sessionId} onChange={(e) => setSessionId(e.target.value)} placeholder="Ex: comercial-01" />
+                  <p className="text-xs text-muted-foreground">
+                    Usado pelo fluxo do n8n para identificar a sessão.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3 p-3 bg-muted/30 rounded-lg border border-border">
+                  <h4 className="text-xs font-bold uppercase text-muted-foreground flex items-center gap-2">
+                    <Building2 className="h-3 w-3" /> Configuração Meta
+                  </h4>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Phone Number ID</Label>
+                    <Input 
+                      value={metaConfig.phone_number_id} 
+                      onChange={(e) => setMetaConfig({...metaConfig, phone_number_id: e.target.value})} 
+                      placeholder="Identificador numérico da Meta" 
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">WABA ID</Label>
+                    <Input 
+                      value={metaConfig.waba_id} 
+                      onChange={(e) => setMetaConfig({...metaConfig, waba_id: e.target.value})} 
+                      placeholder="WhatsApp Business Account ID" 
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Access Token (Permanent)</Label>
+                    <Input 
+                      type="password"
+                      value={metaConfig.token} 
+                      onChange={(e) => setMetaConfig({...metaConfig, token: e.target.value})} 
+                      placeholder="EAA..." 
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">
+                    A Meta Cloud API é serverless e mais estável para envios em massa.
+                  </p>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>

@@ -259,6 +259,47 @@ export type Database = {
           },
         ]
       }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string | null
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json | null
+          tenant_id: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json | null
+          tenant_id: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json | null
+          tenant_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_hours: {
         Row: {
           config: Json
@@ -1585,20 +1626,24 @@ export type Database = {
           created_at: string
           credential_reference: string | null
           id: string
+          instance_key: string | null
           last_connected_at: string | null
           last_disconnected_at: string | null
           last_health_check_at: string | null
           metadata: Json
           name: string
           phone_number: string | null
+          phone_number_id: string | null
           provider_instance_id: string | null
           provider_session_id: string | null
+          provider_token: string | null
           provider_type: Database["public"]["Enums"]["provider_type"]
           qr_status: string
           status: string
           sync_status: string | null
           tenant_id: string
           updated_at: string
+          waba_id: string | null
           webhook_status: string
           webhook_url: string | null
           zapi_client_token: string | null
@@ -1611,20 +1656,24 @@ export type Database = {
           created_at?: string
           credential_reference?: string | null
           id?: string
+          instance_key?: string | null
           last_connected_at?: string | null
           last_disconnected_at?: string | null
           last_health_check_at?: string | null
           metadata?: Json
           name?: string
           phone_number?: string | null
+          phone_number_id?: string | null
           provider_instance_id?: string | null
           provider_session_id?: string | null
+          provider_token?: string | null
           provider_type?: Database["public"]["Enums"]["provider_type"]
           qr_status?: string
           status?: string
           sync_status?: string | null
           tenant_id: string
           updated_at?: string
+          waba_id?: string | null
           webhook_status?: string
           webhook_url?: string | null
           zapi_client_token?: string | null
@@ -1637,20 +1686,24 @@ export type Database = {
           created_at?: string
           credential_reference?: string | null
           id?: string
+          instance_key?: string | null
           last_connected_at?: string | null
           last_disconnected_at?: string | null
           last_health_check_at?: string | null
           metadata?: Json
           name?: string
           phone_number?: string | null
+          phone_number_id?: string | null
           provider_instance_id?: string | null
           provider_session_id?: string | null
+          provider_token?: string | null
           provider_type?: Database["public"]["Enums"]["provider_type"]
           qr_status?: string
           status?: string
           sync_status?: string | null
           tenant_id?: string
           updated_at?: string
+          waba_id?: string | null
           webhook_status?: string
           webhook_url?: string | null
           zapi_client_token?: string | null
@@ -1730,7 +1783,7 @@ export type Database = {
       mark_conversation_read: { Args: { conv_id: string }; Returns: undefined }
     }
     Enums: {
-      ai_provider: "ollama" | "openai" | "gemini"
+      ai_provider: "ollama" | "openai" | "gemini" | "groq"
       app_role: "super_admin" | "tenant_admin" | "agent" | "viewer"
       archive_status: "pending" | "processing" | "ready" | "failed"
       business_doc_type: "cnpj" | "mei"
@@ -1889,7 +1942,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      ai_provider: ["ollama", "openai", "gemini"],
+      ai_provider: ["ollama", "openai", "gemini", "groq"],
       app_role: ["super_admin", "tenant_admin", "agent", "viewer"],
       archive_status: ["pending", "processing", "ready", "failed"],
       business_doc_type: ["cnpj", "mei"],
