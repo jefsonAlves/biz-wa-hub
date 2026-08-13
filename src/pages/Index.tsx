@@ -3,6 +3,11 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
+import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 import { 
   MessageSquare, Users, Shield, Bot, Clock, BarChart3,
   CheckCircle, ArrowRight, Building2
@@ -26,11 +31,38 @@ const Index = () => {
     { icon: BarChart3, title: "Relatórios Avançados", description: "Dashboards completos com métricas de performance" },
   ];
 
-  const plans = [
-    { id: "starter", name: "Starter", price: "R$ 250", period: "/mês", description: "Para começar", features: ["1.000 msgs/mês", "3 agentes", "3 departamentos"], highlighted: false },
-    { id: "profissional", name: "Profissional", price: "R$ 397", period: "/mês", description: "Mais vendido", features: ["10.000 msgs/mês", "10 agentes", "10 departamentos", "IA avançada", "Suporte prioritário"], highlighted: true },
-    { id: "enterprise", name: "Enterprise", price: "R$ 597", period: "/mês", description: "Escalável", features: ["Ilimitado", "Agentes ilimitados", "API personalizada", "Suporte dedicado"], highlighted: false },
-  ];
+  const { data: plansFromDb = [] } = useQuery({
+    queryKey: ["active-plans"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("plans")
+        .select("*")
+        .eq("is_active", true)
+        .order("price", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const displayPlans = plansFromDb.length > 0 
+    ? plansFromDb.map(p => ({
+        id: p.name.toLowerCase(),
+        name: p.name,
+        price: `R$ ${p.price}`,
+        period: "/mês",
+        description: p.description || "",
+        features: Array.isArray(p.features) ? p.features : [
+          `${p.max_connections} Conexão(ões)`,
+          `${p.max_agents} Agentes`,
+          "Suporte Prioritário"
+        ],
+        highlighted: p.name === "Profissional"
+      }))
+    : [
+        { id: "starter", name: "Starter", price: "R$ 250", period: "/mês", description: "Para começar", features: ["1.000 msgs/mês", "3 agentes", "3 departamentos"], highlighted: false },
+        { id: "profissional", name: "Profissional", price: "R$ 397", period: "/mês", description: "Mais vendido", features: ["10.000 msgs/mês", "10 agentes", "10 departamentos", "IA avançada", "Suporte prioritário"], highlighted: true },
+        { id: "enterprise", name: "Enterprise", price: "R$ 597", period: "/mês", description: "Escalável", features: ["Ilimitado", "Agentes ilimitados", "API personalizada", "Suporte dedicado"], highlighted: false },
+      ];
 
   return (
     <div className="min-h-screen bg-white">
@@ -138,7 +170,7 @@ const Index = () => {
           <h2 className="text-3xl font-bold mb-4">Planos</h2>
         </div>
         <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-          {plans.map((plan, i) => (
+          {displayPlans.map((plan, i) => (
             <Card key={i} className={`p-8 relative ${plan.highlighted ? 'border-primary bg-gradient-card shadow-glow scale-105' : 'bg-gradient-card border-border/50'}`}>
               {plan.highlighted && <Badge className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-primary">Mais Popular</Badge>}
               <div className="text-center mb-6">
