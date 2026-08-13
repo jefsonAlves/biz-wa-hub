@@ -45,13 +45,19 @@ serve(async (req) => {
     const customer = await customerResponse.json();
     if (customer.errors) throw new Error(customer.errors[0].description);
 
-    const planPrices: Record<string, number> = {
-      "starter": 250.00,
-      "profissional": 397.00,
-      "enterprise": 597.00
-    };
+    // 2. Fetch plan from database instead of hard-coding
+    const { data: planData, error: planError } = await supabaseClient
+      .from("plans")
+      .select("price, name")
+      .eq("name", body.planId.charAt(0).toUpperCase() + body.planId.slice(1))
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (planError || !planData) {
+      throw new Error(`Plano ${body.planId} não encontrado ou inativo.`);
+    }
     
-    const value = planPrices[body.planId] || 250.00;
+    const value = planData.price;
 
     // 2. Criar a cobrança
     const paymentResponse = await fetch(`${ASAAS_URL}/payments`, {
