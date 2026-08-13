@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type Provider = "ollama" | "openai" | "gemini";
+type Provider = "ollama" | "openai" | "gemini" | "groq";
 type Status = "not_configured" | "validating" | "active" | "error";
 
 interface ProviderRow {
@@ -47,6 +47,13 @@ const PROVIDERS: { id: Provider; name: string; description: string; secret: stri
     description: "Provedor opcional para redigir respostas ou atuar como fallback.",
     secret: "GEMINI_API_KEY",
     defaultModel: "gemini-2.5-flash",
+  },
+  {
+    id: "groq",
+    name: "Groq (LPU)",
+    description: "Ideal para processamento ultra-rápido de grandes volumes de texto.",
+    secret: "GROQ_API_KEY",
+    defaultModel: "llama-3.1-70b-versatile",
   },
 ];
 
