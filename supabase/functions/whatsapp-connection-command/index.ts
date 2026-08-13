@@ -60,7 +60,14 @@ serve(async (req) => {
       .maybeSingle();
     if (!connection) return json({ error: "Conexão não encontrada" }, 404);
 
-    if (connection.provider_type !== "n8n_unofficial") {
+    if (connection.provider_type === "meta") {
+      if (command === "get_status" || command === "health_check") {
+        return json({ success: true, status: connection.status });
+      }
+      return json({ error: "Comandos Meta Cloud API são processados via webhook" }, 400);
+    }
+
+    if (connection.provider_type !== "n8n_unofficial" && connection.provider_type !== "n8n") {
       return json({ error: `Provedor ${connection.provider_type} ainda não suportado para comandos` }, 400);
     }
 
