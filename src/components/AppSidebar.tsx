@@ -28,6 +28,7 @@ import {
   Workflow,
   ShieldCheck,
   Sparkles,
+  CreditCard,
 } from "lucide-react";
 import { DsaLogo } from "./DsaLogo";
 import { useAuth } from "@/hooks/useAuth";
@@ -83,6 +84,7 @@ export function AppSidebar() {
         
         { title: "Equipe", url: "/team", icon: Users },
         { title: "Funções e Permissões", url: "/roles", icon: ShieldCheck },
+        { title: "Assinatura", url: "/subscription", icon: CreditCard },
         { title: "Relatórios", url: "/reports", icon: BarChart3 },
         { title: "Configurações", url: "/settings", icon: Settings },
       ];
