@@ -27,6 +27,7 @@ import AdminLogs from "./pages/AdminLogs";
 import AdminPlans from "./pages/AdminPlans";
 import NotFound from "./pages/NotFound";
 import OAuthConsent from "./pages/OAuthConsent";
+import Checkout from "./pages/Checkout";
 
 
 const queryClient = new QueryClient();
@@ -76,6 +77,7 @@ const App = () => (
               <Route path="/chat" element={<Navigate to="/inbox" replace />} />
               <Route path="/sectors" element={<Navigate to="/departments" replace />} />
 
+              <Route path="/checkout" element={<Checkout />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>
