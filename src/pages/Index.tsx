@@ -27,9 +27,9 @@ const Index = () => {
   ];
 
   const plans = [
-    { name: "Free", price: "Grátis", period: "", description: "Para testar", features: ["500 msgs/mês", "2 agentes", "2 departamentos"], highlighted: false },
-    { name: "Pro", price: "R$ 297", period: "/mês", description: "Para empresas", features: ["10.000 msgs/mês", "10 agentes", "10 departamentos", "IA avançada", "Suporte prioritário"], highlighted: true },
-    { name: "Enterprise", price: "Sob consulta", period: "", description: "Grandes operações", features: ["Ilimitado", "Agentes ilimitados", "API personalizada", "Suporte dedicado"], highlighted: false },
+    { id: "starter", name: "Starter", price: "R$ 250", period: "/mês", description: "Para começar", features: ["1.000 msgs/mês", "3 agentes", "3 departamentos"], highlighted: false },
+    { id: "profissional", name: "Profissional", price: "R$ 397", period: "/mês", description: "Mais vendido", features: ["10.000 msgs/mês", "10 agentes", "10 departamentos", "IA avançada", "Suporte prioritário"], highlighted: true },
+    { id: "enterprise", name: "Enterprise", price: "R$ 597", period: "/mês", description: "Escalável", features: ["Ilimitado", "Agentes ilimitados", "API personalizada", "Suporte dedicado"], highlighted: false },
   ];
 
   return (
@@ -154,7 +154,7 @@ const Index = () => {
                   <li key={fi} className="flex items-center gap-3"><CheckCircle className="h-5 w-5 text-primary flex-shrink-0" /><span className="text-sm">{f}</span></li>
                 ))}
               </ul>
-              <Button className="w-full" variant={plan.highlighted ? "hero" : "premium"} size="lg" onClick={() => navigate("/auth")}>Escolher Plano</Button>
+              <Button className="w-full" variant={plan.highlighted ? "hero" : "premium"} size="lg" onClick={() => navigate(`/checkout?plan=${plan.id}`)}>Escolher Plano</Button>
             </Card>
           ))}
         </div>
