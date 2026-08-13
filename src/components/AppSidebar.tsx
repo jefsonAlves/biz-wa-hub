@@ -145,7 +145,7 @@ export function AppSidebar() {
                     <NavLink to={item.url} className={({ isActive }) => 
                       `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
                         isActive 
-                          ? "bg-blue-50 text-blue-600 font-semibold shadow-sm border border-blue-100/50" 
+                          ? "bg-blue-50 text-primary font-semibold shadow-sm border border-blue-100/50" 
                           : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                       }`
                     }>
