@@ -18,7 +18,13 @@ const Dashboard = () => {
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats", tenantId],
     queryFn: async () => {
-      if (!tenantId) return { conversations: 0, contacts: 0, messagesToday: 0 };
+      if (!tenantId) return { conversations: 0, contacts: 0, messagesToday: 0, plan: null };
+
+      const { data: subscription } = await supabase
+        .from("subscriptions")
+        .select("*, plans(*)")
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
 
       const [convRes, contactRes, msgRes] = await Promise.all([
         supabase
@@ -45,6 +51,7 @@ const Dashboard = () => {
         conversations: convRes.count ?? 0,
         contacts: contactRes.count ?? 0,
         messagesToday: msgRes.count ?? 0,
+        plan: subscription?.plans ?? null,
       };
     },
     enabled: !!tenantId,
@@ -264,33 +271,45 @@ const Dashboard = () => {
         <Card className="border-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-lg font-bold text-slate-900">Consumo do Plano Pro</CardTitle>
+              <CardTitle className="text-lg font-bold text-slate-900">
+                Consumo do Plano {stats?.plan?.name || "Starter"}
+              </CardTitle>
             </div>
-            <button className="text-xs font-semibold text-primary hover:underline">Ver consumo →</button>
+            <button className="text-xs font-semibold text-primary hover:underline">Ver detalhes →</button>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-600">Usuários Ativos</span>
-                <span className="font-bold text-slate-900">8 / 20</span>
+                <span className="font-bold text-slate-900">
+                  {stats?.contacts ?? 0} / {stats?.plan?.max_agents || 3}
+                </span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2">
-                <div className="bg-primary h-2 rounded-full" style={{width: '40%'}}></div>
+                <div 
+                  className="bg-primary h-2 rounded-full transition-all" 
+                  style={{width: `${Math.min(100, ((stats?.contacts ?? 0) / (stats?.plan?.max_agents || 3)) * 100)}%`}}
+                ></div>
               </div>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Números WhatsApp</span>
-                <span className="font-bold text-slate-900">3 / 5</span>
+                <span className="text-slate-600">Conexões WhatsApp</span>
+                <span className="font-bold text-slate-900">
+                  {stats?.conversations > 0 ? 1 : 0} / {stats?.plan?.max_connections || 1}
+                </span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2">
-                <div className="bg-primary h-2 rounded-full" style={{width: '60%'}}></div>
+                <div 
+                  className="bg-primary h-2 rounded-full transition-all" 
+                  style={{width: `${Math.min(100, ((stats?.conversations > 0 ? 1 : 0) / (stats?.plan?.max_connections || 1)) * 100)}%`}}
+                ></div>
               </div>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Tokens de IA (RAG)</span>
-                <span className="font-bold text-slate-900">142.800 / 500.000</span>
+                <span className="text-slate-600">Mensagens Hoje</span>
+                <span className="font-bold text-slate-900">{stats?.messagesToday ?? 0}</span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2">
                 <div className="bg-primary h-2 rounded-full" style={{width: '28%'}}></div>
