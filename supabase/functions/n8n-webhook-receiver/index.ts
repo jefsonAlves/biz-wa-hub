@@ -24,6 +24,8 @@ const INBOUND_TYPES = new Set([
   "automation.pause",
   "automation.resume",
   "automation.error",
+  "meta.webhook.payload", // New type for Meta API
+  "asaas.payment.received", // New type for Asaas
 ]);
 
 const MAX_SKEW_SECONDS = 300;
@@ -197,6 +199,22 @@ serve(async (req) => {
         break;
       case "automation.reply":
         await handleAutomationReply(svc, tenantId, data);
+        break;
+      case "meta.webhook.payload":
+        // Meta webhooks logic can be routed here if processed by n8n first
+        // For Fase 4, we will create a direct receiver.
+        await handleInboundMessage(svc, tenantId, connectionId, data);
+        break;
+      case "asaas.payment.received":
+        if (data.subscription_id && data.status === "CONFIRMED") {
+          await svc.from("subscriptions")
+            .update({ 
+              status: "active", 
+              current_period_start: nowIso,
+              current_period_end: data.next_due_date || undefined 
+            })
+            .eq("external_id", data.subscription_id);
+        }
         break;
       default:
         break;
