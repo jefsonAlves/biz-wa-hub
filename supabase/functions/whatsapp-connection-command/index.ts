@@ -26,11 +26,15 @@ serve(async (req) => {
 
     // SPECIAL COMMAND: Create a new connection entry using service role to bypass RLS issues
     if (command === "create_connection_entry") {
+      const providerType = body?.provider_type || "n8n_unofficial";
       const { data, error } = await svc.from("whatsapp_connections").insert({
         tenant_id: auth.tenantId,
         name: body?.name || "Novo número",
-        provider_type: "n8n_unofficial",
+        provider_type: providerType,
         provider_session_id: body?.provider_session_id || null,
+        provider_token: body?.provider_token || null,
+        phone_number_id: body?.phone_number_id || null,
+        waba_id: body?.waba_id || null,
         status: "disconnected",
       }).select("id").single();
 
