@@ -2,12 +2,13 @@
 // Secrets are read from the Edge Function environment and NEVER returned.
 import { corsHeaders, json, serviceClient, authenticate, isTenantAdmin } from "../_shared/n8n.ts";
 
-type Provider = "ollama" | "openai" | "gemini";
+type Provider = "ollama" | "openai" | "gemini" | "groq";
 
 const SECRET_BY_PROVIDER: Record<Provider, string | null> = {
   ollama: null,
   openai: "OPENAI_API_KEY",
   gemini: "GEMINI_API_KEY",
+  groq: "GROQ_API_KEY",
 };
 
 async function probe(provider: Provider, model: string | null, baseUrl: string | null) {
@@ -36,6 +37,15 @@ async function probe(provider: Provider, model: string | null, baseUrl: string |
         signal: controller.signal,
       });
       if (!res.ok) return { ok: false, error: `OpenAI respondeu ${res.status}` };
+      return { ok: true };
+    }
+    
+    if (provider === "groq") {
+      const res = await fetch("https://api.groq.com/openai/v1/models", {
+        headers: { Authorization: `Bearer ${key}` },
+        signal: controller.signal,
+      });
+      if (!res.ok) return { ok: false, error: `Groq respondeu ${res.status}` };
       return { ok: true };
     }
 
