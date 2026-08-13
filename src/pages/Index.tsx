@@ -5,9 +5,6 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Badge } from "@/components/ui/badge";
-import { useNavigate } from "react-router-dom";
-import { useToast } from "@/hooks/use-toast";
 import { 
   MessageSquare, Users, Shield, Bot, Clock, BarChart3,
   CheckCircle, ArrowRight, Building2
@@ -183,7 +180,7 @@ const Index = () => {
               </div>
               <ul className="space-y-3 mb-8">
                 {plan.features.map((f, fi) => (
-                  <li key={fi} className="flex items-center gap-3"><CheckCircle className="h-5 w-5 text-primary flex-shrink-0" /><span className="text-sm">{f}</span></li>
+                  <li key={fi} className="flex items-center gap-3"><CheckCircle className="h-5 w-5 text-primary flex-shrink-0" /><span className="text-sm">{String(f)}</span></li>
                 ))}
               </ul>
               <Button className="w-full" variant={plan.highlighted ? "hero" : "premium"} size="lg" onClick={() => navigate(`/checkout?plan=${plan.id}`)}>Escolher Plano</Button>
