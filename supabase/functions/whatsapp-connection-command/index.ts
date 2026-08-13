@@ -22,25 +22,42 @@ serve(async (req) => {
     const body = await req.json().catch(() => null);
     const command = body?.command as string | undefined;
     const connectionId = body?.connection_id as string | undefined;
+    const svc = serviceClient();
+
+    // SPECIAL COMMAND: Create a new connection entry using service role to bypass RLS issues
+    if (command === "create_connection_entry") {
+      const { data, error } = await svc.from("whatsapp_connections").insert({
+        tenant_id: auth.tenantId,
+        name: body?.name || "Novo número",
+        provider_type: "n8n_unofficial",
+        provider_session_id: body?.provider_session_id || null,
+        status: "disconnected",
+      }).select("id").single();
+
+      if (error) {
+        console.error("Error creating connection entry:", error);
+        return json({ error: "Falha ao criar entrada de conexão no banco." }, 500);
+      }
+      return json({ success: true, connection_id: data.id });
+    }
 
     if ((command === "disconnect" || command === "logout") && body?.confirm_disconnect !== true) {
       return json({ error: "confirm_disconnect_required" }, 409);
     }
 
-    if (!command || !COMMAND_EVENTS[command]) return json({ error: "Comando invÃ¡lido" }, 400);
-    if (!connectionId) return json({ error: "connection_id Ã© obrigatÃ³rio" }, 400);
+    if (!command || !COMMAND_EVENTS[command]) return json({ error: "Comando inválido" }, 400);
+    if (!connectionId) return json({ error: "connection_id é obrigatório" }, 400);
 
-    const svc = serviceClient();
     const { data: connection } = await svc
       .from("whatsapp_connections")
       .select("id, tenant_id, provider_type, provider_instance_id, provider_session_id, status")
       .eq("id", connectionId)
       .eq("tenant_id", auth.tenantId)
       .maybeSingle();
-    if (!connection) return json({ error: "ConexÃ£o nÃ£o encontrada" }, 404);
+    if (!connection) return json({ error: "Conexão não encontrada" }, 404);
 
     if (connection.provider_type !== "n8n_unofficial") {
-      return json({ error: `Provedor ${connection.provider_type} ainda nÃ£o suportado para comandos` }, 400);
+      return json({ error: `Provedor ${connection.provider_type} ainda não suportado para comandos` }, 400);
     }
 
     // Optimistic local state so the UI has feedback
@@ -69,12 +86,11 @@ serve(async (req) => {
       success: true,
       queued: true,
       event_id: event.event_id,
-      message: command === "sync_messages" ? "SincronizaÃ§Ã£o enfileirada" : "Comando enfileirado",
-      warning: integration ? undefined : "IntegraÃ§Ã£o n8n nÃ£o configurada",
+      message: command === "sync_messages" ? "Sincronização enfileirada" : "Comando enfileirado",
+      warning: integration ? undefined : "Integração n8n não configurada",
     }, 202);
   } catch (error) {
     console.error("whatsapp-connection-command error:", error);
     return json({ error: error instanceof Error ? error.message : "erro interno" }, 500);
   }
 });
-
