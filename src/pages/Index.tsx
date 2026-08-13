@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import { DsaLogo } from "@/components/DsaLogo";
 import heroBgAsset from "@/assets/hero-bg.png.asset.json";
-import fullRefAsset from "@/user-uploads/ChatGPT_Image_12_de_ago._de_2026_22_35_51.png";
+import fullRefAsset from "@/assets/full-ref.png.asset.json";
+
 
 
 const Index = () => {

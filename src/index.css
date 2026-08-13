@@ -8,7 +8,7 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Light mode - DSA Blue/Cyan system */
+    /* Brand: Chat Zap Flow IA (Cyan/Blue) */
     --background: 210 20% 98%;
     --foreground: 222 47% 11%;
 
@@ -19,7 +19,7 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 217 91% 47%; /* #0B66E4 */
+    --primary: 200 100% 45%; /* #0099e5 - Vivid Cyan-Blue */
     --primary-foreground: 0 0% 100%;
 
     --secondary: 210 40% 96%;
@@ -28,7 +28,7 @@ All colors MUST be HSL.
     --muted: 210 40% 96%;
     --muted-foreground: 215 16% 47%;
 
-    --accent: 200 100% 50%; /* #00B3FF */
+    --accent: 185 100% 45%; /* #00b8e5 - Cyan */
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
@@ -36,28 +36,28 @@ All colors MUST be HSL.
 
     --border: 214 32% 91%;
     --input: 214 32% 91%;
-    --ring: 217 91% 47%;
+    --ring: 200 100% 45%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    /* Professional DSA gradients */
-    --gradient-primary: linear-gradient(135deg, #0B66E4, #00B3FF);
-    --gradient-hero: linear-gradient(135deg, #f8fafc, #eff6ff);
+    /* Professional "Zap Flow" gradients */
+    --gradient-primary: linear-gradient(135deg, #0099e5, #00d2ff);
+    --gradient-hero: linear-gradient(135deg, #f8fafc, #e0f2fe);
     --gradient-card: linear-gradient(145deg, #ffffff, #f1f5f9);
 
     /* Shadows */
-    --shadow-elegant: 0 10px 30px -10px rgba(11, 102, 228, 0.2);
-    --shadow-glow: 0 0 40px rgba(0, 179, 255, 0.15);
+    --shadow-elegant: 0 10px 40px -10px rgba(0, 153, 229, 0.2);
+    --shadow-glow: 0 0 40px rgba(0, 210, 255, 0.15);
 
     /* Sidebar tokens */
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 215 25% 27%;
-    --sidebar-primary: 200 100% 50%; /* #00B3FF */
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 200 100% 45%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 210 40% 96%;
-    --sidebar-accent-foreground: 217 91% 47%;
+    --sidebar-accent-foreground: 200 100% 45%;
     --sidebar-border: 214 32% 91%;
-    --sidebar-ring: 200 100% 50%;
+    --sidebar-ring: 200 100% 45%;
   }
 
   .dark {
