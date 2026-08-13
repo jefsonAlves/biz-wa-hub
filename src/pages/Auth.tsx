@@ -191,7 +191,7 @@ const Auth = () => {
               {isLogin ? "Bem-vindo de volta" : "Crie sua conta"}
             </h1>
             <p className="text-muted-foreground">
-              {isLogin ? "Acesse sua plataforma de atendimento" : "Comece a usar o Chat Zap Flow IA"}
+              {isLogin ? "Acesse sua plataforma de atendimento" : "Comece a usar o Chat Zap Flow IA (Versão Otimizada)"}
             </p>
           </div>
 
