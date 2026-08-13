@@ -155,7 +155,7 @@ const Auth = () => {
         } else {
           toast({
             title: "Cadastro realizado!",
-            description: "Bem-vindo ao DSA WA Hub! Verifique seu email para confirmar o cadastro.",
+            description: "Bem-vindo ao Chat Zap Flow IA! Verifique seu email para confirmar o cadastro.",
           });
           if (nextPath) window.location.replace(nextPath);
           else navigate("/dashboard");
@@ -191,7 +191,7 @@ const Auth = () => {
               {isLogin ? "Bem-vindo de volta" : "Crie sua conta"}
             </h1>
             <p className="text-muted-foreground">
-              {isLogin ? "Acesse sua plataforma de atendimento" : "Comece a usar o DSA WA Hub"}
+              {isLogin ? "Acesse sua plataforma de atendimento" : "Comece a usar o Chat Zap Flow IA"}
             </p>
           </div>
 
