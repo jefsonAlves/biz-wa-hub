@@ -34,7 +34,7 @@ function playNotificationSound() {
   } catch { /* no AudioContext */ }
 }
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 50; // Aumentado conforme a nova arquitetura modular
 
 const Inbox = () => {
   const { profile, user } = useAuth();

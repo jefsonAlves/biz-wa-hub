@@ -1089,6 +1089,45 @@ export type Database = {
         }
         Relationships: []
       }
+      plans: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          external_id: string | null
+          features: Json | null
+          id: string
+          is_active: boolean | null
+          max_agents: number | null
+          max_connections: number | null
+          name: string
+          price: number
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          external_id?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_agents?: number | null
+          max_connections?: number | null
+          name: string
+          price: number
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          external_id?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_agents?: number | null
+          max_connections?: number | null
+          name?: string
+          price?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -1194,6 +1233,57 @@ export type Database = {
             foreignKeyName: "schedules_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean | null
+          created_at: string | null
+          current_period_end: string | null
+          current_period_start: string | null
+          external_id: string | null
+          id: string
+          plan_id: string
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          cancel_at_period_end?: boolean | null
+          created_at?: string | null
+          current_period_end?: string | null
+          current_period_start?: string | null
+          external_id?: string | null
+          id?: string
+          plan_id: string
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          cancel_at_period_end?: boolean | null
+          created_at?: string | null
+          current_period_end?: string | null
+          current_period_start?: string | null
+          external_id?: string | null
+          id?: string
+          plan_id?: string
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
