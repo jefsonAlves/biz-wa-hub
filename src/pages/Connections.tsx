@@ -65,7 +65,11 @@ const Connections = () => {
   const [metaConfig, setMetaConfig] = useState({ phone_number_id: "", waba_id: "", token: "" });
   const [pending, setPending] = useState<string | null>(null);
   const [qrConnectionId, setQrConnectionId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SafeConnection | null>(null);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<N8nDiagnostics | null>(null);
   const previousStatuses = useRef<Record<string, string>>({});
+
 
   // Fetch tenants for Super Admin selector
   const { data: tenants = [] } = useQuery({
