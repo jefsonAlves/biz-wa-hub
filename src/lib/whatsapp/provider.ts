@@ -35,8 +35,11 @@ export interface SafeConnection {
 }
 
 /** Lists the tenant's connections with credentials masked server-side. */
-export async function listConnections(): Promise<SafeConnection[]> {
-  const { data, error } = await supabase.rpc("get_whatsapp_connections_safe");
+export async function listConnections({ queryKey }: any): Promise<SafeConnection[]> {
+  const [_, tenantId] = queryKey;
+  const { data, error } = await supabase.rpc("get_whatsapp_connections_safe", {
+    _tenant_id: tenantId || null
+  });
   if (error) throw error;
   return (data ?? []) as SafeConnection[];
 }
