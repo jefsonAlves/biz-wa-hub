@@ -9,12 +9,12 @@ export function WhatsAppStatusBadge() {
 
   const { data } = useQuery({
     queryKey: ["whatsapp-status-badge", tenantId],
-    queryFn: async () => {
-      const connections = await listConnections();
+    queryFn: listConnections,
+    select: (connections) => {
       if (connections.length === 0) return { total: 0, online: 0 };
       return {
         total: connections.length,
-        online: connections.filter((c) => c.status === "connected").length,
+        online: connections.filter((c: any) => c.status === "connected").length,
       };
     },
     enabled: !!tenantId,
