@@ -157,17 +157,19 @@ const Connections = () => {
       });
       
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) {
+        throw new Error(data.details || data.error);
+      }
     },
     onSuccess: () => {
       setOpen(false);
       setName("");
       setSessionId("");
       setMetaConfig({ phone_number_id: "", waba_id: "", token: "" });
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe"] });
+      queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe", effectiveTenantId] });
       toast({ title: "Conexão criada", description: "Gere a sessão para conectar o número." });
     },
-    onError: (e: Error) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Erro ao criar conexão", description: e.message, variant: "destructive" }),
   });
 
   const runCommand = async (
@@ -180,7 +182,7 @@ const Connections = () => {
 
     try {
       const res = await sendConnectionCommand(connection.id, command, { confirmDisconnect });
-      await queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe"] });
+      await queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe", effectiveTenantId] });
       toast({
         title: res.warning ? "Comando enfileirado" : "Comando enviado ao n8n",
         description: res.warning ?? (command === "generate_qr"

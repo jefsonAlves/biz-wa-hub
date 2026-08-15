@@ -24,19 +24,24 @@ serve(async (req) => {
     const connectionId = body?.connection_id as string | undefined;
     const svc = serviceClient();
 
-    // Determine the effective tenant ID for creation or lookup
-    const requestedTenantId = body?.tenant_id;
-    const effectiveTenantId = auth.isSuperAdmin && requestedTenantId 
+    // Determine the effective tenant ID for creation
+    const requestedTenantId = body?.tenant_id as string | undefined;
+    const targetTenantId = auth.isSuperAdmin && requestedTenantId 
       ? requestedTenantId 
       : auth.tenantId;
 
+    // Validation: common users cannot specify another tenant
+    if (!auth.isSuperAdmin && requestedTenantId && requestedTenantId !== auth.tenantId) {
+      return json({ error: "tenant_forbidden" }, 403);
+    }
+
     // SPECIAL COMMAND: Create a new connection entry
     if (command === "create_connection_entry") {
-      if (!effectiveTenantId) return json({ error: "tenant_id_required" }, 400);
+      if (!targetTenantId) return json({ error: "tenant_id_required" }, 400);
 
       const providerType = body?.provider_type || "n8n_unofficial";
       const { data, error } = await svc.from("whatsapp_connections").insert({
-        tenant_id: effectiveTenantId,
+        tenant_id: targetTenantId,
         name: body?.name || "Novo número",
         provider_type: providerType,
         provider_session_id: body?.provider_session_id || null,
@@ -48,7 +53,10 @@ serve(async (req) => {
 
       if (error) {
         console.error("Error creating connection entry:", error);
-        return json({ error: "Falha ao criar entrada de conexão no banco." }, 500);
+        return json({ 
+          error: "Falha ao criar conexão",
+          details: error.message
+        }, 500);
       }
       return json({ success: true, connection_id: data.id });
     }
@@ -65,6 +73,7 @@ serve(async (req) => {
       .select("id, tenant_id, provider_type, provider_instance_id, provider_session_id, status")
       .eq("id", connectionId);
 
+    // Common user restriction
     if (!auth.isSuperAdmin) {
       query = query.eq("tenant_id", auth.tenantId);
     }
@@ -117,6 +126,9 @@ serve(async (req) => {
     }, 202);
   } catch (error) {
     console.error("whatsapp-connection-command error:", error);
-    return json({ error: error instanceof Error ? error.message : "erro interno" }, 500);
+    return json({ 
+      error: "Erro no processamento do comando", 
+      details: error instanceof Error ? error.message : "erro interno" 
+    }, 500);
   }
 });
