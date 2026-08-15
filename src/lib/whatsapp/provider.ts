@@ -18,6 +18,7 @@ export type ConnectionCommand =
 
 export interface SafeConnection {
   id: string;
+  tenant_id?: string;
   name: string;
   phone_number: string | null;
   provider_type: string;
@@ -33,8 +34,17 @@ export interface SafeConnection {
 }
 
 /** Lists the tenant's connections with credentials masked server-side. */
-export async function listConnections(): Promise<SafeConnection[]> {
-  const { data, error } = await supabase.rpc("get_whatsapp_connections_safe");
+export async function listConnections(tenantId?: string | null): Promise<SafeConnection[]> {
+  type RpcWithTenant = (
+    fn: "get_whatsapp_connections_safe",
+    args?: { _tenant_id?: string },
+  ) => Promise<{ data: unknown[] | null; error: Error | null }>;
+
+  const rpcWithTenant = supabase.rpc as unknown as RpcWithTenant;
+  const { data, error } = await rpcWithTenant(
+    "get_whatsapp_connections_safe",
+    tenantId ? { _tenant_id: tenantId } : undefined,
+  );
   if (error) throw error;
   return (data ?? []) as SafeConnection[];
 }

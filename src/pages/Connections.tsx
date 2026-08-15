@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Smartphone, Plus, QrCode, RefreshCw, PlugZap, Power, Loader2, ShieldCheck, AlertCircle } from "lucide-react";
 import {
   listConnections,
@@ -22,8 +23,8 @@ const statusVariant = (status: string) =>
   status === "connected" ? "default" : status === "error" ? "destructive" : "secondary";
 
 const Connections = () => {
-  const { profile } = useAuth();
-  const tenantId = profile?.tenant_id;
+  const { profile, isSuperAdmin } = useAuth();
+  const profileTenantId = profile?.tenant_id;
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -31,10 +32,37 @@ const Connections = () => {
   const [name, setName] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [pending, setPending] = useState<string | null>(null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(profileTenantId ?? null);
+
+  const { data: tenants = [] } = useQuery({
+    queryKey: ["admin_tenants_for_whatsapp"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("id,name,status")
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: isSuperAdmin,
+  });
+
+  useEffect(() => {
+    if (profileTenantId) {
+      setSelectedTenantId(profileTenantId);
+      return;
+    }
+
+    if (isSuperAdmin && !selectedTenantId && tenants.length > 0) {
+      setSelectedTenantId(tenants[0].id);
+    }
+  }, [isSuperAdmin, profileTenantId, selectedTenantId, tenants]);
+
+  const tenantId = isSuperAdmin ? selectedTenantId : profileTenantId;
 
   const { data: connections = [], isLoading } = useQuery({
     queryKey: ["whatsapp_connections_safe", tenantId],
-    queryFn: listConnections,
+    queryFn: () => listConnections(tenantId),
     enabled: !!tenantId,
     refetchInterval: 20000,
   });
@@ -90,9 +118,29 @@ const Connections = () => {
             Múltiplos números por empresa, conectados por meio do n8n self-hosted.
           </p>
         </div>
+        {isSuperAdmin && (
+          <div className="w-full sm:w-80 space-y-2">
+            <Label>Empresa administrada</Label>
+            <Select value={selectedTenantId ?? ""} onValueChange={setSelectedTenantId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione a empresa" />
+              </SelectTrigger>
+              <SelectContent>
+                {tenants.map((tenant) => (
+                  <SelectItem key={tenant.id} value={tenant.id}>
+                    {tenant.name} {tenant.status !== "active" ? `(${tenant.status})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Como Super Admin, escolha a empresa antes de criar sessão, gerar QR ou sincronizar mensagens.
+            </p>
+          </div>
+        )}
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 mr-2" />Nova conexão</Button>
+            <Button disabled={!tenantId}><Plus className="h-4 w-4 mr-2" />Nova conexão</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Nova conexão</DialogTitle></DialogHeader>
@@ -128,7 +176,14 @@ const Connections = () => {
         </CardContent>
       </Card>
 
-      {isLoading ? (
+      {!tenantId ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Smartphone className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+            <p className="text-muted-foreground">Selecione uma empresa para cadastrar e conectar o WhatsApp.</p>
+          </CardContent>
+        </Card>
+      ) : isLoading ? (
         <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Carregando conexões...</div>
       ) : connections.length === 0 ? (
         <Card>
