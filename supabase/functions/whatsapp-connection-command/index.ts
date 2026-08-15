@@ -61,9 +61,43 @@ serve(async (req) => {
       return json({ success: true, connection_id: data.id });
     }
 
+    // SPECIAL COMMAND: Delete a connection entry
+    if (command === "delete_connection") {
+      if (!connectionId) return json({ error: "connection_id é obrigatório" }, 400);
+
+      let delQuery = svc.from("whatsapp_connections")
+        .select("id, tenant_id, name, status")
+        .eq("id", connectionId);
+      if (!auth.isSuperAdmin) delQuery = delQuery.eq("tenant_id", auth.tenantId);
+
+      const { data: target } = await delQuery.maybeSingle();
+      if (!target) return json({ error: "Conexão não encontrada" }, 404);
+
+      if (target.status === "connected" && body?.confirm_delete !== true) {
+        return json({ error: "confirm_delete_required" }, 409);
+      }
+
+      // Preserva o histórico: desvincula conversas e remove vínculos auxiliares
+      await svc.from("conversations")
+        .update({ whatsapp_connection_id: null })
+        .eq("whatsapp_connection_id", target.id);
+      await svc.from("connection_departments").delete().eq("connection_id", target.id);
+      await svc.from("user_connection_access").delete().eq("connection_id", target.id);
+      await svc.from("meta_whatsapp_configs").update({ connection_id: null }).eq("connection_id", target.id);
+
+      const { error: delError } = await svc.from("whatsapp_connections").delete().eq("id", target.id);
+      if (delError) {
+        console.error("Error deleting connection:", delError);
+        return json({ error: "Falha ao excluir conexão", details: delError.message }, 500);
+      }
+
+      return json({ success: true, deleted_id: target.id });
+    }
+
     if ((command === "disconnect" || command === "logout") && body?.confirm_disconnect !== true) {
       return json({ error: "confirm_disconnect_required" }, 409);
     }
+
 
     if (!command || !COMMAND_EVENTS[command]) return json({ error: "Comando inválido" }, 400);
     if (!connectionId) return json({ error: "connection_id é obrigatório" }, 400);
