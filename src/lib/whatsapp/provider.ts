@@ -61,6 +61,63 @@ export async function sendConnectionCommand(
   return data as { success: boolean; event_id?: string; warning?: string };
 }
 
+export async function deleteConnection(connectionId: string, options?: { confirmDelete?: boolean }) {
+  const { data, error } = await supabase.functions.invoke("whatsapp-connection-command", {
+    body: {
+      connection_id: connectionId,
+      command: "delete_connection",
+      confirm_delete: options?.confirmDelete === true,
+    },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.details || data.error);
+  return data as { success: boolean; deleted_id?: string };
+}
+
+export interface N8nDiagnostics {
+  tenant_id: string;
+  integration:
+    | { found: false }
+    | {
+        found: true;
+        name: string;
+        status: string;
+        scope: "tenant" | "global";
+        target: string | null;
+        last_success_at: string | null;
+        last_error_at: string | null;
+        last_error_message: string | null;
+      };
+  secret_configured: boolean;
+  outbox?: { pending: number; failed: number };
+  last_delivery?: {
+    created_at: string;
+    success: boolean;
+    http_status: number | null;
+    error_message: string | null;
+    duration_ms: number | null;
+  } | null;
+  last_inbound_event?: { received_at: string; event_type: string; processing_status: string } | null;
+  webhook?: {
+    reachable: boolean;
+    http_status?: number | null;
+    duration_ms?: number;
+    error?: string | null;
+    response_excerpt?: string | null;
+    target?: string | null;
+  };
+}
+
+export async function diagnoseN8n(tenantId?: string | null) {
+  const { data, error } = await supabase.functions.invoke("n8n-test-connection", {
+    body: { tenant_id: tenantId ?? null },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data as { success: boolean; diagnostics: N8nDiagnostics };
+}
+
+
 export async function sendMessage(params: {
   conversationId: string;
   content: string;
