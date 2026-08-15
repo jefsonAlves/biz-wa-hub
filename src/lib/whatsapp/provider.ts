@@ -13,7 +13,8 @@ export type ConnectionCommand =
   | "disconnect"
   | "reconnect"
   | "logout"
-  | "health_check";
+  | "health_check"
+  | "sync_messages";
 
 export interface SafeConnection {
   id: string;
@@ -41,9 +42,14 @@ export async function listConnections(): Promise<SafeConnection[]> {
 export async function sendConnectionCommand(
   connectionId: string,
   command: ConnectionCommand,
+  options: { confirmDisconnect?: boolean } = {},
 ) {
   const { data, error } = await supabase.functions.invoke("whatsapp-connection-command", {
-    body: { connection_id: connectionId, command },
+    body: {
+      connection_id: connectionId,
+      command,
+      confirm_disconnect: options.confirmDisconnect === true,
+    },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);

@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { authenticate, buildEvent, corsHeaders, deliverEvent, enqueueEvent, getIntegration, json, serviceClient } from "../_shared/n8n.ts";
+import { authenticate, buildEvent, corsHeaders, enqueueEvent, getIntegration, json, serviceClient } from "../_shared/n8n.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -119,28 +119,25 @@ serve(async (req) => {
 
     await enqueueEvent(svc, event, { type: "message", id: message.id });
 
-    await svc.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id);
+    const queuedAt = new Date().toISOString();
+    await svc.from("conversations").update({
+      last_message_at: queuedAt,
+      last_message_direction: "outgoing",
+      last_agent_message_at: queuedAt,
+      awaiting_reply: false,
+    }).eq("id", conversation.id);
     if (contactRow?.id && content) {
       await svc.from("contacts").update({ last_message_preview: content.slice(0, 100) }).eq("id", contactRow.id);
     }
 
     const integration = await getIntegration(svc, auth.tenantId);
-    if (!integration) {
-      return json({ success: true, queued: true, message_id: message.id, warning: "Integração n8n não configurada" });
-    }
-
-    const result = await deliverEvent(svc, event, integration);
-    await svc.from("event_outbox").update(
-      result.success
-        ? { status: "sent", attempts: 1, processed_at: new Date().toISOString() }
-        : { status: "pending", attempts: 1, last_error: result.error, next_retry_at: new Date(Date.now() + 30000).toISOString() },
-    ).eq("id", event.event_id);
-
-    await svc.from("messages")
-      .update({ delivery_status: result.success ? "queued" : "pending" })
-      .eq("id", message.id);
-
-    return json({ success: true, message_id: message.id, dispatched: result.success, error: result.error });
+    return json({
+      success: true,
+      queued: true,
+      event_id: event.event_id,
+      message_id: message.id,
+      warning: integration ? undefined : "Integração n8n não configurada",
+    }, 202);
   } catch (error) {
     console.error("whatsapp-send-message error:", error);
     return json({ error: error instanceof Error ? error.message : "erro interno" }, 500);

@@ -63,7 +63,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
          c.webhook_status,
          (c.credential_reference IS NOT NULL OR c.zapi_token IS NOT NULL) AS has_credentials,
          c.last_connected_at, c.last_disconnected_at, c.last_health_check_at,
-         left(coalesce(c.connection_error,''), 160) NULLIF_EMPTY_PLACEHOLDER,
+         nullif(left(coalesce(c.connection_error,''), 160), '') AS connection_error,
          c.created_at
   FROM public.whatsapp_connections c
   WHERE c.tenant_id = public.get_user_tenant_id();

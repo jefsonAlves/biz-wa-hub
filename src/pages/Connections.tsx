@@ -62,9 +62,13 @@ const Connections = () => {
   });
 
   const runCommand = async (connection: SafeConnection, command: ConnectionCommand) => {
+    const requiresConfirmation = command === "disconnect" || command === "logout";
+    if (requiresConfirmation && !window.confirm("Desconectar este WhatsApp? A sessão permanecerá ativa até sua confirmação.")) {
+      return;
+    }
     setPending(`${connection.id}:${command}`);
     try {
-      const res = await sendConnectionCommand(connection.id, command);
+      const res = await sendConnectionCommand(connection.id, command, { confirmDisconnect: requiresConfirmation });
       queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe"] });
       toast({
         title: res.warning ? "Comando enfileirado" : "Comando enviado ao n8n",
@@ -178,6 +182,9 @@ const Connections = () => {
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => runCommand(conn, "health_check")} disabled={busy("health_check")}>
                       <RefreshCw className={`h-3.5 w-3.5 mr-1 ${busy("health_check") ? "animate-spin" : ""}`} />Status
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => runCommand(conn, "sync_messages")} disabled={busy("sync_messages") || conn.status !== "connected"}>
+                      <RefreshCw className={`h-3.5 w-3.5 mr-1 ${busy("sync_messages") ? "animate-spin" : ""}`} />Atualizar mensagens
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => runCommand(conn, "disconnect")} disabled={busy("disconnect")}>
                       <Power className="h-3.5 w-3.5 mr-1" />Desconectar

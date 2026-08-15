@@ -209,10 +209,12 @@ export type Database = {
           metadata: Json | null
           name: string | null
           phone: string
+          quarantined_at: string | null
           tags: string[] | null
           tenant_id: string
           updated_at: string
           wa_chat_id: string | null
+          whatsapp_origin_verified: boolean
         }
         Insert: {
           avatar_url?: string | null
@@ -223,10 +225,12 @@ export type Database = {
           metadata?: Json | null
           name?: string | null
           phone: string
+          quarantined_at?: string | null
           tags?: string[] | null
           tenant_id: string
           updated_at?: string
           wa_chat_id?: string | null
+          whatsapp_origin_verified?: boolean
         }
         Update: {
           avatar_url?: string | null
@@ -237,10 +241,12 @@ export type Database = {
           metadata?: Json | null
           name?: string | null
           phone?: string
+          quarantined_at?: string | null
           tags?: string[] | null
           tenant_id?: string
           updated_at?: string
           wa_chat_id?: string | null
+          whatsapp_origin_verified?: boolean
         }
         Relationships: [
           {
@@ -257,13 +263,19 @@ export type Database = {
           ai_mode: string | null
           ai_paused: boolean
           assigned_agent_id: string | null
+          awaiting_reply: boolean
           closed_at: string | null
           contact_id: string
           created_at: string
           deal_value: number | null
           department_id: string | null
           id: string
+          is_pinned: boolean
+          last_agent_message_at: string | null
+          last_customer_message_at: string | null
+          last_message_direction: string | null
           last_message_at: string | null
+          pinned_at: string | null
           next_meeting: string | null
           sales_status: Database["public"]["Enums"]["sales_status"]
           status: Database["public"]["Enums"]["conversation_status"]
@@ -278,13 +290,19 @@ export type Database = {
           ai_mode?: string | null
           ai_paused?: boolean
           assigned_agent_id?: string | null
+          awaiting_reply?: boolean
           closed_at?: string | null
           contact_id: string
           created_at?: string
           deal_value?: number | null
           department_id?: string | null
           id?: string
+          is_pinned?: boolean
+          last_agent_message_at?: string | null
+          last_customer_message_at?: string | null
+          last_message_direction?: string | null
           last_message_at?: string | null
+          pinned_at?: string | null
           next_meeting?: string | null
           sales_status?: Database["public"]["Enums"]["sales_status"]
           status?: Database["public"]["Enums"]["conversation_status"]
@@ -299,13 +317,19 @@ export type Database = {
           ai_mode?: string | null
           ai_paused?: boolean
           assigned_agent_id?: string | null
+          awaiting_reply?: boolean
           closed_at?: string | null
           contact_id?: string
           created_at?: string
           deal_value?: number | null
           department_id?: string | null
           id?: string
+          is_pinned?: boolean
+          last_agent_message_at?: string | null
+          last_customer_message_at?: string | null
+          last_message_direction?: string | null
           last_message_at?: string | null
+          pinned_at?: string | null
           next_meeting?: string | null
           sales_status?: Database["public"]["Enums"]["sales_status"]
           status?: Database["public"]["Enums"]["conversation_status"]

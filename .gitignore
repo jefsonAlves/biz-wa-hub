@@ -27,3 +27,4 @@ infra/n8n/backups/
 *.njsproj
 *.sln
 *.sw?
+infra/n8n/scripts/current-public-url.txt

@@ -1,0 +1,89 @@
+{
+  "name": "Biz WA Hub - Evolution Event Receiver",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "biz-wa-hub/evolution",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "evolution-webhook",
+      "name": "Evolution Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "biz-wa-hub-evolution-events"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const crypto = require('crypto');\nconst http = require('http');\nconst https = require('https');\n\nconst input = $input.first().json;\nconst headers = Object.fromEntries(Object.entries(input.headers ?? {}).map(([key, value]) => [key.toLowerCase(), String(value)]));\nconst query = input.query ?? {};\nconst tenantId = headers['x-tenant-id'] ?? query.tenant_id ?? query.tenantId;\nconst connectionId = headers['x-connection-id'] ?? query.connection_id ?? query.connectionId;\nconst token = headers['x-evolution-webhook-token'] ?? query.token ?? '';\nconst payload = input.body ?? {};\nconst instanceName = String(payload.instance ?? payload.instanceName ?? headers['x-instance-name'] ?? query.instance ?? query.instanceName ?? '');\nconst uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nconst result = (statusCode, response) => [{ json: { statusCode, response } }];\nif (!uuid.test(tenantId ?? '') || !uuid.test(connectionId ?? '') || !instanceName || !token) return result(401, { ok: false, error: 'invalid_webhook_identity' });\nconst secret = $env.N8N_WEBHOOK_SECRET;\nif (!secret) return result(503, { ok: false, error: 'webhook_secret_not_configured' });\nconst expectedToken = crypto.createHmac('sha256', secret).update(`${tenantId}.${connectionId}.${instanceName}`).digest('hex');\nconst expectedBytes = Buffer.from(expectedToken, 'hex');\nconst tokenBytes = /^[0-9a-f]{64}$/i.test(token) ? Buffer.from(token, 'hex') : Buffer.alloc(0);\nif (expectedBytes.length !== tokenBytes.length || !crypto.timingSafeEqual(expectedBytes, tokenBytes)) return result(401, { ok: false, error: 'invalid_webhook_token' });\n\nconst requestJson = (method, urlString, requestHeaders = {}, body) => new Promise((resolve, reject) => {\n  const bodyText = body === undefined ? null : (typeof body === 'string' ? body : JSON.stringify(body));\n  const transport = urlString.startsWith('https://') ? https : http;\n  const request = transport.request(urlString, { method, headers: { ...requestHeaders, ...(bodyText ? { 'Content-Length': Buffer.byteLength(bodyText) } : {}) } }, response => {\n    response.resume();\n    response.on('end', () => resolve({ ok: (response.statusCode ?? 0) >= 200 && (response.statusCode ?? 0) < 300, status: response.statusCode ?? 0 }));\n  });\n  request.setTimeout(30000, () => request.destroy(new Error('request_timeout')));\n  request.on('error', reject);\n  if (bodyText) request.write(bodyText);\n  request.end();\n});\n\nconst callback = async (eventType, data) => {\n  const callbackId = crypto.randomUUID();\n  const body = JSON.stringify({ event_id: callbackId, event_type: eventType, tenant_id: tenantId, connection_id: connectionId, conversation_id: null, occurred_at: new Date().toISOString(), source: 'n8n', version: 1, data });\n  const timestamp = String(Math.floor(Date.now() / 1000));\n  const signature = crypto.createHmac('sha256', secret).update(`${timestamp}.${callbackId}.${body}`).digest('hex');\n  return requestJson('POST', $env.SUPABASE_URL.replace(/\\/+$/, '') + '/functions/v1/n8n-webhook-receiver', { 'Content-Type': 'application/json', 'X-Tenant-Id': tenantId, 'X-Event-Id': callbackId, 'X-Timestamp': timestamp, 'X-Signature': signature }, body);\n};\n\ntry {\n  const eventName = String(payload.event ?? payload.event_type ?? '').toLowerCase().replace(/_/g, '.');\n  const data = payload.data ?? {};\n  if (eventName === 'messages.upsert') {\n    const messagePayload = Array.isArray(data.messages) ? data.messages[0] : data;\n    const key = messagePayload.key ?? {};\n    const remoteJid = String(key.remoteJid ?? messagePayload.remoteJid ?? data.remoteJid ?? '');\n    if (!remoteJid || remoteJid === 'status@broadcast' || remoteJid.endsWith('@newsletter')) return result(202, { ok: true, ignored: 'unsupported_chat' });\n    const message = messagePayload.message ?? {};\n    const media = message.imageMessage ?? message.audioMessage ?? message.videoMessage ?? message.documentMessage ?? message.stickerMessage ?? null;\n    const content = message.conversation ?? message.extendedTextMessage?.text ?? message.imageMessage?.caption ?? message.videoMessage?.caption ?? message.documentMessage?.caption ?? '';\n    const messageType = message.imageMessage ? 'image' : message.audioMessage ? 'audio' : message.videoMessage ? 'video' : message.documentMessage ? 'document' : message.stickerMessage ? 'sticker' : message.locationMessage ? 'location' : 'text';\n    const mediaBase64 = payload.base64 ?? data.base64 ?? media?.base64 ?? null;\n    const location = message.locationMessage ? JSON.stringify({ latitude: message.locationMessage.degreesLatitude, longitude: message.locationMessage.degreesLongitude }) : null;\n    const response = await callback('whatsapp.message.received', {\n      chat_id: remoteJid,\n      phone: remoteJid.split('@')[0].replace(/\\D/g, ''),\n      name: messagePayload.pushName ?? messagePayload.notifyName ?? data.pushName ?? data.notifyName ?? null,\n      content: location ?? String(content),\n      from_me: key.fromMe === true,\n      direction: key.fromMe === true ? 'outgoing' : 'incoming',\n      message_type: messageType,\n      media_url: mediaBase64 ? null : (media?.url ?? null),\n      media_base64: mediaBase64,\n      media_mime_type: media?.mimetype ?? null,\n      file_name: media?.fileName ?? null,\n      provider_message_id: key.id ?? messagePayload.id ?? data.id ?? null,\n      occurred_at: messagePayload.messageTimestamp ? new Date(Number(messagePayload.messageTimestamp) * 1000).toISOString() : new Date().toISOString(),\n      session_id: instanceName,\n    });\n    if (!response.ok) throw new Error(`callback_http_${response.status}`);\n    return result(202, { ok: true, accepted: true, event_type: 'whatsapp.message.received' });\n  }\n  if (eventName === 'connection.update') {\n    const state = String(data.state ?? data.status ?? '').toLowerCase();\n    const eventType = (state === 'open' || state === 'connected') ? 'whatsapp.connection.connected' : (state === 'close' || state === 'disconnected') ? 'whatsapp.connection.disconnected' : 'whatsapp.connection.creating';\n    const response = await callback(eventType, { state, session_id: instanceName, phone_number: data.wuid?.split('@')[0] ?? null });\n    if (!response.ok) throw new Error(`callback_http_${response.status}`);\n    return result(202, { ok: true, accepted: true, event_type: eventType });\n  }\n  if (eventName === 'qrcode.updated') {\n    const qr = data.base64 ?? data.qrcode?.base64 ?? data.qrcode ?? data.code ?? null;\n    if (!qr) return result(202, { ok: true, ignored: 'empty_qr' });\n    const response = await callback('whatsapp.connection.qr.generated', { qr_code: qr, expires_at: new Date(Date.now() + 120000).toISOString(), session_id: instanceName });\n    if (!response.ok) throw new Error(`callback_http_${response.status}`);\n    return result(202, { ok: true, accepted: true, event_type: 'whatsapp.connection.qr.generated' });\n  }\n  return result(202, { ok: true, ignored: 'unsupported_event' });\n} catch (error) {\n  return result(502, { ok: false, error: error instanceof Error ? error.message : 'unknown_error' });\n}\n"
+      },
+      "id": "normalize-and-callback",
+      "name": "Validate Evolution and Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.response }}",
+        "options": {
+          "responseCode": "={{ $json.statusCode }}"
+        }
+      },
+      "id": "return-result",
+      "name": "Return Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        520,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Evolution Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Evolution and Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Evolution and Callback": {
+      "main": [
+        [
+          {
+            "node": "Return Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "2a66a08e-6dbb-4db1-942f-c01d65116852",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

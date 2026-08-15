@@ -1,0 +1,87 @@
+{
+  "name": "Biz WA Hub - WhatsApp Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "biz-wa-hub/platform",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "9c8bd2b0-6e59-4b88-8cf3-834cd8db25b7",
+      "name": "Platform Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -360,
+        0
+      ],
+      "webhookId": "aa94667f-7f72-4928-9ae0-ce18f88327bd"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\nconst input = $input.first().json;\nconst headers = Object.fromEntries(\n  Object.entries(input.headers ?? {}).map(([key, value]) => [key.toLowerCase(), String(value)]),\n);\nconst tenantId = headers['x-tenant-id'];\nconst eventId = headers['x-event-id'];\nconst timestamp = headers['x-timestamp'];\nconst signature = (headers['x-signature'] ?? '').toLowerCase();\nconst rawBody = typeof input.rawBody === 'string' ? input.rawBody : JSON.stringify(input.body ?? {});\nconst result = (statusCode, response) => [{ json: { statusCode, response } }];\nconst uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\n\nif (!tenantId || !eventId || !timestamp || !signature) {\n  return result(400, { ok: false, error: 'missing_headers' });\n}\nif (!uuid.test(tenantId) || !uuid.test(eventId)) {\n  return result(400, { ok: false, error: 'invalid_identifiers' });\n}\nif (Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp)) > 300) {\n  return result(401, { ok: false, error: 'expired_timestamp' });\n}\n\nconst secret = $env.N8N_WEBHOOK_SECRET;\nif (!secret) return result(503, { ok: false, error: 'webhook_secret_not_configured' });\n\nconst expected = crypto.createHmac('sha256', secret).update(`${timestamp}.${eventId}.${rawBody}`).digest('hex');\nconst expectedBytes = Buffer.from(expected, 'hex');\nconst signatureBytes = /^[0-9a-f]{64}$/.test(signature) ? Buffer.from(signature, 'hex') : Buffer.alloc(0);\nif (expectedBytes.length !== signatureBytes.length || !crypto.timingSafeEqual(expectedBytes, signatureBytes)) {\n  return result(401, { ok: false, error: 'invalid_signature' });\n}\n\nlet event;\ntry {\n  event = JSON.parse(rawBody);\n} catch {\n  return result(400, { ok: false, error: 'invalid_json' });\n}\nif (event.tenant_id !== tenantId || event.event_id !== eventId || typeof event.event_type !== 'string') {\n  return result(400, { ok: false, error: 'invalid_event' });\n}\nif (event.event_type === 'system.integration.test') {\n  return result(202, { ok: true, accepted: true, event_id: eventId });\n}\n\nconst supported = new Set([\n  'whatsapp.connection.create',\n  'whatsapp.connection.qr.request',\n  'whatsapp.connection.status.request',\n  'whatsapp.connection.disconnect',\n  'whatsapp.connection.reconnect',\n  'whatsapp.connection.delete',\n  'whatsapp.messages.sync.request',\n  'whatsapp.message.send',\n]);\nif (!supported.has(event.event_type)) {\n  return result(202, { ok: true, accepted: true, event_id: eventId, ignored: true, reason: 'unsupported_event_type' });\n}\nif (!event.connection_id || !uuid.test(event.connection_id)) {\n  return result(400, { ok: false, error: 'connection_id_required' });\n}\n\nconst apiBase = ($env.EVOLUTION_API_URL || '').replace(/\\/+$/, '');\nconst apiKey = $env.EVOLUTION_API_KEY;\nconst publicN8nUrl = ($env.WEBHOOK_URL || $env.N8N_PUBLIC_URL || '').replace(/\\/+$/, '');\nif (!apiBase || !apiKey) return result(503, { ok: false, error: 'evolution_not_configured' });\n\nconst instanceName = event.data?.provider_instance_id || event.data?.provider_session_id || `bizwa_${event.connection_id.replace(/-/g, '')}`;\nconst webhookToken = crypto.createHmac('sha256', secret).update(`${tenantId}.${event.connection_id}.${instanceName}`).digest('hex');\n\nconst parseJson = (text) => {\n  try {\n    return text ? JSON.parse(text) : {};\n  } catch {\n    return { raw: String(text || '').slice(0, 500) };\n  }\n};\n\nconst evo = async (method, path, body) => {\n  const response = await fetch(apiBase + path, {\n    method,\n    headers: { apikey: apiKey, 'Content-Type': 'application/json' },\n    body: body === undefined ? undefined : JSON.stringify(body),\n  });\n  const text = await response.text();\n  return { ok: response.ok, status: response.status, data: parseJson(text), text };\n};\n\nconst evoAny = async (attempts) => {\n  const errors = [];\n  for (const attempt of attempts) {\n    const response = await evo(attempt.method, attempt.path, attempt.body);\n    if (response.ok) return response;\n    errors.push(`${attempt.method} ${attempt.path} -> ${response.status}`);\n    if (![404, 405, 400].includes(response.status)) break;\n  }\n  return { ok: false, status: 0, data: { errors }, text: errors.join('; ') };\n};\n\nconst callback = async (eventType, data) => {\n  const callbackId = crypto.randomUUID();\n  const body = JSON.stringify({\n    event_id: callbackId,\n    event_type: eventType,\n    tenant_id: tenantId,\n    connection_id: event.connection_id,\n    conversation_id: event.conversation_id ?? null,\n    occurred_at: new Date().toISOString(),\n    source: 'n8n',\n    version: 1,\n    data,\n  });\n  const ts = String(Math.floor(Date.now() / 1000));\n  const sig = crypto.createHmac('sha256', secret).update(`${ts}.${callbackId}.${body}`).digest('hex');\n  const response = await fetch($env.SUPABASE_URL.replace(/\\/+$/, '') + '/functions/v1/n8n-webhook-receiver', {\n    method: 'POST',\n    headers: {\n      'Content-Type': 'application/json',\n      'X-Tenant-Id': tenantId,\n      'X-Event-Id': callbackId,\n      'X-Timestamp': ts,\n      'X-Signature': sig,\n    },\n    body,\n  });\n  return { ok: response.ok, status: response.status, event_id: callbackId };\n};\n\nconst extractArray = (payload, keys) => {\n  if (Array.isArray(payload)) return payload;\n  for (const key of keys) {\n    const value = payload?.[key];\n    if (Array.isArray(value)) return value;\n    if (Array.isArray(value?.records)) return value.records;\n    if (Array.isArray(value?.data)) return value.data;\n  }\n  if (Array.isArray(payload?.data)) return payload.data;\n  if (Array.isArray(payload?.response)) return payload.response;\n  return [];\n};\n\nconst messageContent = (message) => {\n  const body = message.message ?? message;\n  return body.conversation\n    ?? body.extendedTextMessage?.text\n    ?? body.imageMessage?.caption\n    ?? body.videoMessage?.caption\n    ?? body.documentMessage?.caption\n    ?? message.text\n    ?? message.body\n    ?? message.content\n    ?? '';\n};\n\nconst normalizeMessage = (message) => {\n  const key = message.key ?? {};\n  const remoteJid = String(key.remoteJid ?? message.remoteJid ?? message.chatId ?? message.chat_id ?? message.from ?? '');\n  if (!remoteJid || remoteJid === 'status@broadcast' || remoteJid.endsWith('@newsletter')) return null;\n  const body = message.message ?? message;\n  const media = body.imageMessage ?? body.audioMessage ?? body.videoMessage ?? body.documentMessage ?? body.stickerMessage ?? null;\n  const messageType = body.imageMessage ? 'image'\n    : body.audioMessage ? 'audio'\n      : body.videoMessage ? 'video'\n        : body.documentMessage ? 'document'\n          : body.stickerMessage ? 'sticker'\n            : body.locationMessage ? 'location'\n              : 'text';\n  const timestampValue = message.messageTimestamp ?? message.timestamp ?? message.createdAt ?? message.messageTimestampLong;\n  const timestampMs = typeof timestampValue === 'number'\n    ? (timestampValue > 9999999999 ? timestampValue : timestampValue * 1000)\n    : Date.parse(String(timestampValue || ''));\n  return {\n    chat_id: remoteJid,\n    phone: remoteJid.split('@')[0].replace(/\\D/g, ''),\n    name: message.pushName ?? message.notifyName ?? message.name ?? null,\n    content: String(messageContent(message)),\n    from_me: key.fromMe === true || message.fromMe === true,\n    direction: key.fromMe === true || message.fromMe === true ? 'outgoing' : 'incoming',\n    message_type: messageType,\n    media_url: media?.url ?? message.media_url ?? null,\n    media_base64: message.base64 ?? media?.base64 ?? null,\n    media_mime_type: media?.mimetype ?? message.media_mime_type ?? null,\n    file_name: media?.fileName ?? message.fileName ?? null,\n    provider_message_id: key.id ?? message.id ?? message.messageId ?? null,\n    is_unread: message.unread === true || message.is_unread === true,\n    occurred_at: Number.isFinite(timestampMs) ? new Date(timestampMs).toISOString() : new Date().toISOString(),\n    session_id: instanceName,\n  };\n};\n\nconst normalizeChat = (chat) => {\n  const chatId = String(chat.id ?? chat.remoteJid ?? chat.chatId ?? chat.chat_id ?? '');\n  if (!chatId || chatId === 'status@broadcast' || chatId.endsWith('@newsletter')) return null;\n  const last = chat.lastMessage ?? chat.messages?.[0] ?? {};\n  return {\n    chat_id: chatId,\n    phone: chatId.split('@')[0].replace(/\\D/g, ''),\n    name: chat.name ?? chat.pushName ?? chat.subject ?? chat.verifiedName ?? null,\n    avatar_url: chat.profilePicUrl ?? chat.picture ?? chat.avatar_url ?? null,\n    last_message_preview: String(chat.lastMessagePreview ?? chat.preview ?? messageContent(last) ?? '').slice(0, 100),\n    is_pinned: chat.pinned === true,\n    is_archived: chat.archived === true,\n    unread_count: Number(chat.unreadCount ?? chat.unread_count ?? 0) || 0,\n  };\n};\n\nconst configureWebhook = async () => {\n  if (!publicN8nUrl) return { ok: false, skipped: true, reason: 'WEBHOOK_URL_missing' };\n  const url = `${publicN8nUrl}/webhook/biz-wa-hub/evolution?tenant_id=${encodeURIComponent(tenantId)}&connection_id=${encodeURIComponent(event.connection_id)}&token=${encodeURIComponent(webhookToken)}`;\n  const body = {\n    webhook: {\n      enabled: true,\n      url,\n      webhook_by_events: false,\n      webhook_base64: true,\n      events: ['QRCODE_UPDATED', 'CONNECTION_UPDATE', 'MESSAGES_UPSERT'],\n    },\n    enabled: true,\n    url,\n    webhook_by_events: false,\n    webhook_base64: true,\n    events: ['QRCODE_UPDATED', 'CONNECTION_UPDATE', 'MESSAGES_UPSERT'],\n  };\n  return evoAny([\n    { method: 'POST', path: `/webhook/set/${encodeURIComponent(instanceName)}`, body },\n    { method: 'POST', path: `/webhook/${encodeURIComponent(instanceName)}`, body },\n  ]);\n};\n\nconst syncMessages = async () => {\n  const chatsResponse = await evoAny([\n    { method: 'POST', path: `/chat/findChats/${encodeURIComponent(instanceName)}`, body: { where: {} } },\n    { method: 'GET', path: `/chat/findChats/${encodeURIComponent(instanceName)}` },\n  ]);\n  const messagesResponse = await evoAny([\n    { method: 'POST', path: `/chat/findMessages/${encodeURIComponent(instanceName)}`, body: { where: {}, limit: 300 } },\n    { method: 'POST', path: `/chat/findMessages/${encodeURIComponent(instanceName)}`, body: { limit: 300 } },\n    { method: 'GET', path: `/chat/findMessages/${encodeURIComponent(instanceName)}` },\n  ]);\n  const contacts = extractArray(chatsResponse.data, ['chats', 'contacts', 'data']).map(normalizeChat).filter(Boolean);\n  const messages = extractArray(messagesResponse.data, ['messages', 'records', 'data']).map(normalizeMessage).filter(Boolean);\n  const cb = await callback('whatsapp.sync.batch', {\n    contacts,\n    messages,\n    provider: 'evolution',\n    session_id: instanceName,\n    chats_status: chatsResponse.status,\n    messages_status: messagesResponse.status,\n    chats_error: chatsResponse.ok ? null : chatsResponse.data?.errors ?? chatsResponse.text,\n    messages_error: messagesResponse.ok ? null : messagesResponse.data?.errors ?? messagesResponse.text,\n  });\n  if (!cb.ok) throw new Error(`callback_http_${cb.status}`);\n  return result(202, {\n    ok: true,\n    accepted: true,\n    event_id: eventId,\n    callback_event_id: cb.event_id,\n    event_type: 'whatsapp.sync.batch',\n    contacts: contacts.length,\n    messages: messages.length,\n  });\n};\n\ntry {\n  let operation;\n  if (event.event_type === 'whatsapp.messages.sync.request') {\n    return await syncMessages();\n  }\n  if (event.event_type === 'whatsapp.message.send') {\n    const chatId = String(event.data?.chat_id ?? '');\n    const text = String(event.data?.content ?? event.data?.text ?? '');\n    if (!chatId || !text) throw new Error('send_message_missing_chat_or_text');\n    operation = await evo('POST', `/message/sendText/${encodeURIComponent(instanceName)}`, { number: chatId, text });\n    if (!operation.ok) throw new Error(`send_text_http_${operation.status}`);\n    const cb = await callback('whatsapp.message.sent', {\n      provider_message_id: operation.data?.key?.id ?? operation.data?.id ?? null,\n      local_message_id: event.data?.local_message_id ?? null,\n      chat_id: chatId,\n      content: text,\n      session_id: instanceName,\n    });\n    if (!cb.ok) throw new Error(`callback_http_${cb.status}`);\n    return result(202, { ok: true, accepted: true, event_id: eventId, callback_event_id: cb.event_id });\n  }\n  if (event.event_type === 'whatsapp.connection.create') {\n    await callback('whatsapp.connection.creating', { session_id: instanceName, state: 'creating' });\n    operation = await evo('POST', '/instance/create', { instanceName, qrcode: true, integration: 'WHATSAPP-BAILEYS' });\n    if (!operation.ok && ![403, 409].includes(operation.status)) throw new Error(`create_http_${operation.status}`);\n    await configureWebhook();\n    operation = await evo('GET', `/instance/connect/${encodeURIComponent(instanceName)}`);\n  } else if (event.event_type === 'whatsapp.connection.qr.request' || event.event_type === 'whatsapp.connection.reconnect') {\n    await configureWebhook();\n    operation = await evo('GET', `/instance/connect/${encodeURIComponent(instanceName)}`);\n  } else if (event.event_type === 'whatsapp.connection.status.request') {\n    operation = await evo('GET', `/instance/connectionState/${encodeURIComponent(instanceName)}`);\n  } else if (event.event_type === 'whatsapp.connection.disconnect') {\n    operation = await evo('DELETE', `/instance/logout/${encodeURIComponent(instanceName)}`);\n  } else {\n    operation = await evo('DELETE', `/instance/delete/${encodeURIComponent(instanceName)}`);\n  }\n  if (!operation.ok) throw new Error(`evolution_http_${operation.status}`);\n  const qr = operation.data?.base64 ?? operation.data?.qrcode?.base64 ?? operation.data?.qrcode ?? operation.data?.code ?? null;\n  const state = String(operation.data?.instance?.state ?? operation.data?.state ?? operation.data?.instance?.status ?? '').toLowerCase();\n  let callbackType = 'whatsapp.connection.creating';\n  if (qr) callbackType = 'whatsapp.connection.qr.generated';\n  else if (state === 'open' || state === 'connected') callbackType = 'whatsapp.connection.connected';\n  else if (event.event_type === 'whatsapp.connection.disconnect' || event.event_type === 'whatsapp.connection.delete') callbackType = 'whatsapp.connection.disconnected';\n  const cb = await callback(callbackType, {\n    qr_code: qr,\n    expires_at: qr ? new Date(Date.now() + 120000).toISOString() : null,\n    session_id: instanceName,\n    state,\n  });\n  if (!cb.ok) throw new Error(`callback_http_${cb.status}`);\n  return result(202, { ok: true, accepted: true, event_id: eventId, callback_event_id: cb.event_id, event_type: callbackType });\n} catch (error) {\n  const message = error instanceof Error ? error.message : 'unknown_error';\n  try {\n    await callback('whatsapp.connection.error', { message, session_id: instanceName });\n  } catch {}\n  return result(502, { ok: false, error: message, event_id: eventId });\n}\n"
+      },
+      "id": "cb397bb7-bf7a-48fe-aa66-7cd82ac54cd3",
+      "name": "Validate HMAC and Run WhatsApp",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.response }}",
+        "options": {
+          "responseCode": "={{ $json.statusCode }}"
+        }
+      },
+      "id": "00c8b09f-90c2-4d58-b3a7-ab02a51daa49",
+      "name": "Return Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        180,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Platform Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate HMAC and Run WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate HMAC and Run WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Return Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true
+  },
+  "active": false,
+  "tags": []
+}

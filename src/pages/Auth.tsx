@@ -72,7 +72,8 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [documentType, setDocumentType] = useState<"cpf" | "cnpj">("cpf");
+  const [companyName, setCompanyName] = useState("");
+  const [documentType, setDocumentType] = useState<"mei" | "cnpj">("cnpj");
   const [documentNumber, setDocumentNumber] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -92,14 +93,14 @@ const Auth = () => {
   }, [user, loading, navigate, nextPath]);
 
   const handleDocumentChange = (value: string) => {
-    if (documentType === "cpf") {
+    if (documentType === "mei") {
       setDocumentNumber(formatCPF(value));
     } else {
       setDocumentNumber(formatCNPJ(value));
     }
   };
 
-  const handleDocumentTypeChange = (value: "cpf" | "cnpj") => {
+  const handleDocumentTypeChange = (value: "mei" | "cnpj") => {
     setDocumentType(value);
     setDocumentNumber("");
   };
@@ -135,7 +136,7 @@ const Auth = () => {
           return;
         }
         const rawDigits = documentNumber.replace(/\D/g, "");
-        if (documentType === "cpf" && !validateCPF(rawDigits)) {
+        if (documentType === "mei" && !validateCPF(rawDigits)) {
           toast({ title: "CPF inválido", description: "Verifique o CPF informado.", variant: "destructive" });
           setIsLoading(false);
           return;
@@ -145,7 +146,7 @@ const Auth = () => {
           setIsLoading(false);
           return;
         }
-        const { error } = await signUp(email, password, fullName, documentType, rawDigits);
+        const { error } = await signUp(email, password, fullName, companyName, documentType, rawDigits);
         if (error) {
           let msg = error.message;
           if (error.message.includes("already registered")) msg = "Este email já está cadastrado. Tente fazer login.";
@@ -212,24 +213,36 @@ const Auth = () => {
                   </div>
                 </div>
 
+                <div className="space-y-2">
+                  <Label htmlFor="companyName">Nome da empresa</Label>
+                  <Input
+                    id="companyName"
+                    type="text"
+                    placeholder="Razão social ou nome empresarial"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    required
+                  />
+                </div>
+
                 {/* Tipo de pessoa */}
                 <div className="space-y-2">
-                  <Label>Tipo de pessoa</Label>
+                  <Label>Tipo de empresa</Label>
                   <RadioGroup
                     value={documentType}
-                    onValueChange={(v) => handleDocumentTypeChange(v as "cpf" | "cnpj")}
+                    onValueChange={(v) => handleDocumentTypeChange(v as "mei" | "cnpj")}
                     className="flex gap-6"
                   >
                     <div className="flex items-center gap-2">
-                      <RadioGroupItem value="cpf" id="pf" />
-                      <Label htmlFor="pf" className="cursor-pointer font-normal">
-                        Pessoa Física (CPF)
+                      <RadioGroupItem value="cnpj" id="pj" />
+                      <Label htmlFor="pj" className="cursor-pointer font-normal">
+                        Empresa (CNPJ)
                       </Label>
                     </div>
                     <div className="flex items-center gap-2">
-                      <RadioGroupItem value="cnpj" id="pj" />
-                      <Label htmlFor="pj" className="cursor-pointer font-normal">
-                        Pessoa Jurídica (CNPJ)
+                      <RadioGroupItem value="mei" id="mei" />
+                      <Label htmlFor="mei" className="cursor-pointer font-normal">
+                        MEI (CPF do titular)
                       </Label>
                     </div>
                   </RadioGroup>
@@ -238,7 +251,7 @@ const Auth = () => {
                 {/* CPF ou CNPJ */}
                 <div className="space-y-2">
                   <Label htmlFor="document">
-                    {documentType === "cpf" ? "CPF" : "CNPJ"}
+                    {documentType === "mei" ? "CPF do titular MEI" : "CNPJ"}
                   </Label>
                   <div className="relative">
                     <FileText className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -246,7 +259,7 @@ const Auth = () => {
                       id="document"
                       type="text"
                       inputMode="numeric"
-                      placeholder={documentType === "cpf" ? "000.000.000-00" : "00.000.000/0000-00"}
+                      placeholder={documentType === "mei" ? "000.000.000-00" : "00.000.000/0000-00"}
                       value={documentNumber}
                       onChange={(e) => handleDocumentChange(e.target.value)}
                       className="pl-10"

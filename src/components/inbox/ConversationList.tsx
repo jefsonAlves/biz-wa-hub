@@ -3,7 +3,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, ChevronLeft, ChevronRight, Filter } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Filter, Pin, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
@@ -30,6 +30,10 @@ const filterTabs = [
   { key: "all", label: "Todos" },
   { key: "open", label: "Abertos" },
   { key: "waiting", label: "Pendentes" },
+  { key: "unread", label: "Não lidas" },
+  { key: "awaiting", label: "Aguardando" },
+  { key: "answered", label: "Respondidas" },
+  { key: "archived", label: "Arquivadas" },
   { key: "mine", label: "Meus" },
   { key: "unassigned", label: "Sem agente" },
 ];
@@ -167,7 +171,7 @@ export function ConversationList({
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
-                    <span className={cn("font-medium text-sm truncate", unread > 0 && "font-semibold text-foreground")}>{name}</span>
+                    <span className={cn("flex min-w-0 items-center gap-1 font-medium text-sm", unread > 0 && "font-semibold text-foreground")}>{conv.is_pinned && <Pin className="h-3 w-3 flex-shrink-0 fill-current" />}<span className="truncate">{name}</span></span>
                     <span className="text-xs text-muted-foreground flex-shrink-0">{time}</span>
                   </div>
                   <p className="text-xs text-muted-foreground truncate mt-0.5">{preview || phone}</p>
@@ -178,6 +182,7 @@ export function ConversationList({
                     {conv.departments?.name && (
                       <Badge variant="secondary" className="text-xs py-0 h-4">{conv.departments.name}</Badge>
                     )}
+                    {conv.status === "archived" && <Badge variant="outline" className="text-xs py-0 h-4"><Archive className="mr-1 h-3 w-3" />Arquivada</Badge>}
                     {unread > 0 && (
                       <Badge className="text-xs py-0 h-4 ml-auto">{unread}</Badge>
                     )}

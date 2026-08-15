@@ -26,10 +26,15 @@ assert.notEqual(
   crypto.createHmac("sha256", secret).update(`${timestamp}.${eventId}.${rawBody}x`).digest("hex"),
   signature,
 );
+assert.equal(
+  crypto.timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(signature, "hex")),
+  true,
+);
+assert.equal(/^[0-9a-f]{64}$/.test(signature), true);
 
 const workflowDirectory = new URL("../infra/n8n/workflows/", import.meta.url);
 const workflowFiles = fs.readdirSync(workflowDirectory).filter((name) => name.endsWith(".json"));
-assert.equal(workflowFiles.length, 3);
+assert.ok(workflowFiles.length >= 3);
 
 for (const name of workflowFiles) {
   const text = fs.readFileSync(new URL(name, workflowDirectory), "utf8");
@@ -39,5 +44,21 @@ for (const name of workflowFiles) {
   assert.ok(Array.isArray(workflow.nodes) && workflow.nodes.length > 0);
   assert.doesNotMatch(text, /(?:sk-|AIza|service_role.{0,20}eyJ)/i);
 }
+
+const outboxWorker = fs.readFileSync(
+  new URL("../supabase/functions/process-event-outbox/index.ts", import.meta.url),
+  "utf8",
+);
+assert.match(outboxWorker, /rpc\("claim_event_outbox"/);
+assert.doesNotMatch(outboxWorker, /\.from\("event_outbox"\)\s*\.select\("\*"\)/);
+assert.match(outboxWorker, /authorization !== `Bearer \$\{serviceRoleKey\}`/);
+
+const cronMigration = fs.readFileSync(
+  new URL("../supabase/migrations/20260801183100_event_outbox_cron.sql", import.meta.url),
+  "utf8",
+);
+assert.match(cronMigration, /biz-wa-hub-process-event-outbox/);
+assert.match(cronMigration, /vault\.decrypted_secrets/);
+assert.doesNotMatch(cronMigration, /eyJ[A-Za-z0-9_-]{20,}/);
 
 console.log("HMAC contract and sanitized workflow exports: OK");

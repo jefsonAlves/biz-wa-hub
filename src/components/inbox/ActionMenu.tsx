@@ -11,7 +11,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Calendar, Tag, ArrowLeftRight, CheckSquare } from "lucide-react";
+import { Plus, Calendar, ArrowLeftRight, CheckSquare, Pin, PinOff, Archive, ArchiveRestore } from "lucide-react";
 
 interface ActionMenuProps {
   conversation: any;
@@ -72,6 +72,21 @@ export function ActionMenu({ conversation, departments, tenantId, onStatusChange
     },
   });
 
+  const togglePin = useMutation({
+    mutationFn: async () => {
+      const shouldPin = !conversation.is_pinned;
+      const { error } = await supabase.from("conversations").update({
+        is_pinned: shouldPin,
+        pinned_at: shouldPin ? new Date().toISOString() : null,
+      }).eq("id", conversation.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast({ title: conversation.is_pinned ? "Conversa desafixada" : "Conversa fixada" });
+    },
+  });
+
   const transferToDept = useMutation({
     mutationFn: async (deptId: string) => {
       const { error } = await supabase.from("conversations").update({
@@ -97,6 +112,14 @@ export function ActionMenu({ conversation, departments, tenantId, onStatusChange
           <DropdownMenuItem onClick={() => setScheduleOpen(true)}>
             <Calendar className="h-4 w-4 mr-2" />
             Agendar mensagem
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => togglePin.mutate()}>
+            {conversation.is_pinned ? <PinOff className="h-4 w-4 mr-2" /> : <Pin className="h-4 w-4 mr-2" />}
+            {conversation.is_pinned ? "Desafixar conversa" : "Fixar conversa"}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => changeStatus.mutate(conversation.status === "archived" ? "open" : "archived")}>
+            {conversation.status === "archived" ? <ArchiveRestore className="h-4 w-4 mr-2" /> : <Archive className="h-4 w-4 mr-2" />}
+            {conversation.status === "archived" ? "Desarquivar" : "Arquivar conversa"}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => changeStatus.mutate("waiting")}>
