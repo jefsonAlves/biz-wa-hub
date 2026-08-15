@@ -250,7 +250,15 @@ const Connections = () => {
             Múltiplos números por empresa, conectados por meio do n8n self-hosted.
           </p>
         </div>
+        <div className="flex items-center gap-2">
+        <Button variant="outline" onClick={runDiagnostics} disabled={!effectiveTenantId || diagnoseMutation.isPending}>
+          {diagnoseMutation.isPending
+            ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            : <Activity className="h-4 w-4 mr-2" />}
+          Diagnosticar n8n
+        </Button>
         <Dialog open={open} onOpenChange={setOpen}>
+
           <DialogTrigger asChild>
             <Button disabled={!effectiveTenantId}>
               <Plus className="h-4 w-4 mr-2" />Nova conexão
