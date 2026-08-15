@@ -1746,26 +1746,48 @@ export type Database = {
       }
       get_my_permissions: { Args: never; Returns: string[] }
       get_user_tenant_id: { Args: never; Returns: string }
-      get_whatsapp_connections_safe: {
-        Args: never
-        Returns: {
-          connection_error: string
-          created_at: string
-          has_credentials: boolean
-          id: string
-          last_connected_at: string
-          last_disconnected_at: string
-          last_health_check_at: string
-          name: string
-          phone_number: string
-          provider_type: string
-          qr_code: string
-          qr_expires_at: string
-          qr_status: string
-          status: string
-          webhook_status: string
-        }[]
-      }
+      get_whatsapp_connections_safe:
+        | {
+            Args: never
+            Returns: {
+              connection_error: string
+              created_at: string
+              has_credentials: boolean
+              id: string
+              last_connected_at: string
+              last_disconnected_at: string
+              last_health_check_at: string
+              name: string
+              phone_number: string
+              provider_type: string
+              qr_code: string
+              qr_expires_at: string
+              qr_status: string
+              status: string
+              webhook_status: string
+            }[]
+          }
+        | {
+            Args: { _tenant_id?: string }
+            Returns: {
+              connection_error: string
+              created_at: string
+              has_credentials: boolean
+              id: string
+              last_connected_at: string
+              last_disconnected_at: string
+              last_health_check_at: string
+              name: string
+              phone_number: string
+              provider_type: string
+              qr_code: string
+              qr_expires_at: string
+              qr_status: string
+              status: string
+              tenant_id: string
+              webhook_status: string
+            }[]
+          }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean

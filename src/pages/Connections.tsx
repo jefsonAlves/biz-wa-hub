@@ -9,7 +9,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Smartphone, Plus, QrCode, RefreshCw, PlugZap, Power, Loader2, ShieldCheck, AlertCircle, Building2 } from "lucide-react";
+import { Smartphone, Plus, QrCode, RefreshCw, PlugZap, Power, Loader2, ShieldCheck, AlertCircle, Building2, Search } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   listConnections,
   sendConnectionCommand,
@@ -39,10 +46,13 @@ const toQrGeneratorUrl = (value: string | null) => {
 
 const Connections = () => {
   const { profile, isSuperAdmin } = useAuth();
-  const tenantId = profile?.tenant_id;
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  
+  // Use profile.tenant_id for regular users, and selectedTenantId for Super Admins
+  const effectiveTenantId = isSuperAdmin ? selectedTenantId : profile?.tenant_id;
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
 
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -53,10 +63,24 @@ const Connections = () => {
   const [qrConnectionId, setQrConnectionId] = useState<string | null>(null);
   const previousStatuses = useRef<Record<string, string>>({});
 
+  // Fetch tenants for Super Admin selector
+  const { data: tenants = [] } = useQuery({
+    queryKey: ["admin-tenants-list"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("id, name")
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: isSuperAdmin,
+  });
+
   const { data: connections = [], isLoading } = useQuery({
-    queryKey: ["whatsapp_connections_safe", tenantId],
+    queryKey: ["whatsapp_connections_safe", effectiveTenantId],
     queryFn: listConnections,
-    enabled: !!tenantId,
+    enabled: !!effectiveTenantId,
     refetchInterval: (query) => {
       const rows = (query.state.data ?? []) as SafeConnection[];
       return rows.some((connection) =>
@@ -85,43 +109,44 @@ const Connections = () => {
           title: "WhatsApp conectado",
           description: `${connection.name} foi conectado com sucesso. Novas mensagens aparecerão no Inbox.`,
         });
-        queryClient.invalidateQueries({ queryKey: ["dashboard-stats", tenantId] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard-chart", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats", effectiveTenantId] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-chart", effectiveTenantId] });
         queryClient.invalidateQueries({ queryKey: ["conversations"] });
       }
       previousStatuses.current[connection.id] = connection.status;
     }
-  }, [connections, qrConnectionId, queryClient, tenantId, toast]);
+  }, [connections, qrConnectionId, queryClient, effectiveTenantId, toast]);
 
   useEffect(() => {
-    if (!tenantId) return;
+    if (!effectiveTenantId) return;
 
     const channel = supabase
-      .channel(`whatsapp-connections-${tenantId}`)
+      .channel(`whatsapp-connections-${effectiveTenantId}`)
       .on(
         "postgres_changes",
         {
           event: "UPDATE",
           schema: "public",
           table: "whatsapp_connections",
-          filter: `tenant_id=eq.${tenantId}`,
+          filter: `tenant_id=eq.${effectiveTenantId}`,
         },
-        () => queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe", tenantId] }),
+        () => queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe", effectiveTenantId] }),
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient, tenantId]);
+  }, [queryClient, effectiveTenantId]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      if (!tenantId) throw new Error("Sem empresa vinculada");
+      if (!effectiveTenantId) throw new Error("Selecione uma empresa para cadastrar e conectar o WhatsApp.");
       
       const { data, error } = await supabase.functions.invoke("whatsapp-connection-command", {
         body: {
           command: "create_connection_entry",
+          tenant_id: effectiveTenantId,
           name: name.trim() || "Novo número",
           provider_type: providerType === "meta" ? "meta_cloud" : "n8n_unofficial",
           provider_session_id: providerType === "n8n" ? (sessionId.trim() || null) : null,
@@ -188,7 +213,9 @@ const Connections = () => {
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 mr-2" />Nova conexão</Button>
+            <Button disabled={!effectiveTenantId}>
+              <Plus className="h-4 w-4 mr-2" />Nova conexão
+            </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Nova conexão</DialogTitle></DialogHeader>
@@ -275,19 +302,50 @@ const Connections = () => {
       </div>
 
       {isSuperAdmin && (
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="flex items-start gap-3 py-4 text-sm">
-            <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-            <p className="text-muted-foreground">
-              Credenciais de sessão nunca são expostas ao navegador. Todos os comandos passam por Edge Functions
-              e são entregues ao n8n com assinatura HMAC SHA-256.
-            </p>
-          </CardContent>
-        </Card>
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Building2 className="h-4 w-4" /> Empresa administrada
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Select value={selectedTenantId || ""} onValueChange={setSelectedTenantId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione uma empresa para gerenciar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tenants.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="flex items-start gap-3 py-4 text-sm">
+              <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+              <p className="text-muted-foreground">
+                Credenciais de sessão nunca são expostas ao navegador. Todos os comandos passam por Edge Functions
+                e são entregues ao n8n com assinatura HMAC SHA-256.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {isLoading ? (
         <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Carregando conexões...</div>
+      ) : !effectiveTenantId ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Building2 className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+            <p className="text-muted-foreground font-medium">Selecione uma empresa para cadastrar e conectar o WhatsApp.</p>
+          </CardContent>
+        </Card>
       ) : connections.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
