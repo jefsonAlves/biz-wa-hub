@@ -48,7 +48,20 @@ const toQrGeneratorUrl = (value: string | null) => {
   return `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(qr)}`;
 };
 
+const DiagnosticRow = ({ ok, title, detail }: { ok: boolean; title: string; detail: string }) => (
+  <div className="flex items-start gap-3 rounded-md border p-3">
+    {ok
+      ? <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-primary" />
+      : <XCircle className="h-4 w-4 shrink-0 mt-0.5 text-destructive" />}
+    <div className="space-y-0.5">
+      <p className="font-medium leading-none">{title}</p>
+      <p className="text-xs text-muted-foreground">{detail}</p>
+    </div>
+  </div>
+);
+
 const Connections = () => {
+
   const { profile, isSuperAdmin } = useAuth();
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   
