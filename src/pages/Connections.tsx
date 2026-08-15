@@ -346,7 +346,9 @@ const Connections = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
+
 
       {isSuperAdmin && (
         <div className="grid gap-6 md:grid-cols-2">
