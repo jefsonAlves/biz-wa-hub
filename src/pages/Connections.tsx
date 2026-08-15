@@ -488,7 +488,16 @@ const Connections = () => {
                     >
                       <Power className="h-3.5 w-3.5 mr-1" />Desconectar
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => setDeleteTarget(conn)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />Excluir
+                    </Button>
                   </div>
+
                 </CardContent>
               </Card>
             );
