@@ -24,11 +24,19 @@ serve(async (req) => {
     const connectionId = body?.connection_id as string | undefined;
     const svc = serviceClient();
 
-    // SPECIAL COMMAND: Create a new connection entry using service role to bypass RLS issues
+    // Determine the effective tenant ID for creation or lookup
+    const requestedTenantId = body?.tenant_id;
+    const effectiveTenantId = auth.isSuperAdmin && requestedTenantId 
+      ? requestedTenantId 
+      : auth.tenantId;
+
+    // SPECIAL COMMAND: Create a new connection entry
     if (command === "create_connection_entry") {
+      if (!effectiveTenantId) return json({ error: "tenant_id_required" }, 400);
+
       const providerType = body?.provider_type || "n8n_unofficial";
       const { data, error } = await svc.from("whatsapp_connections").insert({
-        tenant_id: auth.tenantId,
+        tenant_id: effectiveTenantId,
         name: body?.name || "Novo número",
         provider_type: providerType,
         provider_session_id: body?.provider_session_id || null,
@@ -52,12 +60,16 @@ serve(async (req) => {
     if (!command || !COMMAND_EVENTS[command]) return json({ error: "Comando inválido" }, 400);
     if (!connectionId) return json({ error: "connection_id é obrigatório" }, 400);
 
-    const { data: connection } = await svc
-      .from("whatsapp_connections")
+    // Lookup connection - Super Admin can access any connection
+    let query = svc.from("whatsapp_connections")
       .select("id, tenant_id, provider_type, provider_instance_id, provider_session_id, status")
-      .eq("id", connectionId)
-      .eq("tenant_id", auth.tenantId)
-      .maybeSingle();
+      .eq("id", connectionId);
+
+    if (!auth.isSuperAdmin) {
+      query = query.eq("tenant_id", auth.tenantId);
+    }
+
+    const { data: connection } = await query.maybeSingle();
     if (!connection) return json({ error: "Conexão não encontrada" }, 404);
 
     if (connection.provider_type === "meta") {
@@ -78,9 +90,10 @@ serve(async (req) => {
     if (command === "reconnect") patch.status = "connecting";
     await svc.from("whatsapp_connections").update(patch).eq("id", connection.id);
 
+    // Build the event using the REAL tenant_id of the connection
     const event = buildEvent({
       event_type: COMMAND_EVENTS[command],
-      tenant_id: auth.tenantId,
+      tenant_id: connection.tenant_id,
       connection_id: connection.id,
       data: {
         command,
@@ -92,7 +105,9 @@ serve(async (req) => {
 
     await enqueueEvent(svc, event, { type: "whatsapp_connection", id: connection.id });
 
-    const integration = await getIntegration(svc, auth.tenantId);
+    // Use the connection's tenant_id to find the correct integration
+    const integration = await getIntegration(svc, connection.tenant_id);
+    
     return json({
       success: true,
       queued: true,

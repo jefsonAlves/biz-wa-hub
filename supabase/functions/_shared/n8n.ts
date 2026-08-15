@@ -23,7 +23,7 @@ export function serviceClient(): SupabaseClient {
   );
 }
 
-/** Validates the caller JWT and returns the user id + tenant id. */
+/** Validates the caller JWT and returns the user id + tenant id + isSuperAdmin flag. */
 export async function authenticate(req: Request) {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return { error: "Unauthorized" as const };
@@ -39,14 +39,29 @@ export async function authenticate(req: Request) {
 
   const userId = data.claims.sub as string;
   const svc = serviceClient();
+
+  // Check if user is Super Admin
+  const { data: roleData } = await svc
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "super_admin")
+    .maybeSingle();
+  const isSuperAdmin = !!roleData;
+
   const { data: profile } = await svc
     .from("profiles")
     .select("tenant_id")
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (!profile?.tenant_id) return { error: "No tenant" as const };
-  return { userId, tenantId: profile.tenant_id as string };
+  if (!isSuperAdmin && !profile?.tenant_id) return { error: "No tenant" as const };
+  
+  return { 
+    userId, 
+    tenantId: profile?.tenant_id as string | null,
+    isSuperAdmin
+  };
 }
 
 export async function isTenantAdmin(svc: SupabaseClient, userId: string, tenantId: string) {
