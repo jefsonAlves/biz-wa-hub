@@ -208,6 +208,35 @@ const Connections = () => {
     }
   };
 
+  const deleteMutation = useMutation({
+    mutationFn: async (connection: SafeConnection) =>
+      deleteConnection(connection.id, { confirmDelete: true }),
+    onSuccess: () => {
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe", effectiveTenantId] });
+      toast({ title: "Conexão excluída", description: "O histórico de conversas foi preservado." });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Erro ao excluir conexão", description: e.message, variant: "destructive" }),
+  });
+
+  const diagnoseMutation = useMutation({
+    mutationFn: async () => diagnoseN8n(effectiveTenantId),
+    onSuccess: (res) => setDiagnostics(res.diagnostics),
+    onError: (e: Error) => {
+      setDiagnosticsOpen(false);
+      toast({ title: "Falha no diagnóstico", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const runDiagnostics = () => {
+    setDiagnostics(null);
+    setDiagnosticsOpen(true);
+    diagnoseMutation.mutate();
+  };
+
+
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
