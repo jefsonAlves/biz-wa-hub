@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Smartphone, Plus, QrCode, RefreshCw, PlugZap, Power, Loader2, ShieldCheck, AlertCircle, Building2, Search } from "lucide-react";
+import { Smartphone, Plus, QrCode, RefreshCw, PlugZap, Power, Loader2, ShieldCheck, AlertCircle, Building2, Trash2, Activity, CheckCircle2, XCircle } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -20,10 +20,14 @@ import {
 import {
   listConnections,
   sendConnectionCommand,
+  deleteConnection,
+  diagnoseN8n,
   CONNECTION_STATUS_LABELS,
   type SafeConnection,
   type ConnectionCommand,
+  type N8nDiagnostics,
 } from "@/lib/whatsapp/provider";
+
 
 const statusVariant = (status: string) =>
   status === "connected" ? "default" : status === "error" ? "destructive" : "secondary";
