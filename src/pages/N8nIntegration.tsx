@@ -11,20 +11,48 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Workflow, ShieldCheck, Loader2, Copy } from "lucide-react";
 import { testN8nIntegration } from "@/lib/whatsapp/provider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const N8nIntegration = () => {
-  const { profile } = useAuth();
-  const tenantId = profile?.tenant_id;
+  const { profile, isSuperAdmin } = useAuth();
+  const profileTenantId = profile?.tenant_id;
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [baseUrl, setBaseUrl] = useState("");
-  const [webhookPath, setWebhookPath] = useState("/webhook/platform");
+  const [webhookPath, setWebhookPath] = useState("/webhook/biz-wa-hub/platform");
   const [environment, setEnvironment] = useState("production");
   const [active, setActive] = useState(true);
   const [testing, setTesting] = useState(false);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(profileTenantId ?? null);
 
   const receiverUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/n8n-webhook-receiver`;
+
+  const { data: tenants = [] } = useQuery({
+    queryKey: ["admin_tenants_for_n8n"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("id,name,status")
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: isSuperAdmin,
+  });
+
+  useEffect(() => {
+    if (profileTenantId) {
+      setSelectedTenantId(profileTenantId);
+      return;
+    }
+
+    if (isSuperAdmin && !selectedTenantId && tenants.length > 0) {
+      setSelectedTenantId(tenants[0].id);
+    }
+  }, [isSuperAdmin, profileTenantId, selectedTenantId, tenants]);
+
+  const tenantId = isSuperAdmin ? selectedTenantId : profileTenantId;
 
   const { data: integration, isLoading } = useQuery({
     queryKey: ["n8n_integration", tenantId],
@@ -45,18 +73,23 @@ const N8nIntegration = () => {
   useEffect(() => {
     if (integration) {
       setBaseUrl(integration.base_url ?? "");
-      setWebhookPath(integration.webhook_path ?? "/webhook/platform");
+      setWebhookPath(integration.webhook_path ?? "/webhook/biz-wa-hub/platform");
       setEnvironment(integration.environment ?? "production");
       setActive(integration.status === "active");
+    } else if (tenantId) {
+      setBaseUrl("");
+      setWebhookPath("/webhook/biz-wa-hub/platform");
+      setEnvironment("production");
+      setActive(true);
     }
-  }, [integration]);
+  }, [integration, tenantId]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!tenantId) throw new Error("Sem empresa vinculada");
       const payload = {
         base_url: baseUrl.trim().replace(/\/+$/, ""),
-        webhook_path: webhookPath.trim() || "/webhook/platform",
+        webhook_path: webhookPath.trim() || "/webhook/biz-wa-hub/platform",
         environment,
         status: active ? "active" : "inactive",
       };
@@ -107,6 +140,29 @@ const N8nIntegration = () => {
         </p>
       </div>
 
+      {isSuperAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Empresa administrada</CardTitle>
+            <CardDescription>Escolha para qual empresa a URL pública do n8n será salva.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Select value={selectedTenantId ?? ""} onValueChange={setSelectedTenantId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione a empresa" />
+              </SelectTrigger>
+              <SelectContent>
+                {tenants.map((tenant) => (
+                  <SelectItem key={tenant.id} value={tenant.id}>
+                    {tenant.name} {tenant.status !== "active" ? `(${tenant.status})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -134,7 +190,7 @@ const N8nIntegration = () => {
                 </div>
                 <div className="space-y-2">
                   <Label>Caminho do webhook</Label>
-                  <Input value={webhookPath} onChange={(e) => setWebhookPath(e.target.value)} placeholder="/webhook/platform" />
+                  <Input value={webhookPath} onChange={(e) => setWebhookPath(e.target.value)} placeholder="/webhook/biz-wa-hub/platform" />
                 </div>
                 <div className="space-y-2">
                   <Label>Ambiente</Label>
@@ -147,7 +203,7 @@ const N8nIntegration = () => {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button onClick={() => saveMutation.mutate()} disabled={!baseUrl.trim() || saveMutation.isPending}>
+                <Button onClick={() => saveMutation.mutate()} disabled={!tenantId || !baseUrl.trim() || saveMutation.isPending}>
                   {saveMutation.isPending ? "Salvando..." : "Salvar"}
                 </Button>
                 <Button variant="outline" onClick={runTest} disabled={!integration || testing}>
