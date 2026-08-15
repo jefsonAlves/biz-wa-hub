@@ -552,7 +552,106 @@ const Connections = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(isOpen) => !isOpen && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Excluir conexão</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Tem certeza que deseja excluir <strong className="text-foreground">{deleteTarget?.name}</strong>?
+            As conversas já registradas continuam no Inbox, mas o número deixará de estar vinculado à plataforma.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget)}
+            >
+              {deleteMutation.isPending
+                ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                : <Trash2 className="h-4 w-4 mr-2" />}
+              Excluir definitivamente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={diagnosticsOpen} onOpenChange={setDiagnosticsOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Diagnóstico da comunicação com o n8n</DialogTitle>
+          </DialogHeader>
+          {diagnoseMutation.isPending || !diagnostics ? (
+            <div className="flex flex-col items-center gap-3 py-10 text-sm text-muted-foreground">
+              <Loader2 className="h-7 w-7 animate-spin text-primary" />
+              Testando a comunicação com o n8n...
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1 text-sm">
+              <DiagnosticRow
+                ok={diagnostics.integration.found && diagnostics.integration.status === "active"}
+                title="Integração n8n ativa"
+                detail={
+                  diagnostics.integration.found
+                    ? `${diagnostics.integration.name} · escopo ${diagnostics.integration.scope === "global" ? "global (plataforma)" : "da empresa"} · destino ${diagnostics.integration.target ?? "—"}`
+                    : "Nenhuma integração ativa. Configure em Integração n8n."
+                }
+              />
+              <DiagnosticRow
+                ok={diagnostics.secret_configured}
+                title="Segredo de assinatura (HMAC)"
+                detail={diagnostics.secret_configured
+                  ? "Configurado no servidor."
+                  : "Não configurado — os eventos não podem ser assinados."}
+              />
+              <DiagnosticRow
+                ok={!!diagnostics.webhook?.reachable}
+                title="Webhook alcançável"
+                detail={diagnostics.webhook?.reachable
+                  ? `Respondeu HTTP ${diagnostics.webhook.http_status} em ${diagnostics.webhook.duration_ms} ms.`
+                  : diagnostics.webhook?.error ?? "O n8n não respondeu à chamada de teste."}
+              />
+              <DiagnosticRow
+                ok={(diagnostics.outbox?.failed ?? 0) === 0}
+                title="Fila de eventos"
+                detail={`${diagnostics.outbox?.pending ?? 0} pendente(s), ${diagnostics.outbox?.failed ?? 0} com falha.`}
+              />
+              <DiagnosticRow
+                ok={!!diagnostics.last_delivery?.success}
+                title="Última entrega ao n8n"
+                detail={diagnostics.last_delivery
+                  ? `${new Date(diagnostics.last_delivery.created_at).toLocaleString("pt-BR")} · HTTP ${diagnostics.last_delivery.http_status ?? "—"}${diagnostics.last_delivery.error_message ? ` · ${diagnostics.last_delivery.error_message}` : ""}`
+                  : "Nenhuma entrega registrada ainda."}
+              />
+              <DiagnosticRow
+                ok={!!diagnostics.last_inbound_event}
+                title="Retorno recebido do n8n"
+                detail={diagnostics.last_inbound_event
+                  ? `${new Date(diagnostics.last_inbound_event.received_at).toLocaleString("pt-BR")} · ${diagnostics.last_inbound_event.event_type}`
+                  : "Nenhum callback assinado recebido do n8n até agora."}
+              />
+
+              {!diagnostics.webhook?.reachable && (
+                <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  Enquanto o n8n não responder, o QR Code não será gerado: os comandos ficam apenas enfileirados.
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiagnosticsOpen(false)}>Fechar</Button>
+            <Button onClick={() => diagnoseMutation.mutate()} disabled={diagnoseMutation.isPending}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${diagnoseMutation.isPending ? "animate-spin" : ""}`} />
+              Testar novamente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+
   );
 };
 
