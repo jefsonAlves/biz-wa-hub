@@ -9,63 +9,103 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Workflow, ShieldCheck, Loader2, Copy } from "lucide-react";
+import { Workflow, ShieldCheck, Loader2, Copy, Building2 } from "lucide-react";
 import { testN8nIntegration } from "@/lib/whatsapp/provider";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const N8nIntegration = () => {
   const { profile, isSuperAdmin } = useAuth();
-  const tenantId = null; // Global config uses NULL tenant_id
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  
+  // For Super Admin, we either manage global (null) or a specific tenant
+  // For regular users (if they ever get here), it's their own tenant
+  const effectiveTenantId = isSuperAdmin ? selectedTenantId : profile?.tenant_id;
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [baseUrl, setBaseUrl] = useState("");
-  const [webhookPath, setWebhookPath] = useState("/webhook/platform");
+  const [webhookPath, setWebhookPath] = useState("/webhook/biz-wa-hub/platform");
   const [environment, setEnvironment] = useState("production");
   const [active, setActive] = useState(true);
   const [testing, setTesting] = useState(false);
 
   const receiverUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/n8n-webhook-receiver`;
 
-  const { data: integration, isLoading } = useQuery({
-    queryKey: ["n8n_integration_global"],
+  // Fetch tenants for Super Admin selector
+  const { data: tenants = [] } = useQuery({
+    queryKey: ["admin-tenants-list"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("n8n_integrations")
-        .select("*")
-        .is("tenant_id", null)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("id, name")
+        .order("name");
+      if (error) throw error;
       return data;
     },
-    enabled: !!tenantId,
+    enabled: isSuperAdmin,
+  });
+
+  const { data: integration, isLoading } = useQuery({
+    queryKey: ["n8n_integration", effectiveTenantId],
+    queryFn: async () => {
+      const query = supabase
+        .from("n8n_integrations")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(1);
+      
+      if (effectiveTenantId === null) {
+        query.is("tenant_id", null);
+      } else {
+        query.eq("tenant_id", effectiveTenantId);
+      }
+
+      const { data } = await query.maybeSingle();
+      return data;
+    },
+    enabled: isSuperAdmin || !!profile?.tenant_id,
   });
 
   useEffect(() => {
     if (integration) {
       setBaseUrl(integration.base_url ?? "");
-      setWebhookPath(integration.webhook_path ?? "/webhook/platform");
+      setWebhookPath(integration.webhook_path ?? "/webhook/biz-wa-hub/platform");
       setEnvironment(integration.environment ?? "production");
       setActive(integration.status === "active");
+    } else {
+      // Reset if no integration found for selected tenant
+      setBaseUrl("");
+      setWebhookPath("/webhook/biz-wa-hub/platform");
+      setEnvironment("production");
+      setActive(true);
     }
   }, [integration]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!isSuperAdmin) throw new Error("Apenas Super Admin pode configurar n8n");
+      
       const payload = {
         base_url: baseUrl.trim().replace(/\/+$/, ""),
-        webhook_path: webhookPath.trim() || "/webhook/platform",
+        webhook_path: webhookPath.trim() || "/webhook/biz-wa-hub/platform",
         environment,
         status: active ? "active" : "inactive",
+        tenant_id: effectiveTenantId
       };
+
       if (integration) {
         const { error } = await supabase.from("n8n_integrations").update(payload).eq("id", integration.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from("n8n_integrations").insert({
-          tenant_id: null,
-          name: "n8n self-hosted",
+          name: effectiveTenantId ? `n8n for ${tenants.find(t => t.id === effectiveTenantId)?.name}` : "n8n self-hosted global",
           ...payload,
         });
         if (error) throw error;
@@ -108,6 +148,37 @@ const N8nIntegration = () => {
         </p>
       </div>
 
+      {isSuperAdmin && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Building2 className="h-4 w-4" /> Empresa administrada
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Select 
+              value={selectedTenantId || "global"} 
+              onValueChange={(val) => setSelectedTenantId(val === "global" ? null : val)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Selecione uma empresa ou Configuração Global" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="global">Configuração Global (Padrão)</SelectItem>
+                {tenants.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground mt-2">
+              Selecione "Configuração Global" para definir o padrão do sistema, ou uma empresa específica para sobrescrever o padrão apenas para ela.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -135,7 +206,7 @@ const N8nIntegration = () => {
                 </div>
                 <div className="space-y-2">
                   <Label>Caminho do webhook</Label>
-                  <Input value={webhookPath} onChange={(e) => setWebhookPath(e.target.value)} placeholder="/webhook/platform" />
+                  <Input value={webhookPath} onChange={(e) => setWebhookPath(e.target.value)} placeholder="/webhook/biz-wa-hub/platform" />
                 </div>
                 <div className="space-y-2">
                   <Label>Ambiente</Label>
