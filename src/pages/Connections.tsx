@@ -701,7 +701,7 @@ const Connections = () => {
                 <div className="flex flex-col gap-3 p-4 rounded-md border border-destructive/30 bg-destructive/5 text-xs text-destructive">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0" />
-                    <p className="font-bold">For the code present, I get the error below.</p>
+                    <p className="font-bold">esse erro é no código aqui ou nao n8n? se tem como corrigir corrija e faça funcionar o carregamento da imagem do qrcode</p>
                   </div>
                   
                   <div className="space-y-3 opacity-95">
