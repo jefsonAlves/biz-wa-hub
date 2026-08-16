@@ -555,22 +555,35 @@ const Connections = () => {
                 <img src={qrDisplaySource} alt="QR Code para conectar o WhatsApp" className="h-72 w-72 object-contain" />
               </div>
             ) : (pending === `${qrConnectionId}:generate_qr`) || qrConnection?.qr_status === "requested" || qrConnection?.qr_status === "pending" ? (
-              <div className="flex min-h-72 w-full flex-col items-center justify-center gap-3 rounded-lg border bg-muted/20">
+              <div className="flex min-h-[288px] w-full flex-col items-center justify-center gap-3 rounded-lg border bg-muted/20 p-6 text-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm">O n8n está processando o QR Code...</p>
+                <p className="text-sm font-medium">O n8n está gerando o QR Code...</p>
+                <p className="text-xs text-muted-foreground">
+                  Se demorar mais de 30 segundos, verifique se o túnel trycloudflare ainda está ativo no diagnóstico.
+                </p>
               </div>
             ) : qrConnection?.qr_status === "available" && !qrDisplaySource ? (
-              <div className="flex min-h-72 w-full flex-col items-center justify-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-6">
+              <div className="flex min-h-[288px] w-full flex-col items-center justify-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center">
                 <AlertCircle className="h-8 w-8 text-destructive" />
-                <p className="font-medium">QR Code indisponível</p>
+                <p className="font-medium">QR Code vazio</p>
                 <p className="text-sm text-muted-foreground">
-                  O status está como disponível, mas data.qr_code veio vazio. Verifique o callback do n8n.
+                  O servidor respondeu, mas não enviou a imagem do QR Code. Tente gerar novamente.
                 </p>
               </div>
             ) : (
-              <div className="flex min-h-72 w-full flex-col items-center justify-center gap-3 rounded-lg border bg-muted/20">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm">Aguardando o n8n gerar o QR Code...</p>
+              <div className="flex min-h-[288px] w-full flex-col items-center justify-center gap-3 rounded-lg border bg-muted/20 p-6 text-center">
+                {qrConnection?.connection_error ? (
+                  <>
+                    <XCircle className="h-8 w-8 text-destructive" />
+                    <p className="font-medium text-destructive">Erro na conexão</p>
+                    <p className="text-xs text-muted-foreground">{qrConnection.connection_error}</p>
+                  </>
+                ) : (
+                  <>
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-sm">Aguardando resposta do servidor n8n...</p>
+                  </>
+                )}
               </div>
             )}
 
