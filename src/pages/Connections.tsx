@@ -671,17 +671,26 @@ const Connections = () => {
                 <div className="flex flex-col gap-3 p-4 rounded-md border border-destructive/30 bg-destructive/5 text-xs text-destructive">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0" />
-                    <p className="font-bold">Verifique e corrija a Edge Function n8n-poll-events.</p>
+                    <p className="font-bold">For the code present, I get the error below.</p>
                   </div>
                   
                   <div className="space-y-3 opacity-95">
                     <p>
-                      O n8n está conseguindo receber chamadas no webhook <code>/webhook/biz-wa-hub/platform</code> e responde HTTP 202 para <code>platform.ping</code>, 
-                      porém o workflow <strong>Reliable Outbox Poller</strong> está falhando ao chamar <code>/functions/v1/n8n-poll-events</code> com:
+                      Please think step-by-step in order to resolve it.
                     </p>
                     
-                    <div className="p-2 bg-destructive/10 rounded font-mono text-[10px] border border-destructive/20">
-                      poll_backend_http_500: {"{\"error\":\"internal_error\"}"}
+                    <div className="p-2 bg-destructive/10 rounded font-mono text-[10px] border border-destructive/20 whitespace-pre-wrap">
+{`Edge function returned 500: Error, {"error":"Erro interno"}
+
+{
+  "timestamp": 1786843742930,
+  "error_type": "RUNTIME_ERROR",
+  "filename": "supabase/functions/n8n-test-connection/index.ts",
+  "lineno": 0,
+  "colno": 0,
+  "stack": "not_applicable",
+  "has_blank_screen": true
+}`}
                     </div>
                     
                     <p>
