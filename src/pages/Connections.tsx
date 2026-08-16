@@ -240,9 +240,14 @@ const Connections = () => {
   const diagnoseMutation = useMutation({
     mutationFn: async () => diagnoseN8n(effectiveTenantId),
     onSuccess: (res) => setDiagnostics(res.diagnostics),
-    onError: (e: Error) => {
+    onError: (e: any) => {
       setDiagnosticsOpen(false);
-      toast({ title: "Falha no diagnóstico", description: e.message, variant: "destructive" });
+      const detail = e.context?.details || e.message;
+      toast({ 
+        title: "Falha no diagnóstico", 
+        description: detail, 
+        variant: "destructive" 
+      });
     },
   });
 
