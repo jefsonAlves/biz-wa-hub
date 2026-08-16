@@ -667,26 +667,50 @@ const Connections = () => {
                   : "Nenhum callback assinado recebido do n8n até agora."}
               />
 
-              {!diagnostics.webhook?.reachable && (
-                <div className="flex flex-col gap-2 p-3 rounded-md border border-destructive/30 bg-destructive/5 text-xs text-destructive">
+               {!diagnostics.webhook?.reachable && (
+                <div className="flex flex-col gap-3 p-4 rounded-md border border-destructive/30 bg-destructive/5 text-xs text-destructive">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0" />
-                    <p className="font-semibold">O QR Code não chega ao n8n porque o workflow “Biz WA Hub - Reliable Outbox Poller” está falhando.</p>
+                    <p className="font-bold">Verifique e corrija a Edge Function n8n-poll-events.</p>
                   </div>
-                  <div className="pl-6 space-y-2 opacity-90">
-                    <p><strong>Erro visto no n8n:</strong> poll_backend_http_500: {"{\"error\":\"internal_error\"}"}</p>
-                    <p><strong>Origem:</strong> O n8n chama a Edge Function <code>/functions/v1/n8n-poll-events</code> com body <code>{"{ \"action\": \"claim\", \"limit\": 10 }"}</code>. A função retorna HTTP 500 internal_error.</p>
-                    <p className="font-medium mt-2">Verificar/corrigir na Lovable:</p>
-                    <ol className="list-decimal pl-4 space-y-1">
-                      <li>Conferir logs da Edge Function: <code>n8n-poll-events</code></li>
-                      <li>Corrigir a causa do erro em: <code>supabase/functions/n8n-poll-events/index.ts</code> (Provável ponto de falha: <code>svc.rpc("claim_event_outbox", ...)</code>)</li>
-                      <li>Confirmar que a migration foi aplicada: <code>supabase/migrations/20260801183000_event_outbox_worker.sql</code> (Ela precisa criar <code>public.claim_event_outbox</code>)</li>
-                      <li>Confirmar que a função existe no banco e pode ser executada pelo service_role: <code>GRANT EXECUTE ON FUNCTION public.claim_event_outbox(integer) TO service_role;</code></li>
-                      <li>Confirmar que a Edge Function n8n-poll-events tem estes secrets/envs: <code>SUPABASE_URL</code>, <code>SUPABASE_SERVICE_ROLE_KEY</code>, <code>SUPABASE_ANON_KEY</code>, <code>N8N_WEBHOOK_SECRET</code></li>
-                      <li>Melhorar o retorno temporariamente para diagnóstico em caso de erro, retornando <code>detail: error.message</code></li>
-                      <li>Depois de corrigir, testar novamente: Gerar QR, confirmar <code>event_outbox</code>, <code>n8n-poll-events</code> action=claim, execução do workflow no n8n e preenchimento do <code>qr_code</code>.</li>
-                    </ol>
-                    <p className="mt-2 text-[10px] opacity-70">Não alterar: N8N_WEBHOOK_SECRET, caminho /webhook/biz-wa-hub/platform, ou webhook de retorno.</p>
+                  
+                  <div className="space-y-3 opacity-95">
+                    <p>
+                      O n8n está conseguindo receber chamadas no webhook <code>/webhook/biz-wa-hub/platform</code> e responde HTTP 202 para <code>platform.ping</code>, 
+                      porém o workflow <strong>Reliable Outbox Poller</strong> está falhando ao chamar <code>/functions/v1/n8n-poll-events</code> com:
+                    </p>
+                    
+                    <div className="p-2 bg-destructive/10 rounded font-mono text-[10px] border border-destructive/20">
+                      poll_backend_http_500: {"{\"error\":\"internal_error\"}"}
+                    </div>
+                    
+                    <p>
+                      Isso impede que eventos como <code>whatsapp.connection.qr.request</code>, <code>whatsapp.connection.create</code> e <code>whatsapp.messages.sync.request</code> sejam entregues ao n8n. 
+                      Como consequência, o <strong>QR Code não é gerado</strong>.
+                    </p>
+
+                    <div className="space-y-1.5">
+                      <p className="font-bold uppercase text-[10px] tracking-wider">Faça o seguinte:</p>
+                      <ol className="list-decimal pl-4 space-y-1">
+                        <li>Confirme se a migration que cria <code>public.claim_event_outbox(batch_size integer)</code> foi aplicada no banco.</li>
+                        <li>Confirme se a função <code>public.claim_event_outbox</code> existe e pode ser executada pela <code>service_role</code>.</li>
+                        <li>Confirme se a Edge Function <code>n8n-poll-events</code> está publicada.</li>
+                        <li>Confirme se os secrets necessários estão configurados (URL, SERVICE_ROLE_KEY, ANON_KEY, N8N_WEBHOOK_SECRET).</li>
+                        <li>Corrija <code>n8n-poll-events</code> para retornar um <code>detail</code> sanitizado no erro 500.</li>
+                        <li>Publique novamente as funções: <code>n8n-poll-events</code>, <code>process-event-outbox</code>, <code>whatsapp-connection-command</code> e <code>n8n-webhook-receiver</code>.</li>
+                        <li>Reprocesse ou libere novamente os eventos pendentes da <code>event_outbox</code>.</li>
+                      </ol>
+                    </div>
+
+                    <div className="space-y-1.5 border-t border-destructive/20 pt-2">
+                      <p className="font-bold uppercase text-[10px] tracking-wider">Resultado esperado:</p>
+                      <ul className="list-disc pl-4 space-y-0.5 opacity-80">
+                        <li>Ao clicar em Gerar QR, deve ser criado um evento <code>whatsapp.connection.qr.request</code>.</li>
+                        <li>O n8n Reliable Outbox Poller deve conseguir fazer claim desse evento.</li>
+                        <li>O n8n deve gerar o QR Code e enviar callback assinado para <code>n8n-webhook-receiver</code>.</li>
+                        <li>A tela deve deixar de ficar presa em “aguardando o n8n gerar QR Code”.</li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
               )}
