@@ -149,7 +149,7 @@ serve(async (req) => {
     await enqueueEvent(svc, event, { type: "whatsapp_connection", id: connection.id });
 
     // Use the connection's tenant_id to find the correct integration
-    const integration = await getIntegration(svc, connection.tenant_id);
+    const integration = await getIntegration(svc, connection.tenant_id || undefined);
     
     return json({
       success: true,

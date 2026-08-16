@@ -49,10 +49,10 @@ serve(async (req) => {
     const timestamp = req.headers.get("X-Timestamp");
     const signature = req.headers.get("X-Signature");
 
-    if (!tenantId || !eventId || !timestamp || !signature) {
+    if (!eventId || !timestamp || !signature) {
       return json({ error: "CabeÃ§alhos obrigatÃ³rios ausentes" }, 400);
     }
-    if (!UUID_PATTERN.test(tenantId) || !UUID_PATTERN.test(eventId)) {
+    if (!UUID_PATTERN.test(eventId) || (tenantId && !UUID_PATTERN.test(tenantId))) {
       return json({ error: "Identificadores invÃ¡lidos" }, 400);
     }
     if (new TextEncoder().encode(rawBody).byteLength > MAX_PAYLOAD_BYTES) {
@@ -80,7 +80,7 @@ serve(async (req) => {
       return json({ error: "Tenant incompatÃ­vel" }, 401);
     }
 
-    const integration = await getIntegration(svc, tenantId);
+    const integration = await getIntegration(svc, tenantId || undefined);
     if (!integration || integration.status !== "active") {
       return json({ error: "Integração inativa" }, 403);
     }

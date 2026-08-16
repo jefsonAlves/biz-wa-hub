@@ -78,7 +78,7 @@ export const EVENT_VERSION = 1;
 export interface PlatformEvent {
   event_id: string;
   event_type: string;
-  tenant_id: string;
+  tenant_id: string | null;
   connection_id: string | null;
   conversation_id: string | null;
   occurred_at: string;
@@ -89,7 +89,7 @@ export interface PlatformEvent {
 
 export function buildEvent(params: {
   event_type: string;
-  tenant_id: string;
+  tenant_id: string | null;
   connection_id?: string | null;
   conversation_id?: string | null;
   data?: Record<string, unknown>;
@@ -244,7 +244,7 @@ export async function deliverEvent(
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
-        "X-Tenant-Id": event.tenant_id,
+        "X-Tenant-Id": event.tenant_id || "00000000-0000-0000-0000-000000000000",
         "X-Event-Id": event.event_id,
         "X-Timestamp": timestamp,
         "X-Signature": signature,

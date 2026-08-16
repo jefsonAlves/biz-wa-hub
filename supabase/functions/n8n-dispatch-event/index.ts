@@ -51,7 +51,7 @@ serve(async (req) => {
 
     await enqueueEvent(svc, event, { type: body.aggregate_type ?? "manual", id: body.connection_id ?? null });
 
-    const integration = await getIntegration(svc, auth.tenantId);
+    const integration = await getIntegration(svc, auth.tenantId || undefined);
     if (!integration) return json({ success: true, queued: true, event_id: event.event_id });
 
     const result = await deliverEvent(svc, event, integration);

@@ -25,7 +25,7 @@ serve(async (req) => {
     let failed = 0;
 
     for (const row of pending ?? []) {
-      const integration = await getIntegration(svc, row.tenant_id);
+      const integration = await getIntegration(svc, row.tenant_id || undefined);
 
 
       const attempts = (row.attempts ?? 0) + 1;
