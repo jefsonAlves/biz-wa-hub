@@ -75,10 +75,13 @@ serve(async (req) => {
       return json({ ok: true, acknowledged: results.length });
     }
 
-    return json({ error: "invalid_action" }, 400);
   } catch (error) {
-    console.error("n8n-poll-events error:", error instanceof Error ? error.message : "unknown");
-    return json({ error: "internal_error" }, 500);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("n8n-poll-events error:", message);
+    return json({ 
+      error: "internal_error",
+      detail: message 
+    }, 500);
   }
 });
 
