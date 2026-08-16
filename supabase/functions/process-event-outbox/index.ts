@@ -74,9 +74,14 @@ serve(async (req) => {
         }).eq("id", row.id);
 
         if (row.payload?.connection_id) {
+          const userFriendlyError = result.status === 404 ? "URL do n8n não encontrada (404)" : 
+                                   result.status === 401 ? "Erro de autenticação no n8n" :
+                                   errorMessage.includes("dns") ? "Erro de DNS: Túnel expirado" :
+                                   `Erro n8n (${result.status ?? "ERR"}): ${errorMessage.slice(0, 100)}`;
+          
           await svc.from("whatsapp_connections")
             .update({ 
-              connection_error: `Falha n8n (${result.status ?? "ERR"}): ${errorMessage.slice(0, 150)}`
+              connection_error: userFriendlyError
             })
             .eq("id", row.payload.connection_id);
         }

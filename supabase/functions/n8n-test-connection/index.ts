@@ -201,11 +201,28 @@ serve(async (req) => {
     return json({ success: result.success, diagnostics });
   } catch (error) {
     console.error("n8n-test-connection error:", error);
-    // Add detail to help debug 500 errors in the UI as requested
+    
+    let message = "Erro interno no servidor";
+    let cause = "unknown";
+    
+    const errorStr = String(error);
+    if (errorStr.includes("failed to lookup address") || errorStr.includes("dns error")) {
+      message = "URL pública do n8n expirada ou inacessível. Gere novo túnel e salve nova URL base.";
+      cause = "dns_error";
+    } else if (errorStr.includes("401") || errorStr.includes("Unauthorized")) {
+      message = "Falha na autenticação com o n8n (Verifique N8N_API_KEY ou segredo HMAC).";
+      cause = "auth_error";
+    } else if (errorStr.includes("fetch")) {
+      message = "Não foi possível alcançar o servidor n8n. Verifique se o túnel está ativo.";
+      cause = "network_error";
+    }
+
     return json({ 
-      error: "Erro interno", 
+      error: message, 
       details: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined
+      cause,
+      name: error instanceof Error ? error.name : "Error",
+      timestamp: Date.now()
     }, 500);
   }
 });

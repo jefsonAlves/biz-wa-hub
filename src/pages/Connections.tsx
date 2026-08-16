@@ -243,9 +243,16 @@ const Connections = () => {
     onError: (e: any) => {
       setDiagnosticsOpen(false);
       const detail = e.context?.details || e.message;
+      const cause = e.context?.cause;
+      
+      let toastMsg = detail;
+      if (cause === "dns_error") {
+        toastMsg = "URL pública do n8n expirada ou inacessível. Gere novo túnel e salve novamente.";
+      }
+
       toast({ 
         title: "Falha no diagnóstico", 
-        description: detail, 
+        description: toastMsg, 
         variant: "destructive" 
       });
     },
