@@ -112,9 +112,19 @@ const N8nIntegration = () => {
         if (error) throw error;
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["n8n_integration", effectiveTenantId] });
-      toast({ title: "Integração salva" });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["n8n_integration", effectiveTenantId] });
+      // Reprocess queue after saving new config
+      try {
+        await testN8nIntegration({ 
+          tenant_id: effectiveTenantId, 
+          use_global: isSuperAdmin && effectiveTenantId === null,
+          action: "reprocess_queue"
+        });
+      } catch (e) {
+        console.warn("Could not auto-reprocess queue:", e);
+      }
+      toast({ title: "Integração salva", description: "Configuração atualizada e fila reiniciada." });
     },
     onError: (e: Error) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
@@ -269,7 +279,114 @@ const N8nIntegration = () => {
           </p>
         </CardContent>
       </Card>
+      <N8nOutboxPanel tenantId={effectiveTenantId} useGlobal={isSuperAdmin && effectiveTenantId === null} />
     </div>
+  );
+};
+
+const N8nOutboxPanel = ({ tenantId, useGlobal }: { tenantId: string | null; useGlobal: boolean }) => {
+  const { toast } = useToast();
+  const [running, setRunning] = useState<string | null>(null);
+
+  const { data: testResult, refetch, isLoading } = useQuery({
+    queryKey: ["n8n_diagnostics", tenantId, useGlobal],
+    queryFn: () => testN8nIntegration({ tenant_id: tenantId, use_global: useGlobal }),
+    refetchInterval: 30000, // Auto refresh every 30s
+  });
+
+  const runAction = async (action: "reprocess_queue" | "archive_dead") => {
+    setRunning(action);
+    try {
+      const res = await testN8nIntegration({ 
+        tenant_id: tenantId, 
+        use_global: useGlobal, 
+        action 
+      });
+      toast({ 
+        title: action === "reprocess_queue" ? "Fila reiniciada" : "Eventos arquivados", 
+        description: `${res.affected_count} eventos afetados.` 
+      });
+      refetch();
+    } catch (e) {
+      toast({ title: "Erro", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setRunning(null);
+    }
+  };
+
+  const diag = testResult?.diagnostics;
+  const outbox = diag?.outbox;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Workflow className="h-5 w-5" /> Fila de eventos (Outbox)
+            </CardTitle>
+            <CardDescription>Status das entregas pendentes e falhas recentes para o n8n.</CardDescription>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isLoading}>
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Atualizar status
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="p-3 bg-muted rounded-lg text-center">
+            <div className="text-2xl font-bold">{outbox?.pending ?? 0}</div>
+            <div className="text-[10px] uppercase text-muted-foreground">Pendentes</div>
+          </div>
+          <div className="p-3 bg-blue-500/10 rounded-lg text-center">
+            <div className="text-2xl font-bold text-blue-500">{outbox?.processing ?? 0}</div>
+            <div className="text-[10px] uppercase text-blue-500">Processando</div>
+          </div>
+          <div className="p-3 bg-green-500/10 rounded-lg text-center">
+            <div className="text-2xl font-bold text-green-500">{outbox?.sent ?? 0}</div>
+            <div className="text-[10px] uppercase text-green-500">Enviados</div>
+          </div>
+          <div className="p-3 bg-yellow-500/10 rounded-lg text-center text-yellow-600">
+            <div className="text-2xl font-bold">{outbox?.failed ?? 0}</div>
+            <div className="text-[10px] uppercase">Falhados</div>
+          </div>
+          <div className="p-3 bg-destructive/10 rounded-lg text-center text-destructive">
+            <div className="text-2xl font-bold">{outbox?.dead ?? 0}</div>
+            <div className="text-[10px] uppercase">Mortos</div>
+          </div>
+        </div>
+
+        {diag?.integration?.found && diag.integration.last_error_message && (
+          <div className="p-3 border border-destructive/20 bg-destructive/5 rounded text-xs text-destructive">
+            <strong>Último erro de integração:</strong> {diag.integration.last_error_message}
+            <div className="mt-1 text-[10px] opacity-70">Ocorrido em: {diag.integration.last_error_at}</div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 pt-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => runAction("reprocess_queue")}
+            disabled={running === "reprocess_queue"}
+          >
+            {running === "reprocess_queue" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Reprocessar fila n8n
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-muted-foreground"
+            onClick={() => runAction("archive_dead")}
+            disabled={running === "archive_dead"}
+          >
+            {running === "archive_dead" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Arquivar eventos mortos antigos
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 

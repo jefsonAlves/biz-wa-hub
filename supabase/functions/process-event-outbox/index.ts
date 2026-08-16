@@ -49,7 +49,7 @@ serve(async (req) => {
 
       const result = await deliverEvent(svc, row.payload as PlatformEvent, integration);
 
-      if (result.success) {
+      if (result.success || result.status === 202 || result.status === 200 || result.status === 201) {
         await svc.from("event_outbox").update({
           status: "sent", attempts, processed_at: new Date().toISOString(), last_error: null,
         }).eq("id", row.id);
@@ -67,7 +67,7 @@ serve(async (req) => {
         const errorMessage = result.error ? `${result.error}${result.body ? `: ${result.body}` : ""}` : "Erro desconhecido";
         
         await svc.from("event_outbox").update({
-          status: dead ? "dead" : "pending",
+          status: dead ? "dead" : "failed", // Use 'failed' instead of 'pending' to make status clear
           attempts,
           last_error: errorMessage.slice(0, 500),
           next_retry_at: new Date(Date.now() + backoffMs(attempts)).toISOString(),

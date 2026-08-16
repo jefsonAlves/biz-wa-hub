@@ -89,7 +89,14 @@ export interface N8nDiagnostics {
         last_error_message: string | null;
       };
   secret_configured: boolean;
-  outbox?: { pending: number; failed: number };
+  outbox?: { 
+    pending: number; 
+    processing: number;
+    sent: number;
+    failed: number; 
+    dead: number;
+    total_active: number;
+  };
   last_delivery?: {
     created_at: string;
     success: boolean;
@@ -141,16 +148,23 @@ export async function sendMessage(params: {
   return data as { success: boolean; message_id?: string; warning?: string };
 }
 
-export async function testN8nIntegration(params?: { tenant_id?: string | null; use_global?: boolean }) {
+export async function testN8nIntegration(params?: { 
+  tenant_id?: string | null; 
+  use_global?: boolean;
+  action?: "reprocess_queue" | "archive_dead";
+  days?: number;
+}) {
   const { data, error } = await supabase.functions.invoke("n8n-test-connection", {
     body: {
       tenant_id: params?.tenant_id ?? null,
-      use_global: params?.use_global ?? false
+      use_global: params?.use_global ?? false,
+      action: params?.action,
+      days: params?.days
     },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
-  return data as { success?: boolean; diagnostics?: N8nDiagnostics; http_status?: number; target?: string };
+  return data as { success?: boolean; diagnostics?: N8nDiagnostics; http_status?: number; target?: string; affected_count?: number; message?: string };
 }
 
 export async function dispatchEvent(payload: {

@@ -37,6 +37,7 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const requestedTenantId = body?.tenant_id as string | undefined;
     const useGlobal = body?.use_global === true;
+    const action = body?.action as string | undefined;
     
     // Determine target tenant_id based on permissions and request
     let tenantId: string | null = null;
@@ -51,6 +52,24 @@ serve(async (req) => {
       }
     } else {
       tenantId = auth.tenantId; // Regular users only test their own
+    }
+
+    // ADMINISTRATIVE ACTIONS
+    if (action === "reprocess_queue") {
+      const { data, error: rpcError } = await svc.rpc("reprocess_n8n_outbox", {
+        _tenant_id: tenantId
+      });
+      if (rpcError) throw rpcError;
+      return json({ success: true, ...data });
+    }
+
+    if (action === "archive_dead") {
+      const { data, error: rpcError } = await svc.rpc("archive_dead_events", {
+        _days_old: body.days || 7,
+        _tenant_id: tenantId
+      });
+      if (rpcError) throw rpcError;
+      return json({ success: true, ...data });
     }
 
     // Special check for global integration lookup
@@ -74,14 +93,28 @@ serve(async (req) => {
       secret_configured: secretConfigured,
     };
 
-    // Fila de saída
-    const [{ count: pendingCount }, { count: failedCount }] = await Promise.all([
+    // Fila de saída (expanded statuses)
+    const [{ count: pendingCount }, { count: processingCount }, { count: sentCount }, { count: failedCount }, { count: deadCount }] = await Promise.all([
       svc.from("event_outbox").select("id", { count: "exact", head: true })
-        .filter("tenant_id", tenantId === null ? "is" : "eq", tenantId).in("status", ["pending", "processing"]),
+        .filter("tenant_id", tenantId === null ? "is" : "eq", tenantId).eq("status", "pending"),
       svc.from("event_outbox").select("id", { count: "exact", head: true })
-        .filter("tenant_id", tenantId === null ? "is" : "eq", tenantId).in("status", ["failed", "dead"]),
+        .filter("tenant_id", tenantId === null ? "is" : "eq", tenantId).eq("status", "processing"),
+      svc.from("event_outbox").select("id", { count: "exact", head: true })
+        .filter("tenant_id", tenantId === null ? "is" : "eq", tenantId).eq("status", "sent"),
+      svc.from("event_outbox").select("id", { count: "exact", head: true })
+        .filter("tenant_id", tenantId === null ? "is" : "eq", tenantId).eq("status", "failed"),
+      svc.from("event_outbox").select("id", { count: "exact", head: true })
+        .filter("tenant_id", tenantId === null ? "is" : "eq", tenantId).eq("status", "dead"),
     ]);
-    diagnostics.outbox = { pending: pendingCount ?? 0, failed: failedCount ?? 0 };
+    
+    diagnostics.outbox = { 
+      pending: pendingCount ?? 0, 
+      processing: processingCount ?? 0,
+      sent: sentCount ?? 0,
+      failed: failedCount ?? 0,
+      dead: deadCount ?? 0,
+      total_active: (pendingCount ?? 0) + (processingCount ?? 0) + (failedCount ?? 0)
+    };
 
     // Última tentativa de entrega
     const { data: lastDelivery } = await svc
