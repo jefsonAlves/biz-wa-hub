@@ -626,6 +626,27 @@ const Connections = () => {
                   ? `Respondeu HTTP ${diagnostics.webhook.http_status} em ${diagnostics.webhook.duration_ms} ms.`
                   : diagnostics.webhook?.error ?? "O n8n não respondeu à chamada de teste."}
               />
+              
+              {diagnostics.worker && (
+                <DiagnosticRow
+                  ok={diagnostics.worker.rpc_ok}
+                  title="RPC public.claim_event_outbox"
+                  detail={diagnostics.worker.rpc_ok
+                    ? "A RPC existe e as permissões para service_role estão corretas."
+                    : `Erro: ${diagnostics.worker.rpc_error || "Falha ao validar RPC."}`}
+                />
+              )}
+
+              {diagnostics.worker && (
+                <DiagnosticRow
+                  ok={diagnostics.worker.is_active}
+                  title="Health Check (Outbox Worker)"
+                  detail={diagnostics.worker.last_poll_at
+                    ? `n8n-poll-events respondendo. Última atividade: ${new Date(diagnostics.worker.last_poll_at).toLocaleString("pt-BR")}.`
+                    : "Nenhuma atividade de poll detectada recentemente pelo worker."}
+                />
+              )}
+
               <DiagnosticRow
                 ok={(diagnostics.outbox?.failed ?? 0) === 0}
                 title="Fila de eventos"
