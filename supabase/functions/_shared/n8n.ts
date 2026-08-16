@@ -244,7 +244,7 @@ export async function deliverEvent(
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
-        "X-Tenant-Id": event.tenant_id ?? "",
+        "X-Tenant-Id": event.tenant_id ?? "00000000-0000-0000-0000-000000000000",
         "X-Event-Id": event.event_id,
         "X-Timestamp": timestamp,
         "X-Signature": signature,
