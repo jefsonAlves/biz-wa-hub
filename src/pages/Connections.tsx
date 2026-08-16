@@ -710,10 +710,10 @@ const Connections = () => {
                     </p>
                     
                      <div className="p-2 bg-destructive/10 rounded font-mono text-[10px] border border-destructive/20 whitespace-pre-wrap">
-{`Edge function returned 500: Error, {"error":"Erro interno","details":"[object Object]"}
+{`Edge function returned 500: Error, {"error":"Erro interno no servidor","details":"[object Object]","cause":"unknown","name":"Error","timestamp":1786848547760}
 
 {
-  "timestamp": 1786845449617,
+  "timestamp": 1786848547670,
   "error_type": "RUNTIME_ERROR",
   "filename": "supabase/functions/n8n-test-connection/index.ts",
   "lineno": 0,
