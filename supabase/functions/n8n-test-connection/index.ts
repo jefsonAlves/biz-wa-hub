@@ -136,6 +136,40 @@ serve(async (req) => {
       .maybeSingle();
     diagnostics.last_inbound_event = lastInbound ?? null;
 
+    // Worker Health Check (n8n-poll-events status)
+    const { data: lastPoll } = await svc
+      .from("webhook_delivery_attempts") // We could use this or a specific health log, but inbound_events is better if n8n is polling
+      .select("created_at")
+      .eq("event_type", "platform.ping") // Pings are a good proxy
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+      
+    // Let's actually check if the RPC exists and is executable
+    let rpcOk = false;
+    let rpcError = null;
+    try {
+      // Test the RPC with a small batch_size
+      const { error: testRpcErr } = await svc.rpc("claim_event_outbox", { batch_size: 1 });
+      if (!testRpcErr) {
+        rpcOk = true;
+      } else {
+        rpcError = testRpcErr.message;
+      }
+    } catch (e) {
+      rpcError = e instanceof Error ? e.message : String(e);
+    }
+
+    // Last inbound check is a better proxy for n8n-poll-events activity if it calls n8n-webhook-receiver back
+    // or we can just check the last time claim_event_outbox was called if we logged it.
+    // For now, let's look for the most recent inbound event from n8n as "activity".
+    diagnostics.worker = {
+      last_poll_at: lastInbound?.received_at ?? null,
+      rpc_ok: rpcOk,
+      rpc_error: rpcError,
+      is_active: lastInbound ? (Date.now() - new Date(lastInbound.received_at).getTime() < 300000) : false // 5 minutes skew
+    };
+
     if (!integration || !secretConfigured) {
       diagnostics.webhook = {
         reachable: false,

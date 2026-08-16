@@ -113,6 +113,12 @@ export interface N8nDiagnostics {
     response_excerpt?: string | null;
     target?: string | null;
   };
+  worker?: {
+    last_poll_at: string | null;
+    rpc_ok: boolean;
+    rpc_error?: string | null;
+    is_active: boolean;
+  };
 }
 
 export async function diagnoseN8n(tenantId?: string | null) {
