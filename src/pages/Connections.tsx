@@ -693,23 +693,6 @@ const Connections = () => {
 }`}
                     </div>
                     
-                    <p>
-                      Isso impede que eventos como <code>whatsapp.connection.qr.request</code>, <code>whatsapp.connection.create</code> e <code>whatsapp.messages.sync.request</code> sejam entregues ao n8n. 
-                      Como consequência, o <strong>QR Code não é gerado</strong>.
-                    </p>
-
-                    <div className="space-y-1.5">
-                      <p className="font-bold uppercase text-[10px] tracking-wider">Faça o seguinte:</p>
-                      <ol className="list-decimal pl-4 space-y-1">
-                        <li>Confirme se a migration que cria <code>public.claim_event_outbox(batch_size integer)</code> foi aplicada no banco.</li>
-                        <li>Confirme se a função <code>public.claim_event_outbox</code> existe e pode ser executada pela <code>service_role</code>.</li>
-                        <li>Confirme se a Edge Function <code>n8n-poll-events</code> está publicada.</li>
-                        <li>Confirme se os secrets necessários estão configurados (URL, SERVICE_ROLE_KEY, ANON_KEY, N8N_WEBHOOK_SECRET).</li>
-                        <li>Corrija <code>n8n-poll-events</code> para retornar um <code>detail</code> sanitizado no erro 500.</li>
-                        <li>Publique novamente as funções: <code>n8n-poll-events</code>, <code>process-event-outbox</code>, <code>whatsapp-connection-command</code> e <code>n8n-webhook-receiver</code>.</li>
-                        <li>Reprocesse ou libere novamente os eventos pendentes da <code>event_outbox</code>.</li>
-                      </ol>
-                    </div>
 
                     <div className="space-y-1.5 border-t border-destructive/20 pt-2">
                       <p className="font-bold uppercase text-[10px] tracking-wider">Passos para resolução:</p>
