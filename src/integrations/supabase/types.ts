@@ -1782,6 +1782,7 @@ export type Database = {
       is_valid_cnpj: { Args: { _digits: string }; Returns: boolean }
       is_valid_cpf: { Args: { _digits: string }; Returns: boolean }
       mark_conversation_read: { Args: { conv_id: string }; Returns: undefined }
+      reprocess_n8n_outbox: { Args: { _tenant_id?: string }; Returns: Json }
     }
     Enums: {
       ai_provider: "ollama" | "openai" | "gemini" | "groq"
