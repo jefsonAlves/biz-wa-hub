@@ -201,6 +201,11 @@ serve(async (req) => {
     return json({ success: result.success, diagnostics });
   } catch (error) {
     console.error("n8n-test-connection error:", error);
-    return json({ error: error instanceof Error ? error.message : "Erro interno" }, 500);
+    // Add detail to help debug 500 errors in the UI as requested
+    return json({ 
+      error: "Erro interno", 
+      details: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    }, 500);
   }
 });

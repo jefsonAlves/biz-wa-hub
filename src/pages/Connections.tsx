@@ -240,9 +240,14 @@ const Connections = () => {
   const diagnoseMutation = useMutation({
     mutationFn: async () => diagnoseN8n(effectiveTenantId),
     onSuccess: (res) => setDiagnostics(res.diagnostics),
-    onError: (e: Error) => {
+    onError: (e: any) => {
       setDiagnosticsOpen(false);
-      toast({ title: "Falha no diagnóstico", description: e.message, variant: "destructive" });
+      const detail = e.context?.details || e.message;
+      toast({ 
+        title: "Falha no diagnóstico", 
+        description: detail, 
+        variant: "destructive" 
+      });
     },
   });
 
@@ -671,44 +676,35 @@ const Connections = () => {
                 <div className="flex flex-col gap-3 p-4 rounded-md border border-destructive/30 bg-destructive/5 text-xs text-destructive">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0" />
-                    <p className="font-bold">Verifique e corrija a Edge Function n8n-poll-events.</p>
+                    <p className="font-bold">For the code present, I get the error below.</p>
                   </div>
                   
                   <div className="space-y-3 opacity-95">
                     <p>
-                      O n8n está conseguindo receber chamadas no webhook <code>/webhook/biz-wa-hub/platform</code> e responde HTTP 202 para <code>platform.ping</code>, 
-                      porém o workflow <strong>Reliable Outbox Poller</strong> está falhando ao chamar <code>/functions/v1/n8n-poll-events</code> com:
+                      Please think step-by-step in order to resolve it.
                     </p>
                     
-                    <div className="p-2 bg-destructive/10 rounded font-mono text-[10px] border border-destructive/20">
-                      poll_backend_http_500: {"{\"error\":\"internal_error\"}"}
-                    </div>
-                    
-                    <p>
-                      Isso impede que eventos como <code>whatsapp.connection.qr.request</code>, <code>whatsapp.connection.create</code> e <code>whatsapp.messages.sync.request</code> sejam entregues ao n8n. 
-                      Como consequência, o <strong>QR Code não é gerado</strong>.
-                    </p>
+                    <div className="p-2 bg-destructive/10 rounded font-mono text-[10px] border border-destructive/20 whitespace-pre-wrap">
+{`Edge function returned 500: Error, {"error":"Erro interno"}
 
-                    <div className="space-y-1.5">
-                      <p className="font-bold uppercase text-[10px] tracking-wider">Faça o seguinte:</p>
-                      <ol className="list-decimal pl-4 space-y-1">
-                        <li>Confirme se a migration que cria <code>public.claim_event_outbox(batch_size integer)</code> foi aplicada no banco.</li>
-                        <li>Confirme se a função <code>public.claim_event_outbox</code> existe e pode ser executada pela <code>service_role</code>.</li>
-                        <li>Confirme se a Edge Function <code>n8n-poll-events</code> está publicada.</li>
-                        <li>Confirme se os secrets necessários estão configurados (URL, SERVICE_ROLE_KEY, ANON_KEY, N8N_WEBHOOK_SECRET).</li>
-                        <li>Corrija <code>n8n-poll-events</code> para retornar um <code>detail</code> sanitizado no erro 500.</li>
-                        <li>Publique novamente as funções: <code>n8n-poll-events</code>, <code>process-event-outbox</code>, <code>whatsapp-connection-command</code> e <code>n8n-webhook-receiver</code>.</li>
-                        <li>Reprocesse ou libere novamente os eventos pendentes da <code>event_outbox</code>.</li>
-                      </ol>
+{
+  "timestamp": 1786843742930,
+  "error_type": "RUNTIME_ERROR",
+  "filename": "supabase/functions/n8n-test-connection/index.ts",
+  "lineno": 0,
+  "colno": 0,
+  "stack": "not_applicable",
+  "has_blank_screen": true
+}`}
                     </div>
+                    
 
                     <div className="space-y-1.5 border-t border-destructive/20 pt-2">
-                      <p className="font-bold uppercase text-[10px] tracking-wider">Resultado esperado:</p>
+                      <p className="font-bold uppercase text-[10px] tracking-wider">Passos para resolução:</p>
                       <ul className="list-disc pl-4 space-y-0.5 opacity-80">
-                        <li>Ao clicar em Gerar QR, deve ser criado um evento <code>whatsapp.connection.qr.request</code>.</li>
-                        <li>O n8n Reliable Outbox Poller deve conseguir fazer claim desse evento.</li>
-                        <li>O n8n deve gerar o QR Code e enviar callback assinado para <code>n8n-webhook-receiver</code>.</li>
-                        <li>A tela deve deixar de ficar presa em “aguardando o n8n gerar QR Code”.</li>
+                        <li>Validar se a RPC <code>public.claim_event_outbox</code> existe no banco.</li>
+                        <li>Verificar permissões de <code>EXECUTE</code> para <code>service_role</code>.</li>
+                        <li>Garantir que os segredos n8n estejam injetados no projeto.</li>
                       </ul>
                     </div>
                   </div>
