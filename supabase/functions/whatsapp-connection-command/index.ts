@@ -95,7 +95,10 @@ serve(async (req) => {
     }
 
     if ((command === "disconnect" || command === "logout") && body?.confirm_disconnect !== true) {
-      return json({ error: "confirm_disconnect_required" }, 409);
+      return json({ 
+        error: "confirm_disconnect_required", 
+        message: "É necessário confirmar a desconexão da sessão ativa." 
+      }, 409);
     }
 
 
