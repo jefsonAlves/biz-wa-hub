@@ -1729,6 +1729,30 @@ export type Database = {
         Args: { _connection_id: string }
         Returns: boolean
       }
+      claim_event_outbox: {
+        Args: { batch_size?: number }
+        Returns: {
+          aggregate_id: string | null
+          aggregate_type: string | null
+          attempts: number
+          created_at: string
+          event_type: string
+          id: string
+          last_error: string | null
+          max_attempts: number
+          next_retry_at: string
+          payload: Json
+          processed_at: string | null
+          status: Database["public"]["Enums"]["outbox_status"]
+          tenant_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "event_outbox"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_department_metrics: {
         Args: { _from: string; _to: string }
         Returns: {
