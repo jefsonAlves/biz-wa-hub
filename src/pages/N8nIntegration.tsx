@@ -337,7 +337,7 @@ const N8nOutboxPanel = ({ tenantId, useGlobal }: { tenantId: string | null; useG
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="p-3 bg-muted rounded-lg text-center">
             <div className="text-2xl font-bold">{outbox?.pending ?? 0}</div>
-            <div className="text-[10px] uppercase text-muted-foreground">Pendentes</div>
+            <div className="text-[10px] uppercase text-muted-foreground">Retentando</div>
           </div>
           <div className="p-3 bg-blue-500/10 rounded-lg text-center">
             <div className="text-2xl font-bold text-blue-500">{outbox?.processing ?? 0}</div>
@@ -372,7 +372,7 @@ const N8nOutboxPanel = ({ tenantId, useGlobal }: { tenantId: string | null; useG
             disabled={running === "reprocess_queue"}
           >
             {running === "reprocess_queue" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            Reprocessar fila n8n
+            Reprocessar falhas
           </Button>
           <Button 
             variant="ghost" 
