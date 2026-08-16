@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const http = require('http');
+const https = require('https');
 
 const input = $input.first().json;
 const headers = Object.fromEntries(
@@ -64,7 +66,11 @@ if (!event.connection_id || !uuid.test(event.connection_id)) {
 
 const apiBase = ($env.EVOLUTION_API_URL || '').replace(/\/+$/, '');
 const apiKey = $env.EVOLUTION_API_KEY;
-const publicN8nUrl = ($env.WEBHOOK_URL || $env.N8N_PUBLIC_URL || '').replace(/\/+$/, '');
+const evolutionWebhookBaseUrl = (
+  $env.EVOLUTION_WEBHOOK_BASE_URL
+  || $env.N8N_INTERNAL_BASE_URL
+  || 'http://n8n:5678'
+).replace(/\/+$/, '');
 if (!apiBase || !apiKey) return result(503, { ok: false, error: 'evolution_not_configured' });
 
 const instanceName = event.data?.provider_instance_id || event.data?.provider_session_id || `bizwa_${event.connection_id.replace(/-/g, '')}`;
@@ -78,14 +84,36 @@ const parseJson = (text) => {
   }
 };
 
-const evo = async (method, path, body) => {
-  const response = await fetch(apiBase + path, {
+const requestJson = (method, urlString, requestHeaders = {}, body) => new Promise((resolve, reject) => {
+  const bodyText = body === undefined ? null : (typeof body === 'string' ? body : JSON.stringify(body));
+  const transport = urlString.startsWith('https://') ? https : http;
+  const request = transport.request(urlString, {
     method,
-    headers: { apikey: apiKey, 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: {
+      ...requestHeaders,
+      ...(bodyText ? { 'Content-Length': Buffer.byteLength(bodyText) } : {}),
+    },
+  }, (response) => {
+    const chunks = [];
+    response.on('data', (chunk) => chunks.push(chunk));
+    response.on('end', () => {
+      const text = Buffer.concat(chunks).toString('utf8');
+      resolve({
+        ok: (response.statusCode ?? 0) >= 200 && (response.statusCode ?? 0) < 300,
+        status: response.statusCode ?? 0,
+        data: parseJson(text),
+        text,
+      });
+    });
   });
-  const text = await response.text();
-  return { ok: response.ok, status: response.status, data: parseJson(text), text };
+  request.setTimeout(30000, () => request.destroy(new Error('request_timeout')));
+  request.on('error', reject);
+  if (bodyText) request.write(bodyText);
+  request.end();
+});
+
+const evo = async (method, path, body) => {
+  return requestJson(method, apiBase + path, { apikey: apiKey, 'Content-Type': 'application/json' }, body);
 };
 
 const evoAny = async (attempts) => {
@@ -114,9 +142,10 @@ const callback = async (eventType, data) => {
   });
   const ts = String(Math.floor(Date.now() / 1000));
   const sig = crypto.createHmac('sha256', secret).update(`${ts}.${callbackId}.${body}`).digest('hex');
-  const response = await fetch($env.SUPABASE_URL.replace(/\/+$/, '') + '/functions/v1/n8n-webhook-receiver', {
-    method: 'POST',
-    headers: {
+  const response = await requestJson(
+    'POST',
+    $env.SUPABASE_URL.replace(/\/+$/, '') + '/functions/v1/n8n-webhook-receiver',
+    {
       'Content-Type': 'application/json',
       'X-Tenant-Id': tenantId,
       'X-Event-Id': callbackId,
@@ -124,7 +153,7 @@ const callback = async (eventType, data) => {
       'X-Signature': sig,
     },
     body,
-  });
+  );
   return { ok: response.ok, status: response.status, event_id: callbackId };
 };
 
@@ -207,8 +236,7 @@ const normalizeChat = (chat) => {
 };
 
 const configureWebhook = async () => {
-  if (!publicN8nUrl) return { ok: false, skipped: true, reason: 'WEBHOOK_URL_missing' };
-  const url = `${publicN8nUrl}/webhook/biz-wa-hub/evolution?tenant_id=${encodeURIComponent(tenantId)}&connection_id=${encodeURIComponent(event.connection_id)}&token=${encodeURIComponent(webhookToken)}`;
+  const url = `${evolutionWebhookBaseUrl}/webhook/biz-wa-hub/evolution?tenant_id=${encodeURIComponent(tenantId)}&connection_id=${encodeURIComponent(event.connection_id)}&token=${encodeURIComponent(webhookToken)}`;
   const body = {
     webhook: {
       enabled: true,

@@ -115,11 +115,19 @@ serve(async (req) => {
       return json({ error: "Tenant incompatível" }, 401);
     }
 
-    const { data: integration } = await svc
+    let { data: integration } = await svc
       .from("n8n_integrations")
       .select("id, status")
       .eq("tenant_id", tenantId)
       .maybeSingle();
+    if (!integration) {
+      const { data: globalIntegration } = await svc
+        .from("n8n_integrations")
+        .select("id, status")
+        .is("tenant_id", null)
+        .maybeSingle();
+      integration = globalIntegration;
+    }
     if (!integration || integration.status !== "active") {
       return json({ error: "Integração inativa" }, 403);
     }
@@ -259,15 +267,19 @@ serve(async (req) => {
 
     return json({ ok: true });
   } catch (error) {
-    console.error("n8n-webhook-receiver error:", error);
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error("n8n-webhook-receiver error:", detail);
     const eventId = req.headers.get("X-Event-Id");
     if (eventId) {
       await svc.from("inbound_events").update({
         processing_status: "failed",
-        error_message: error instanceof Error ? error.message.slice(0, 500) : "erro interno",
+        error_message: detail.slice(0, 500),
       }).eq("source", "n8n").eq("external_event_id", eventId);
     }
-    return json({ error: "erro no processamento" }, 500);
+    return json({
+      error: "erro no processamento",
+      detail: detail.slice(0, 300),
+    }, 500);
   }
 });
 
