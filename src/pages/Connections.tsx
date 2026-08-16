@@ -684,24 +684,18 @@ const Connections = () => {
                       Please think step-by-step in order to resolve it.
                     </p>
                     
-                    <div className="p-2 bg-destructive/10 rounded font-mono text-[10px] border border-destructive/20 whitespace-pre-wrap">
-{`corrija: {
+                     <div className="p-2 bg-destructive/10 rounded font-mono text-[10px] border border-destructive/20 whitespace-pre-wrap">
+{`Edge function returned 500: Error, {"error":"Erro interno","details":"[object Object]"}
 
-  "timestamp": 1786845347990,
-
+{
+  "timestamp": 1786845449617,
   "error_type": "RUNTIME_ERROR",
-
   "filename": "supabase/functions/n8n-test-connection/index.ts",
-
   "lineno": 0,
-
   "colno": 0,
-
   "stack": "not_applicable",
-
   "has_blank_screen": true
-
-} e melhore`}
+}`}
                     </div>
                     
 
