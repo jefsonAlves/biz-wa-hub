@@ -125,7 +125,10 @@ const Connections = () => {
     for (const connection of connections) {
       const previous = previousStatuses.current[connection.id];
       if (connection.status === "connected" && previous && previous !== "connected") {
-        if (qrConnectionId === connection.id) setQrConnectionId(null);
+        if (qrConnectionId === connection.id) {
+          setQrConnectionId(null);
+          // Auto-redirect or state update could go here
+        }
         toast({
           title: "WhatsApp conectado",
           description: `${connection.name} foi conectado com sucesso. Novas mensagens aparecerão no Inbox.`,
@@ -204,11 +207,13 @@ const Connections = () => {
     try {
       const res = await sendConnectionCommand(connection.id, command, { confirmDisconnect });
       await queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe", effectiveTenantId] });
+      
+      const isSync = command === "sync_messages";
       toast({
-        title: res.warning ? "Comando enfileirado" : "Comando enviado ao n8n",
+        title: res.warning ? "Aviso" : (isSync ? "Sincronização iniciada" : "Comando enfileirado"),
         description: res.warning ?? (command === "generate_qr"
-          ? "Aguardando o callback assinado com o QR Code."
-          : "Aguardando a confirmação do n8n."),
+          ? "Aguardando o QR Code do n8n. Se demorar, verifique o diagnóstico da conexão."
+          : (isSync ? "O n8n está importando as mensagens em segundo plano." : "Aguardando a confirmação do n8n.")),
       });
       
       if (res.warning) {
