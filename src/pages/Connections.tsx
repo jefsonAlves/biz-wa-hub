@@ -647,9 +647,26 @@ const Connections = () => {
               />
 
               {!diagnostics.webhook?.reachable && (
-                <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  Enquanto o n8n não responder, o QR Code não será gerado: os comandos ficam apenas enfileirados.
+                <div className="flex flex-col gap-2 p-3 rounded-md border border-destructive/30 bg-destructive/5 text-xs text-destructive">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <p className="font-semibold">O QR Code não chega ao n8n porque o workflow “Biz WA Hub - Reliable Outbox Poller” está falhando.</p>
+                  </div>
+                  <div className="pl-6 space-y-2 opacity-90">
+                    <p><strong>Erro visto no n8n:</strong> poll_backend_http_500: {"{\"error\":\"internal_error\"}"}</p>
+                    <p><strong>Origem:</strong> O n8n chama a Edge Function <code>/functions/v1/n8n-poll-events</code> com body <code>{"{ \"action\": \"claim\", \"limit\": 10 }"}</code>. A função retorna HTTP 500 internal_error.</p>
+                    <p className="font-medium mt-2">Verificar/corrigir na Lovable:</p>
+                    <ol className="list-decimal pl-4 space-y-1">
+                      <li>Conferir logs da Edge Function: <code>n8n-poll-events</code></li>
+                      <li>Corrigir a causa do erro em: <code>supabase/functions/n8n-poll-events/index.ts</code> (Provável ponto de falha: <code>svc.rpc("claim_event_outbox", ...)</code>)</li>
+                      <li>Confirmar que a migration foi aplicada: <code>supabase/migrations/20260801183000_event_outbox_worker.sql</code> (Ela precisa criar <code>public.claim_event_outbox</code>)</li>
+                      <li>Confirmar que a função existe no banco e pode ser executada pelo service_role: <code>GRANT EXECUTE ON FUNCTION public.claim_event_outbox(integer) TO service_role;</code></li>
+                      <li>Confirmar que a Edge Function n8n-poll-events tem estes secrets/envs: <code>SUPABASE_URL</code>, <code>SUPABASE_SERVICE_ROLE_KEY</code>, <code>SUPABASE_ANON_KEY</code>, <code>N8N_WEBHOOK_SECRET</code></li>
+                      <li>Melhorar o retorno temporariamente para diagnóstico em caso de erro, retornando <code>detail: error.message</code></li>
+                      <li>Depois de corrigir, testar novamente: Gerar QR, confirmar <code>event_outbox</code>, <code>n8n-poll-events</code> action=claim, execução do workflow no n8n e preenchimento do <code>qr_code</code>.</li>
+                    </ol>
+                    <p className="mt-2 text-[10px] opacity-70">Não alterar: N8N_WEBHOOK_SECRET, caminho /webhook/biz-wa-hub/platform, ou webhook de retorno.</p>
+                  </div>
                 </div>
               )}
             </div>
