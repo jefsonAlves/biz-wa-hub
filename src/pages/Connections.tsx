@@ -712,12 +712,11 @@ const Connections = () => {
                     </div>
 
                     <div className="space-y-1.5 border-t border-destructive/20 pt-2">
-                      <p className="font-bold uppercase text-[10px] tracking-wider">Resultado esperado:</p>
+                      <p className="font-bold uppercase text-[10px] tracking-wider">Passos para resolução:</p>
                       <ul className="list-disc pl-4 space-y-0.5 opacity-80">
-                        <li>Ao clicar em Gerar QR, deve ser criado um evento <code>whatsapp.connection.qr.request</code>.</li>
-                        <li>O n8n Reliable Outbox Poller deve conseguir fazer claim desse evento.</li>
-                        <li>O n8n deve gerar o QR Code e enviar callback assinado para <code>n8n-webhook-receiver</code>.</li>
-                        <li>A tela deve deixar de ficar presa em “aguardando o n8n gerar QR Code”.</li>
+                        <li>Validar se a RPC <code>public.claim_event_outbox</code> existe no banco.</li>
+                        <li>Verificar permissões de <code>EXECUTE</code> para <code>service_role</code>.</li>
+                        <li>Garantir que os segredos n8n estejam injetados no projeto.</li>
                       </ul>
                     </div>
                   </div>
