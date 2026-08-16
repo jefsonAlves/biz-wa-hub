@@ -77,10 +77,16 @@ serve(async (req) => {
 
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error("n8n-poll-events error:", message);
+    // Log full error internally
+    console.error("n8n-poll-events critical error:", message);
+    
+    // Return sanitized detail for n8n diagnostics
+    // We remove potential sensitive info like stack traces or URLs
+    const sanitizedDetail = message.length > 200 ? message.slice(0, 200) + "..." : message;
+    
     return json({ 
       error: "internal_error",
-      detail: message 
+      detail: sanitizedDetail 
     }, 500);
   }
 });

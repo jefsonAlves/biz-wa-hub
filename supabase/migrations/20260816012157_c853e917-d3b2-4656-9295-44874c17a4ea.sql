@@ -1,0 +1,1 @@
+UPDATE event_outbox SET status = 'pending', attempts = 0, next_retry_at = now(), last_error = NULL WHERE status IN ('failed', 'processing', 'pending') AND (attempts > 0 OR status = 'processing');
