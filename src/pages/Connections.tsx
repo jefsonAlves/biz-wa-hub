@@ -688,7 +688,7 @@ const Connections = () => {
 {`Edge function returned 500: Error, {"error":"Erro interno","details":"[object Object]"}
 
 {
-  "timestamp": 1786844260639,
+  "timestamp": 1786844323299,
   "error_type": "RUNTIME_ERROR",
   "filename": "supabase/functions/n8n-test-connection/index.ts",
   "lineno": 0,
