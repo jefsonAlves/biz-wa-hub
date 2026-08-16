@@ -97,7 +97,8 @@ const N8nIntegration = () => {
         webhook_path: webhookPath.trim() || "/webhook/biz-wa-hub/platform",
         environment,
         status: active ? "active" : "inactive",
-        tenant_id: effectiveTenantId
+        tenant_id: effectiveTenantId,
+        last_error_message: null // Clear old error on save
       };
 
       if (integration) {
@@ -112,7 +113,7 @@ const N8nIntegration = () => {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["n8n_integration"] });
+      queryClient.invalidateQueries({ queryKey: ["n8n_integration", effectiveTenantId] });
       toast({ title: "Integração salva" });
     },
     onError: (e: Error) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
@@ -121,12 +122,24 @@ const N8nIntegration = () => {
   const runTest = async () => {
     setTesting(true);
     try {
-      const res = await testN8nIntegration();
-      if (res?.error) throw new Error(res.error);
-      toast({ title: "n8n respondeu", description: `HTTP ${res?.http_status ?? "ok"}` });
-      queryClient.invalidateQueries({ queryKey: ["n8n_integration"] });
+      // Invalidate query first to make sure we are testing the saved state
+      await queryClient.invalidateQueries({ queryKey: ["n8n_integration", effectiveTenantId] });
+      
+      const res = await testN8nIntegration({
+        tenant_id: effectiveTenantId,
+        use_global: isSuperAdmin && effectiveTenantId === null
+      });
+      
+      if (res?.success) {
+        toast({ title: "n8n respondeu", description: `HTTP ${res?.diagnostics?.webhook?.http_status ?? "ok"}` });
+      } else {
+        const errorMsg = res?.diagnostics?.webhook?.error || "Falha desconhecida";
+        toast({ title: "Falha no teste", description: errorMsg, variant: "destructive" });
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ["n8n_integration", effectiveTenantId] });
     } catch (e) {
-      toast({ title: "Falha no teste", description: (e as Error).message, variant: "destructive" });
+      toast({ title: "Erro ao testar", description: (e as Error).message, variant: "destructive" });
     } finally {
       setTesting(false);
     }

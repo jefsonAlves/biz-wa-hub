@@ -34,17 +34,31 @@ serve(async (req) => {
     );
     if (!isAdmin) return json({ error: "Permissões insuficientes" }, 403);
 
-    const body = await req.json().catch(() => null);
+    const body = await req.json().catch(() => ({}));
     const requestedTenantId = body?.tenant_id as string | undefined;
-    const tenantId = auth.isSuperAdmin && requestedTenantId ? requestedTenantId : auth.tenantId;
+    const useGlobal = body?.use_global === true;
+    
+    // Determine target tenant_id based on permissions and request
+    let tenantId: string | null = null;
+    
+    if (auth.isSuperAdmin) {
+      if (useGlobal) {
+        tenantId = null; // Forces global lookup
+      } else if (requestedTenantId) {
+        tenantId = requestedTenantId;
+      } else {
+        tenantId = auth.tenantId || null;
+      }
+    } else {
+      tenantId = auth.tenantId; // Regular users only test their own
+    }
 
-    if (!tenantId) return json({ error: "tenant_id_required" }, 400);
-
+    // Special check for global integration lookup
     const integration = await getIntegration(svc, tenantId);
     const secretConfigured = !!webhookSecret();
 
     const diagnostics: Record<string, unknown> = {
-      tenant_id: tenantId,
+      tenant_id: tenantId ?? "global",
       integration: integration
         ? {
           found: true,
@@ -63,9 +77,9 @@ serve(async (req) => {
     // Fila de saída
     const [{ count: pendingCount }, { count: failedCount }] = await Promise.all([
       svc.from("event_outbox").select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenantId).in("status", ["pending", "processing"]),
+        .filter("tenant_id", tenantId === null ? "is" : "eq", tenantId).in("status", ["pending", "processing"]),
       svc.from("event_outbox").select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenantId).in("status", ["failed", "dead"]),
+        .filter("tenant_id", tenantId === null ? "is" : "eq", tenantId).in("status", ["failed", "dead"]),
     ]);
     diagnostics.outbox = { pending: pendingCount ?? 0, failed: failedCount ?? 0 };
 
@@ -73,7 +87,7 @@ serve(async (req) => {
     const { data: lastDelivery } = await svc
       .from("webhook_delivery_attempts")
       .select("created_at, success, http_status, error_message, duration_ms")
-      .eq("tenant_id", tenantId)
+      .filter("tenant_id", tenantId === null ? "is" : "eq", tenantId)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -83,7 +97,7 @@ serve(async (req) => {
     const { data: lastInbound } = await svc
       .from("inbound_events")
       .select("received_at, event_type, processing_status")
-      .eq("tenant_id", tenantId)
+      .filter("tenant_id", tenantId === null ? "is" : "eq", tenantId)
       .order("received_at", { ascending: false })
       .limit(1)
       .maybeSingle();

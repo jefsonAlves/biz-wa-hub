@@ -141,10 +141,16 @@ export async function sendMessage(params: {
   return data as { success: boolean; message_id?: string; warning?: string };
 }
 
-export async function testN8nIntegration() {
-  const { data, error } = await supabase.functions.invoke("n8n-test-connection", { body: {} });
+export async function testN8nIntegration(params?: { tenant_id?: string | null; use_global?: boolean }) {
+  const { data, error } = await supabase.functions.invoke("n8n-test-connection", {
+    body: {
+      tenant_id: params?.tenant_id ?? null,
+      use_global: params?.use_global ?? false
+    },
+  });
   if (error) throw error;
-  return data as { success?: boolean; error?: string; http_status?: number; target?: string };
+  if (data?.error) throw new Error(data.error);
+  return data as { success?: boolean; diagnostics?: N8nDiagnostics; http_status?: number; target?: string };
 }
 
 export async function dispatchEvent(payload: {
