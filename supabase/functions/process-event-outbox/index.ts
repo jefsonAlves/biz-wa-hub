@@ -67,7 +67,7 @@ serve(async (req) => {
         const errorMessage = result.error ? `${result.error}${result.body ? `: ${result.body}` : ""}` : "Erro desconhecido";
         
         await svc.from("event_outbox").update({
-          status: dead ? "dead" : "failed", // Use 'failed' instead of 'pending' to make status clear
+          status: dead ? "dead" : "pending",
           attempts,
           last_error: errorMessage.slice(0, 500),
           next_retry_at: new Date(Date.now() + backoffMs(attempts)).toISOString(),
