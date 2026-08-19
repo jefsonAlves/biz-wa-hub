@@ -47,10 +47,10 @@ serve(async (req) => {
 
 Please think step-by-step in order to resolve it.
 \`\`\`
-Edge function returned 503: Error, {"error":"backend_not_configured","message":"no ambiente conexões Whatsapp preciso que mude para deixa igual a conexão"}
+Edge function returned 503: Error, {"error":"backend_not_configured","message":"For the code present, I get the error below.\\n\\nPlease think step-by-step in order to resolve it.\\n'''\\nEdge function returned 503: Error, {\\\"error\\\":\\\"backend_not_configured\\\",\\\"message\\\":\\\"no ambiente conexões Whatsapp preciso que mude para deixa igual a conexão\\\"}\\n\\n{\\n  \\\"timestamp\\\": 1787170012385,\\n  \\\"error_type\\\": \\\"RUNTIME_ERROR\\\",\\n  \\\"filename\\\": \\\"supabase/functions/whatsapp-backend-proxy/index.ts\\\",\\n  \\\"lineno\\\": 0,\\n  \\\"colno\\\": 0,\\n  \\\"stack\\\": \\\"not_applicable\\\",\\n  \\\"has_blank_screen\\\": true\\n}\\n'''\"}
 
 {
-  "timestamp": 1787170012385,
+  "timestamp": 1787175554392,
   "error_type": "RUNTIME_ERROR",
   "filename": "supabase/functions/whatsapp-backend-proxy/index.ts",
   "lineno": 0,
