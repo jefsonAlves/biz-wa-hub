@@ -27,6 +27,12 @@ import {
   type ConnectionCommand,
   type N8nDiagnostics,
 } from "@/lib/whatsapp/provider";
+import {
+  createBackendConnection,
+  runBackendConnectionAction,
+  type BackendConnectionAction,
+} from "@/lib/whatsapp/backend";
+import { BackendConfigCard } from "@/components/connections/BackendConfigCard";
 
 
 const statusVariant = (status: string) =>
@@ -74,7 +80,7 @@ const Connections = () => {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [sessionId, setSessionId] = useState("");
-  const [providerType, setProviderType] = useState<"n8n" | "meta">("n8n");
+  const [providerType, setProviderType] = useState<"baileys" | "n8n" | "meta">("baileys");
   const [metaConfig, setMetaConfig] = useState({ phone_number_id: "", waba_id: "", token: "" });
   const [pending, setPending] = useState<string | null>(null);
   const [qrConnectionId, setQrConnectionId] = useState<string | null>(null);
@@ -166,13 +172,19 @@ const Connections = () => {
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!effectiveTenantId) throw new Error("Selecione uma empresa para cadastrar e conectar o WhatsApp.");
+
+      // Backend próprio (Baileys): cria a sessão direto no backend, sem n8n.
+      if (providerType === "baileys") {
+        await createBackendConnection({ tenantId: effectiveTenantId, name: name.trim() || "Novo número" });
+        return;
+      }
       
       const { data, error } = await supabase.functions.invoke("whatsapp-connection-command", {
         body: {
           command: "create_connection_entry",
           tenant_id: effectiveTenantId,
           name: name.trim() || "Novo número",
-          provider_type: providerType === "meta" ? "meta_cloud" : "n8n_unofficial",
+          provider_type: providerType === "meta" ? "whatsapp_cloud_api" : "n8n_unofficial",
           provider_session_id: providerType === "n8n" ? (sessionId.trim() || null) : null,
           provider_token: providerType === "meta" ? metaConfig.token : null,
           phone_number_id: providerType === "meta" ? metaConfig.phone_number_id : null,
@@ -299,7 +311,14 @@ const Connections = () => {
             <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
               <div className="space-y-2">
                 <Label>Provedor</Label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <Button
+                    variant={providerType === "baileys" ? "default" : "outline"}
+                    onClick={() => setProviderType("baileys")}
+                    className="w-full"
+                  >
+                    Backend próprio
+                  </Button>
                   <Button 
                     variant={providerType === "n8n" ? "default" : "outline"}
                     onClick={() => setProviderType("n8n")}
@@ -322,7 +341,14 @@ const Connections = () => {
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Comercial" />
               </div>
 
-              {providerType === "n8n" ? (
+              {providerType === "baileys" ? (
+                <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    A sessão é criada no seu backend Node.js (Baileys). Depois de criar, clique em
+                    <strong> Iniciar sessão</strong> para receber o QR Code. Não é necessário n8n nem Docker.
+                  </p>
+                </div>
+              ) : providerType === "n8n" ? (
                 <div className="space-y-2">
                   <Label>Identificador da sessão no n8n (opcional)</Label>
                   <Input value={sessionId} onChange={(e) => setSessionId(e.target.value)} placeholder="Ex: comercial-01" />
