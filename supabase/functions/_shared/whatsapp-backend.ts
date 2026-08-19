@@ -89,14 +89,17 @@ async function login(svc: SupabaseClient, backend: BackendConfig): Promise<strin
     throw new Error(`Login no backend falhou (HTTP ${resp.status}).`);
   }
   const token = String(body.token);
-  await svc
-    .from("whatsapp_backends")
-    .update({
-      session_token: token,
-      session_token_expires_at: new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString(),
-    })
-    .eq("id", backend.id);
+  if (backend.persisted !== false) {
+    await svc
+      .from("whatsapp_backends")
+      .update({
+        session_token: token,
+        session_token_expires_at: new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString(),
+      })
+      .eq("id", backend.id);
+  }
   return token;
+
 }
 
 /** Token de autorização para chamadas autenticadas no backend. */
