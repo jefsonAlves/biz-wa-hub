@@ -701,7 +701,35 @@ const Connections = () => {
                 <div className="flex flex-col gap-3 p-4 rounded-md border border-destructive/30 bg-destructive/5 text-xs text-destructive">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0" />
-                    <p className="font-bold">Implemente uma conexão de WhatsApp que funcione sem exigir n8n/Docker, usando um provedor via API e credenciais por empresa.</p>
+                    <p className="font-bold whitespace-pre-wrap">IMPORTANTE: a arquitetura da conexão WhatsApp deve seguir o código-fonte fornecido.
+
+O projeto já possui conexão direta com WhatsApp através do Baileys executado pelo backend Node.js/TypeScript.
+
+Portanto:
+
+NÃO torne n8n obrigatório para conectar WhatsApp.
+
+NÃO torne Docker obrigatório para conectar WhatsApp.
+
+NÃO crie o fluxo Frontend → n8n → WhatsApp.
+
+O fluxo principal deve ser:
+
+Frontend → Backend → Baileys → WhatsApp
+
+O backend já possui recursos relacionados a makeWASocket(), StartWhatsAppSession, connection.update, QR Code, listeners de mensagens e Socket.IO. Esses componentes devem ser aproveitados e organizados, e não substituídos por uma conexão controlada pelo n8n.
+
+O n8n deve existir apenas como recurso opcional de automação, por exemplo:
+
+Mensagem recebida → Backend → Evento → n8n, se houver automação ativa.
+
+Se o n8n estiver offline, o WhatsApp deve continuar funcionando normalmente.
+
+Docker deve ser tratado exclusivamente como uma opção de infraestrutura/deploy. Redis, banco, n8n, Ollama e até o backend podem ou não estar em containers, sem modificar a lógica do WhatsApp.
+
+O critério obrigatório de validação é:
+
+Com n8n desligado ou não configurado, o usuário precisa conseguir clicar em “Conectar WhatsApp”, visualizar o QR Code, escaneá-lo, obter status “Conectado”, receber mensagens no painel e responder pelo próprio sistema.</p>
                   </div>
                   
                   <div className="space-y-3 opacity-95">
