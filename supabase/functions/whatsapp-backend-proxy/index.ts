@@ -150,8 +150,9 @@ serve(async (req) => {
           ...(status === "disconnected" ? { last_disconnected_at: new Date().toISOString() } : {}),
         })
         .eq("id", connection.id);
-      return { status, has_qr: !!qrcode };
+      return { status, has_qr: !!qrcode, phone_number: remote?.number ?? null };
     };
+
 
     const registerFailure = async (message: string) => {
       await svc
