@@ -27,6 +27,12 @@ import {
   type ConnectionCommand,
   type N8nDiagnostics,
 } from "@/lib/whatsapp/provider";
+import {
+  createBackendConnection,
+  runBackendConnectionAction,
+  type BackendConnectionAction,
+} from "@/lib/whatsapp/backend";
+import { BackendConfigCard } from "@/components/connections/BackendConfigCard";
 
 
 const statusVariant = (status: string) =>
@@ -74,7 +80,7 @@ const Connections = () => {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [sessionId, setSessionId] = useState("");
-  const [providerType, setProviderType] = useState<"n8n" | "meta">("n8n");
+  const [providerType, setProviderType] = useState<"baileys" | "n8n" | "meta">("baileys");
   const [metaConfig, setMetaConfig] = useState({ phone_number_id: "", waba_id: "", token: "" });
   const [pending, setPending] = useState<string | null>(null);
   const [qrConnectionId, setQrConnectionId] = useState<string | null>(null);
@@ -166,13 +172,19 @@ const Connections = () => {
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!effectiveTenantId) throw new Error("Selecione uma empresa para cadastrar e conectar o WhatsApp.");
+
+      // Backend próprio (Baileys): cria a sessão direto no backend, sem n8n.
+      if (providerType === "baileys") {
+        await createBackendConnection({ tenantId: effectiveTenantId, name: name.trim() || "Novo número" });
+        return;
+      }
       
       const { data, error } = await supabase.functions.invoke("whatsapp-connection-command", {
         body: {
           command: "create_connection_entry",
           tenant_id: effectiveTenantId,
           name: name.trim() || "Novo número",
-          provider_type: providerType === "meta" ? "meta_cloud" : "n8n_unofficial",
+          provider_type: providerType === "meta" ? "whatsapp_cloud_api" : "n8n_unofficial",
           provider_session_id: providerType === "n8n" ? (sessionId.trim() || null) : null,
           provider_token: providerType === "meta" ? metaConfig.token : null,
           phone_number_id: providerType === "meta" ? metaConfig.phone_number_id : null,
@@ -203,6 +215,34 @@ const Connections = () => {
   ) => {
     setPending(`${connection.id}:${command}`);
     if (command === "generate_qr") setQrConnectionId(connection.id);
+
+    // Backend próprio: comandos vão direto ao backend (sem fila do n8n).
+    if (connection.provider_type === "baileys_backend") {
+      const map: Partial<Record<ConnectionCommand, BackendConnectionAction>> = {
+        create_session: "start_session",
+        generate_qr: "start_session",
+        get_status: "refresh_status",
+        health_check: "refresh_status",
+        reconnect: "start_session",
+        disconnect: "disconnect",
+        logout: "disconnect",
+      };
+      const action = map[command];
+      try {
+        if (!action) throw new Error("Comando não disponível para o backend próprio.");
+        const res = await runBackendConnectionAction(connection.id, action, effectiveTenantId);
+        await queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe", effectiveTenantId] });
+        toast({
+          title: "Comando executado",
+          description: res.message ?? "O backend respondeu com sucesso.",
+        });
+      } catch (e) {
+        toast({ title: "Erro no backend", description: (e as Error).message, variant: "destructive" });
+      } finally {
+        setPending(null);
+      }
+      return;
+    }
 
     try {
       const res = await sendConnectionCommand(connection.id, command, { confirmDisconnect });
@@ -263,6 +303,21 @@ const Connections = () => {
     },
   });
 
+  // Polling do QR Code enquanto o backend próprio negocia a sessão.
+  useEffect(() => {
+    if (!qrConnectionId || qrConnection?.provider_type !== "baileys_backend") return;
+    if (qrConnection?.status === "connected") return;
+    const timer = setInterval(async () => {
+      try {
+        await runBackendConnectionAction(qrConnectionId, "refresh_status", effectiveTenantId);
+        await queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe", effectiveTenantId] });
+      } catch {
+        // erros já ficam registrados em connection_error
+      }
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [qrConnectionId, qrConnection?.provider_type, qrConnection?.status, effectiveTenantId, queryClient]);
+
   const runDiagnostics = () => {
     setDiagnostics(null);
     setDiagnosticsOpen(true);
@@ -299,7 +354,14 @@ const Connections = () => {
             <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
               <div className="space-y-2">
                 <Label>Provedor</Label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <Button
+                    variant={providerType === "baileys" ? "default" : "outline"}
+                    onClick={() => setProviderType("baileys")}
+                    className="w-full"
+                  >
+                    Backend próprio
+                  </Button>
                   <Button 
                     variant={providerType === "n8n" ? "default" : "outline"}
                     onClick={() => setProviderType("n8n")}
@@ -322,7 +384,14 @@ const Connections = () => {
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Comercial" />
               </div>
 
-              {providerType === "n8n" ? (
+              {providerType === "baileys" ? (
+                <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    A sessão é criada no seu backend Node.js (Baileys). Depois de criar, clique em
+                    <strong> Iniciar sessão</strong> para receber o QR Code. Não é necessário n8n nem Docker.
+                  </p>
+                </div>
+              ) : providerType === "n8n" ? (
                 <div className="space-y-2">
                   <Label>Identificador da sessão no n8n (opcional)</Label>
                   <Input value={sessionId} onChange={(e) => setSessionId(e.target.value)} placeholder="Ex: comercial-01" />
@@ -416,6 +485,8 @@ const Connections = () => {
         </div>
       )}
 
+      {effectiveTenantId && <BackendConfigCard tenantId={effectiveTenantId} />}
+
       {isLoading ? (
         <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Carregando conexões...</div>
       ) : !effectiveTenantId ? (
@@ -482,7 +553,7 @@ const Connections = () => {
 
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" onClick={() => runCommand(conn, "create_session")} disabled={busy("create_session") || conn.status === "connected"}>
-                      <PlugZap className="h-3.5 w-3.5 mr-1" />{conn.status === "connected" ? "Sessão ativa" : "Criar sessão"}
+                      <PlugZap className="h-3.5 w-3.5 mr-1" />{conn.status === "connected" ? "Sessão ativa" : conn.provider_type === "baileys_backend" ? "Iniciar sessão" : "Criar sessão"}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => runCommand(conn, "generate_qr")} disabled={busy("generate_qr") || conn.status === "connected"}>
                       {busy("generate_qr") ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <QrCode className="h-3.5 w-3.5 mr-1" />}
@@ -500,7 +571,7 @@ const Connections = () => {
                       size="sm"
                       variant="outline"
                       onClick={() => runCommand(conn, "sync_messages")}
-                      disabled={busy("sync_messages") || conn.status !== "connected"}
+                      disabled={busy("sync_messages") || conn.status !== "connected" || conn.provider_type === "baileys_backend"}
                     >
                       <RefreshCw className={`h-3.5 w-3.5 mr-1 ${busy("sync_messages") ? "animate-spin" : ""}`} />
                       Atualizar mensagens

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { authenticate, buildEvent, corsHeaders, enqueueEvent, getIntegration, json, serviceClient } from "../_shared/n8n.ts";
+import { backendCall, getBackend, humanizeBackendError } from "../_shared/whatsapp-backend.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -99,6 +100,49 @@ serve(async (req) => {
       delivery_status: "pending",
     }).select("id").single();
     if (msgError) throw msgError;
+
+    const touchConversation = async () => {
+      const at = new Date().toISOString();
+      await svc.from("conversations").update({
+        last_message_at: at,
+        last_message_direction: "outgoing",
+        last_agent_message_at: at,
+        awaiting_reply: false,
+      }).eq("id", conversation.id);
+      if (contactRow?.id && content) {
+        await svc.from("contacts").update({ last_message_preview: content.slice(0, 100) }).eq("id", contactRow.id);
+      }
+    };
+
+    // Backend próprio (Baileys): envio direto, sem depender do n8n.
+    if (connection.provider_type === "baileys_backend") {
+      const backend = await getBackend(svc, auth.tenantId as string);
+      if (!backend) return json({ error: "Backend de WhatsApp não configurado" }, 400);
+      const number = chatId.replace(/\D/g, "");
+      try {
+        const sent = await backendCall(svc, backend, `/api/messages/send`, {
+          method: "POST",
+          headers: connection.provider_token
+            ? { Authorization: `Bearer ${connection.provider_token}` }
+            : undefined,
+          body: JSON.stringify({ number, body: content, mediaUrl: mediaUrl ?? undefined }),
+        });
+        const ok = sent.status >= 200 && sent.status < 300;
+        await svc.from("messages").update({
+          delivery_status: ok ? "sent" : "failed",
+          metadata: ok ? null : { error: `HTTP ${sent.status}` },
+        }).eq("id", message.id);
+        if (!ok) return json({ error: "Backend recusou o envio", details: `HTTP ${sent.status}` }, 502);
+        await touchConversation();
+        return json({ success: true, message_id: message.id, delivered_via: "backend" });
+      } catch (e) {
+        const detail = humanizeBackendError(e instanceof Error ? e.message : "erro desconhecido");
+        await svc.from("messages").update({ delivery_status: "failed", metadata: { error: detail } }).eq("id", message.id);
+        return json({ error: detail, cause: "backend_unreachable" }, 502);
+      }
+    }
+
+
 
     const event = buildEvent({
       event_type: mediaUrl ? "whatsapp.media.send" : "whatsapp.message.send",

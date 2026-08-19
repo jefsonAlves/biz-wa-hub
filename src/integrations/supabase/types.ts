@@ -1619,6 +1619,65 @@ export type Database = {
           },
         ]
       }
+      whatsapp_backends: {
+        Row: {
+          api_token: string | null
+          auth_email: string | null
+          auth_password: string | null
+          base_url: string
+          created_at: string
+          id: string
+          last_check_at: string | null
+          last_error_message: string | null
+          name: string
+          session_token: string | null
+          session_token_expires_at: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          api_token?: string | null
+          auth_email?: string | null
+          auth_password?: string | null
+          base_url: string
+          created_at?: string
+          id?: string
+          last_check_at?: string | null
+          last_error_message?: string | null
+          name?: string
+          session_token?: string | null
+          session_token_expires_at?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          api_token?: string | null
+          auth_email?: string | null
+          auth_password?: string | null
+          base_url?: string
+          created_at?: string
+          id?: string
+          last_check_at?: string | null
+          last_error_message?: string | null
+          name?: string
+          session_token?: string | null
+          session_token_expires_at?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_backends_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_connections: {
         Row: {
           api_url: string | null
@@ -1770,6 +1829,19 @@ export type Database = {
       }
       get_my_permissions: { Args: never; Returns: string[] }
       get_user_tenant_id: { Args: never; Returns: string }
+      get_whatsapp_backend_safe: {
+        Args: { _tenant_id?: string }
+        Returns: {
+          base_url: string
+          has_credentials: boolean
+          id: string
+          last_check_at: string
+          last_error_message: string
+          name: string
+          status: string
+          tenant_id: string
+        }[]
+      }
       get_whatsapp_connections_safe: {
         Args: { _tenant_id?: string }
         Returns: {
@@ -1835,7 +1907,11 @@ export type Database = {
       outbox_status: "pending" | "processing" | "sent" | "failed" | "dead"
       plan_tier: "trial" | "free" | "pro" | "enterprise"
       provider_status: "not_configured" | "validating" | "active" | "error"
-      provider_type: "n8n_unofficial" | "whatsapp_cloud_api" | "custom"
+      provider_type:
+        | "n8n_unofficial"
+        | "whatsapp_cloud_api"
+        | "custom"
+        | "baileys_backend"
       retention_policy:
         | "keep_messages"
         | "delete_after_pdf"
@@ -1996,7 +2072,12 @@ export const Constants = {
       outbox_status: ["pending", "processing", "sent", "failed", "dead"],
       plan_tier: ["trial", "free", "pro", "enterprise"],
       provider_status: ["not_configured", "validating", "active", "error"],
-      provider_type: ["n8n_unofficial", "whatsapp_cloud_api", "custom"],
+      provider_type: [
+        "n8n_unofficial",
+        "whatsapp_cloud_api",
+        "custom",
+        "baileys_backend",
+      ],
       retention_policy: [
         "keep_messages",
         "delete_after_pdf",
