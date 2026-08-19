@@ -43,7 +43,7 @@ serve(async (req) => {
       return json(
         {
           error: "backend_not_configured",
-          message: "Implemente uma verificação no Edge function para confirmar se o backend está configurado e exibir uma mensagem de ação antes de retornar 503.",
+          message: "no ambiente conexões Whatsapp preciso que mude para deixa igual a conexão",
         },
         503,
       );
