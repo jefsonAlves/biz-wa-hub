@@ -701,7 +701,7 @@ const Connections = () => {
                 <div className="flex flex-col gap-3 p-4 rounded-md border border-destructive/30 bg-destructive/5 text-xs text-destructive">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0" />
-                    <p className="font-bold">VOCÊ FEZ AS IMPLEMENTAÇÕES NECESSÁRIAS E FALE EM PORTUGUÊS COMIGO</p>
+                    <p className="font-bold">O SISTEMA POSSUI ESSE FRONTEND VERIFIQUE O QUE PODEMOS USAR PARA MELHOR E FAZE-LO FUNCIONAR E UTILIZE O VALIDADO</p>
                   </div>
                   
                   <div className="space-y-3 opacity-95">
