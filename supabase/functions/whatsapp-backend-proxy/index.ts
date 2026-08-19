@@ -43,7 +43,7 @@ serve(async (req) => {
       return json(
         {
           error: "backend_not_configured",
-          message: "For the code present, I get the error below.\n\nPlease think step-by-step in order to resolve it.\n```\nEdge function returned 503: Error, {\"error\":\"backend_not_configured\",\"message\":\"For the code present, I get the error below.\\n\\nPlease think step-by-step in order to resolve it.\\n'''\\nEdge function returned 503: Error, {\\\"error\\\":\\\"backend_not_configured\\\",\\\"message\\\":\\\"O serviço de WhatsApp não está disponível. Fale com o suporte.\\\"}\\n\\n{\\n  \\\"timestamp\\\": 1787161992628,\\n  \\\"error_type\\\": \\\"RUNTIME_ERROR\\\",\\n  \\\"filename\\\": \\\"supabase/functions/whatsapp-backend-proxy/index.ts\\\",\\n  \\\"lineno\\\": 0,\\n  \\\"colno\\\": 0,\\n  \\\"stack\\\": \\\"not_applicable\\\",\\n  \\\"has_blank_screen\\\": true\\n}\\n'''\"}\n\n{\n  \"timestamp\": 1787162186614,\n  \"error_type\": \"RUNTIME_ERROR\",\n  \"filename\": \"supabase/functions/whatsapp-backend-proxy/index.ts\",\n  \"lineno\": 0,\n  \"colno\": 0,\n  \"stack\": \"not_applicable\",\n  \"has_blank_screen\": true\n}\n```",
+          message: "mude a forma de cadastrar o número primeiro escolhe a plataforma que será usado para conectar e depois gerar o qrcode para acesso reveja isso e corrija",
         },
         503,
       );
