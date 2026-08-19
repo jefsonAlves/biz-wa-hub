@@ -93,7 +93,15 @@ serve(async (req) => {
           .single();
         if (error) return json({ error: "Falha ao registrar conexão", details: error.message }, 500);
 
+        // Já inicia a sessão para o QR Code aparecer sem passo extra.
+        if (remoteId) {
+          await backendCall(svc, backend, `/whatsappsession/${remoteId}`, { method: "POST" }).catch(
+            () => null,
+          );
+        }
+
         return json({ success: true, connection_id: connection.id, remote_id: remoteId });
+
       } catch (e) {
         return json(
           { error: humanizeBackendError(e instanceof Error ? e.message : "erro desconhecido"), cause: "backend_unreachable" },
