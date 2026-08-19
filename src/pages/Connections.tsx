@@ -216,6 +216,34 @@ const Connections = () => {
     setPending(`${connection.id}:${command}`);
     if (command === "generate_qr") setQrConnectionId(connection.id);
 
+    // Backend próprio: comandos vão direto ao backend (sem fila do n8n).
+    if (connection.provider_type === "baileys_backend") {
+      const map: Partial<Record<ConnectionCommand, BackendConnectionAction>> = {
+        create_session: "start_session",
+        generate_qr: "start_session",
+        get_status: "refresh_status",
+        health_check: "refresh_status",
+        reconnect: "start_session",
+        disconnect: "disconnect",
+        logout: "disconnect",
+      };
+      const action = map[command];
+      try {
+        if (!action) throw new Error("Comando não disponível para o backend próprio.");
+        const res = await runBackendConnectionAction(connection.id, action, effectiveTenantId);
+        await queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe", effectiveTenantId] });
+        toast({
+          title: "Comando executado",
+          description: res.message ?? "O backend respondeu com sucesso.",
+        });
+      } catch (e) {
+        toast({ title: "Erro no backend", description: (e as Error).message, variant: "destructive" });
+      } finally {
+        setPending(null);
+      }
+      return;
+    }
+
     try {
       const res = await sendConnectionCommand(connection.id, command, { confirmDisconnect });
       await queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe", effectiveTenantId] });
@@ -274,6 +302,21 @@ const Connections = () => {
       });
     },
   });
+
+  // Polling do QR Code enquanto o backend próprio negocia a sessão.
+  useEffect(() => {
+    if (!qrConnectionId || qrConnection?.provider_type !== "baileys_backend") return;
+    if (qrConnection?.status === "connected") return;
+    const timer = setInterval(async () => {
+      try {
+        await runBackendConnectionAction(qrConnectionId, "refresh_status", effectiveTenantId);
+        await queryClient.invalidateQueries({ queryKey: ["whatsapp_connections_safe", effectiveTenantId] });
+      } catch {
+        // erros já ficam registrados em connection_error
+      }
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [qrConnectionId, qrConnection?.provider_type, qrConnection?.status, effectiveTenantId, queryClient]);
 
   const runDiagnostics = () => {
     setDiagnostics(null);
@@ -442,6 +485,8 @@ const Connections = () => {
         </div>
       )}
 
+      {effectiveTenantId && <BackendConfigCard tenantId={effectiveTenantId} />}
+
       {isLoading ? (
         <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Carregando conexões...</div>
       ) : !effectiveTenantId ? (
@@ -508,7 +553,7 @@ const Connections = () => {
 
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" onClick={() => runCommand(conn, "create_session")} disabled={busy("create_session") || conn.status === "connected"}>
-                      <PlugZap className="h-3.5 w-3.5 mr-1" />{conn.status === "connected" ? "Sessão ativa" : "Criar sessão"}
+                      <PlugZap className="h-3.5 w-3.5 mr-1" />{conn.status === "connected" ? "Sessão ativa" : conn.provider_type === "baileys_backend" ? "Iniciar sessão" : "Criar sessão"}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => runCommand(conn, "generate_qr")} disabled={busy("generate_qr") || conn.status === "connected"}>
                       {busy("generate_qr") ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <QrCode className="h-3.5 w-3.5 mr-1" />}
@@ -526,7 +571,7 @@ const Connections = () => {
                       size="sm"
                       variant="outline"
                       onClick={() => runCommand(conn, "sync_messages")}
-                      disabled={busy("sync_messages") || conn.status !== "connected"}
+                      disabled={busy("sync_messages") || conn.status !== "connected" || conn.provider_type === "baileys_backend"}
                     >
                       <RefreshCw className={`h-3.5 w-3.5 mr-1 ${busy("sync_messages") ? "animate-spin" : ""}`} />
                       Atualizar mensagens
