@@ -12,6 +12,8 @@ export interface BackendConfig {
   auth_password: string | null;
   session_token: string | null;
   session_token_expires_at: string | null;
+  /** false quando a configuração vem de variáveis de ambiente (não há linha no banco). */
+  persisted?: boolean;
 }
 
 export function normalizeBaseUrl(raw: string): string {
@@ -22,17 +24,39 @@ export function normalizeBaseUrl(raw: string): string {
   return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
 }
 
+/**
+ * Resolve o backend WhatsApp da plataforma.
+ * Prioridade: segredos do servidor (WHATSAPP_BACKEND_URL/TOKEN) → linha legada por tenant.
+ * O usuário final nunca informa URL, e-mail, senha ou token.
+ */
 export async function getBackend(
   svc: SupabaseClient,
   tenantId: string,
 ): Promise<BackendConfig | null> {
+  const envUrl = Deno.env.get("WHATSAPP_BACKEND_URL");
+  if (envUrl?.trim()) {
+    return {
+      id: "env",
+      tenant_id: tenantId,
+      name: "Backend WhatsApp",
+      base_url: envUrl.trim(),
+      api_token: Deno.env.get("WHATSAPP_BACKEND_TOKEN")?.trim() || null,
+      auth_email: Deno.env.get("WHATSAPP_BACKEND_EMAIL")?.trim() || null,
+      auth_password: Deno.env.get("WHATSAPP_BACKEND_PASSWORD") || null,
+      session_token: null,
+      session_token_expires_at: null,
+      persisted: false,
+    };
+  }
+
   const { data } = await svc
     .from("whatsapp_backends")
     .select("*")
     .eq("tenant_id", tenantId)
     .maybeSingle();
-  return (data as BackendConfig) ?? null;
+  return data ? ({ ...(data as BackendConfig), persisted: true }) : null;
 }
+
 
 export function humanizeBackendError(message: string): string {
   const lowered = message.toLowerCase();
