@@ -701,7 +701,7 @@ const Connections = () => {
                 <div className="flex flex-col gap-3 p-4 rounded-md border border-destructive/30 bg-destructive/5 text-xs text-destructive">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0" />
-                    <p className="font-bold">O SISTEMA POSSUI ESSE FRONTEND VERIFIQUE O QUE PODEMOS USAR PARA MELHOR E FAZE-LO FUNCIONAR E UTILIZE O VALIDADO</p>
+                    <p className="font-bold">VEJO QUE A ESTRUTURA PARA CONECTAR NO DOCKER E NO N8N ESTÁ IBRIGATÓRIA E O CODIGO QUE TE PASSEI NÃO PRECISA PARA CONECTAR NO WHATSAPP ENTÃO REVEJA E CORRIJA ISSO</p>
                   </div>
                   
                   <div className="space-y-3 opacity-95">
