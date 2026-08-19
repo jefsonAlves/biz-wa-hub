@@ -701,7 +701,7 @@ const Connections = () => {
                 <div className="flex flex-col gap-3 p-4 rounded-md border border-destructive/30 bg-destructive/5 text-xs text-destructive">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0" />
-                    <p className="font-bold">Implementar uma opção de conexão de WhatsApp que funcione sem exigir n8n/Docker</p>
+                    <p className="font-bold">Implemente uma conexão de WhatsApp que funcione sem exigir n8n/Docker, usando um provedor via API e credenciais por empresa.</p>
                   </div>
                   
                   <div className="space-y-3 opacity-95">
