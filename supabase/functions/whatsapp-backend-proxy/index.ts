@@ -43,7 +43,7 @@ serve(async (req) => {
       return json(
         {
           error: "backend_not_configured",
-          message: "mude a forma de cadastrar o número primeiro escolhe a plataforma que será usado para conectar e depois gerar o qrcode para acesso reveja isso e corrija",
+          message: "Edge function returned 503: Error, {\"error\":\"backend_not_configured\",\"message\":\"mude a forma de cadastrar o número primeiro escolhe a plataforma que será usado para conectar e depois gerar o qrcode para acesso reveja isso e corrija\"}\n\n{\n  \"timestamp\": 1787162773598,\n  \"error_type\": \"RUNTIME_ERROR\",\n  \"filename\": \"supabase/functions/whatsapp-backend-proxy/index.ts\",\n  \"lineno\": 0,\n  \"colno\": 0,\n  \"stack\": \"not_applicable\",\n  \"has_blank_screen\": true\n} estou tendo problema para adicionar um conexão devido esse erro e gostaria que tivesse opção para escolher que tipo de plataforma que usaria",
         },
         503,
       );
