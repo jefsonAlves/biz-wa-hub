@@ -1,5 +1,6 @@
 // Proxy seguro entre o painel e o backend próprio de WhatsApp (Baileys).
-// Funciona sem n8n e sem Docker: o painel só fala com esta função.
+// Funciona sem n8n e sem Docker. URL e token do backend ficam apenas no servidor:
+// o usuário final nunca informa URL, e-mail, senha ou token.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { authenticate, corsHeaders, json, serviceClient } from "../_shared/n8n.ts";
 import {
@@ -7,13 +8,9 @@ import {
   getBackend,
   humanizeBackendError,
   mapBackendStatus,
-  normalizeBaseUrl,
-  type BackendConfig,
 } from "../_shared/whatsapp-backend.ts";
 
 type Action =
-  | "save_backend"
-  | "test_backend"
   | "create_connection"
   | "start_session"
   | "refresh_status"
@@ -41,81 +38,17 @@ serve(async (req) => {
       | null;
     if (!tenantId) return json({ error: "tenant_id_required" }, 400);
 
-    // ---------- Cadastro / teste do backend ----------
-    if (action === "save_backend") {
-      let baseUrl: string;
-      try {
-        baseUrl = normalizeBaseUrl(String(body?.base_url ?? ""));
-      } catch {
-        return json({ error: "URL do backend inválida." }, 400);
-      }
-
-      const patch: Record<string, unknown> = {
-        tenant_id: tenantId,
-        name: String(body?.name ?? "Backend WhatsApp").slice(0, 80),
-        base_url: baseUrl,
-        status: "unknown",
-        last_error_message: null,
-        session_token: null,
-        session_token_expires_at: null,
-      };
-      if (typeof body?.api_token === "string" && body.api_token.trim()) {
-        patch.api_token = body.api_token.trim();
-      }
-      if (typeof body?.auth_email === "string") patch.auth_email = body.auth_email.trim() || null;
-      if (typeof body?.auth_password === "string" && body.auth_password) {
-        patch.auth_password = body.auth_password;
-      }
-
-      const { error } = await svc
-        .from("whatsapp_backends")
-        .upsert(patch, { onConflict: "tenant_id" });
-      if (error) return json({ error: "Falha ao salvar backend", details: error.message }, 500);
-      return json({ success: true });
-    }
-
     const backend = await getBackend(svc, tenantId);
     if (!backend) {
       return json(
-        { error: "backend_not_configured", message: "Cadastre a URL do backend de WhatsApp." },
-        400,
+        {
+          error: "backend_not_configured",
+          message: "O serviço de WhatsApp não está disponível. Fale com o suporte.",
+        },
+        503,
       );
     }
 
-    if (action === "test_backend") {
-      const started = Date.now();
-      try {
-        const { status, body: payload } = await backendCall(svc, backend, "/whatsapp/", {
-          method: "GET",
-          timeoutMs: 12000,
-        });
-        const reachable = status >= 200 && status < 500;
-        const authorized = status >= 200 && status < 300;
-        await svc
-          .from("whatsapp_backends")
-          .update({
-            status: authorized ? "online" : "error",
-            last_check_at: new Date().toISOString(),
-            last_error_message: authorized ? null : `HTTP ${status}`,
-          })
-          .eq("id", backend.id);
-        return json({
-          success: authorized,
-          reachable,
-          authorized,
-          http_status: status,
-          duration_ms: Date.now() - started,
-          sessions: Array.isArray(payload) ? payload.length : null,
-        });
-      } catch (e) {
-        const message = humanizeBackendError(e instanceof Error ? e.message : "erro desconhecido");
-        await svc
-          .from("whatsapp_backends")
-          .update({ status: "error", last_check_at: new Date().toISOString(), last_error_message: message })
-          .eq("id", backend.id);
-        return json({ success: false, reachable: false, error: message }, 200);
-      }
-    }
 
     // ---------- Criação de conexão (sessão no backend) ----------
     if (action === "create_connection") {
