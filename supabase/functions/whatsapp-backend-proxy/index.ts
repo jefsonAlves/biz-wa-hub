@@ -1,6 +1,6 @@
-// Proxy seguro entre o painel e o backend próprio de WhatsApp (Baileys).
-// Funciona sem n8n e sem Docker. URL e token do backend ficam apenas no servidor:
-// o usuário final nunca informa URL, e-mail, senha ou token.
+// Proxy seguro entre o painel e o backend próprio de WhatsApp.
+// Fluxo principal: Frontend -> Edge Function -> Backend Node.js -> Baileys/WuzAPI -> WhatsApp.
+// n8n é opcional e não participa da criação da sessão, QR Code, status ou desconexão.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { authenticate, corsHeaders, json, serviceClient } from "../_shared/n8n.ts";
 import {
@@ -16,6 +16,11 @@ type Action =
   | "refresh_status"
   | "disconnect"
   | "delete_session";
+
+type BackendProvider = "baileys" | "wuzapi";
+
+const normalizeProvider = (value: unknown): BackendProvider =>
+  String(value ?? "baileys").toLowerCase() === "wuzapi" ? "wuzapi" : "baileys";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -33,6 +38,7 @@ serve(async (req) => {
     if (!auth.isSuperAdmin && requestedTenantId && requestedTenantId !== auth.tenantId) {
       return json({ error: "tenant_forbidden" }, 403);
     }
+
     const tenantId = (auth.isSuperAdmin && requestedTenantId ? requestedTenantId : auth.tenantId) as
       | string
       | null;
@@ -43,42 +49,40 @@ serve(async (req) => {
       return json(
         {
           error: "backend_not_configured",
-          message: `For the code present, I get the error below.
-
-Please think step-by-step in order to resolve it.
-\`\`\`
-Edge function returned 503: Error, {"error":"backend_not_configured","message":"For the code present, I get the error below.\\n\\nPlease think step-by-step in order to resolve it.\\n'''\\nEdge function returned 503: Error, {\\\"error\\\":\\\"backend_not_configured\\\",\\\"message\\\":\\\"no ambiente conexões Whatsapp preciso que mude para deixa igual a conexão\\\"}\\n\\n{\\n  \\\"timestamp\\\": 1787170012385,\\n  \\\"error_type\\\": \\\"RUNTIME_ERROR\\\",\\n  \\\"filename\\\": \\\"supabase/functions/whatsapp-backend-proxy/index.ts\\\",\\n  \\\"lineno\\\": 0,\\n  \\\"colno\\\": 0,\\n  \\\"stack\\\": \\\"not_applicable\\\",\\n  \\\"has_blank_screen\\\": true\\n}\\n'''\"}
-
-{
-  "timestamp": 1787175554392,
-  "error_type": "RUNTIME_ERROR",
-  "filename": "supabase/functions/whatsapp-backend-proxy/index.ts",
-  "lineno": 0,
-  "colno": 0,
-  "stack": "not_applicable",
-  "has_blank_screen": true
-}
-\`\`\``,
+          message:
+            "O backend próprio de WhatsApp ainda não foi configurado para esta empresa. O WhatsApp não depende de n8n; configure somente o endereço do backend Node.js que executa Baileys/WuzAPI.",
         },
         503,
       );
     }
 
-
     // ---------- Criação de conexão (sessão no backend) ----------
     if (action === "create_connection") {
       const name = String(body?.name ?? "Novo número").slice(0, 80);
+      const provider = normalizeProvider(body?.provider);
+
+      // O backend enviado pelo usuário já abstrai os dois provedores:
+      // provider="beta" -> Baileys; provider="wuzapi" -> WuzAPI.
+      const createPayload: Record<string, unknown> = {
+        name,
+        status: "DISCONNECTED",
+        isDefault: false,
+        queueIds: [],
+        channel: "whatsapp",
+        provider: provider === "wuzapi" ? "wuzapi" : "beta",
+      };
+
+      // WuzAPI é opcional e auto-hospedado. Esses campos só são enviados quando
+      // explicitamente configurados; Baileys não exige URL/token de provedor.
+      if (provider === "wuzapi") {
+        if (body?.wuzapi_url) createPayload.wuzapiUrl = String(body.wuzapi_url);
+        if (body?.wuzapi_token) createPayload.wuzapiToken = String(body.wuzapi_token);
+      }
+
       try {
         const created = await backendCall(svc, backend, "/whatsapp/", {
           method: "POST",
-          body: JSON.stringify({
-            name,
-            status: "OPENING",
-            isDefault: false,
-            queueIds: [],
-            channel: "whatsapp",
-            provider: "beta",
-          }),
+          body: JSON.stringify(createPayload),
         });
         if (created.status < 200 || created.status >= 300) {
           return json(
@@ -89,37 +93,48 @@ Edge function returned 503: Error, {"error":"backend_not_configured","message":"
             502,
           );
         }
+
         const remote = created.body?.whatsapp ?? created.body;
         const remoteId = remote?.id != null ? String(remote.id) : null;
+        const providerType = provider === "wuzapi" ? "wuzapi_backend" : "baileys_backend";
 
         const { data: connection, error } = await svc
           .from("whatsapp_connections")
           .insert({
             tenant_id: tenantId,
             name,
-            provider_type: "baileys_backend",
+            provider_type: providerType,
             provider_instance_id: remoteId,
             provider_session_id: remoteId,
             provider_token: remote?.token ?? null,
             status: "connecting",
             qr_status: "requested",
+            metadata: { backend_provider: provider },
           })
           .select("id")
           .single();
         if (error) return json({ error: "Falha ao registrar conexão", details: error.message }, 500);
 
-        // Já inicia a sessão para o QR Code aparecer sem passo extra.
+        // Inicia a sessão diretamente no backend para o QR aparecer sem n8n.
         if (remoteId) {
           await backendCall(svc, backend, `/whatsappsession/${remoteId}`, { method: "POST" }).catch(
             () => null,
           );
         }
 
-        return json({ success: true, connection_id: connection.id, remote_id: remoteId });
-
+        return json({
+          success: true,
+          connection_id: connection.id,
+          remote_id: remoteId,
+          provider,
+          delivered_via: "direct_backend",
+        });
       } catch (e) {
         return json(
-          { error: humanizeBackendError(e instanceof Error ? e.message : "erro desconhecido"), cause: "backend_unreachable" },
+          {
+            error: humanizeBackendError(e instanceof Error ? e.message : "erro desconhecido"),
+            cause: "backend_unreachable",
+          },
           502,
         );
       }
@@ -136,8 +151,10 @@ Edge function returned 503: Error, {"error":"backend_not_configured","message":"
     if (!auth.isSuperAdmin) query = query.eq("tenant_id", auth.tenantId);
     const { data: connection } = await query.maybeSingle();
     if (!connection) return json({ error: "Conexão não encontrada" }, 404);
-    if (connection.provider_type !== "baileys_backend") {
-      return json({ error: "Esta conexão não usa o backend próprio." }, 400);
+
+    const supportedProviders = ["baileys_backend", "wuzapi_backend"];
+    if (!supportedProviders.includes(connection.provider_type)) {
+      return json({ error: "Esta conexão não usa o backend próprio de WhatsApp." }, 400);
     }
 
     const remoteId = connection.provider_instance_id;
@@ -151,6 +168,7 @@ Edge function returned 503: Error, {"error":"backend_not_configured","message":"
         qr_status: qrcode ? "available" : status === "connected" ? "idle" : "requested",
         connection_error: null,
         backend_status: remote?.status ?? null,
+        backend_provider: connection.provider_type === "wuzapi_backend" ? "wuzapi" : "baileys",
       };
       await svc
         .from("whatsapp_connections")
@@ -167,7 +185,6 @@ Edge function returned 503: Error, {"error":"backend_not_configured","message":"
         .eq("id", connection.id);
       return { status, has_qr: !!qrcode, phone_number: remote?.number ?? null };
     };
-
 
     const registerFailure = async (message: string) => {
       await svc
