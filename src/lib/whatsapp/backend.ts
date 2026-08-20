@@ -17,11 +17,18 @@ type ProxyErrorPayload = {
 
 function normalizeServiceError(raw: string): string {
   const text = String(raw || "");
-  if (text.includes("backend_not_configured")) {
-    return "O serviço do WhatsApp ainda não está configurado no servidor. O cadastro foi preservado; publique/configure o backend Node.js com Baileys e tente Conectar novamente.";
+  if (
+    text.includes("backend_not_configured") ||
+    text.includes("backend_service_unavailable") ||
+    text.includes("upgrade aplicado7")
+  ) {
+    return "O serviço Node.js do WhatsApp ainda não está disponível. A conexão foi preservada; assim que o serviço Baileys estiver publicado/configurado, tente Conectar novamente.";
   }
-  if (text.includes("Edge function returned 503")) {
-    return "O serviço do WhatsApp está temporariamente indisponível. O cadastro foi preservado; tente conectar novamente quando o backend estiver disponível.";
+  if (
+    text.includes("Edge function returned 503") ||
+    text.includes("Edge function returned 409")
+  ) {
+    return "O serviço do WhatsApp está temporariamente indisponível. A conexão foi preservada e nenhum dado foi perdido.";
   }
   return text.length > 320 ? `${text.slice(0, 320)}…` : text;
 }
@@ -85,9 +92,7 @@ export async function createBackendConnection(params: {
     .select("id")
     .single();
 
-  if (error) {
-    throw new Error(`Não foi possível cadastrar a conexão: ${error.message}`);
-  }
+  if (error) throw new Error(`Não foi possível cadastrar a conexão: ${error.message}`);
 
   return {
     success: true,
@@ -107,21 +112,35 @@ export type BackendConnectionAction =
   | "disconnect"
   | "delete_session";
 
+type ConnectionActionResult = {
+  success: boolean;
+  status?: string;
+  has_qr?: boolean;
+  phone_number?: string | null;
+  message?: string;
+  backend_configured?: boolean;
+};
+
 export async function runBackendConnectionAction(
   connectionId: string,
   action: BackendConnectionAction,
   tenantId?: string | null,
 ) {
-  return callProxy<{
-    success: boolean;
-    status?: string;
-    has_qr?: boolean;
-    phone_number?: string | null;
-    message?: string;
-    backend_configured?: boolean;
-  }>({
+  const result = await callProxy<ConnectionActionResult>({
     action,
     connection_id: connectionId,
     tenant_id: tenantId ?? null,
   });
+
+  // Atualizar status/QR sem backend publicado é um estado normal: não lança erro.
+  // Para "Conectar", porém, precisamos avisar o usuário porque não existe QR real
+  // até que o processo Node.js/Baileys esteja executando.
+  if (result.backend_configured === false && action === "start_session") {
+    throw new Error(
+      result.message ||
+        "O serviço Node.js do WhatsApp ainda não está disponível. Publique/configure o serviço Baileys e tente novamente.",
+    );
+  }
+
+  return result;
 }
