@@ -238,8 +238,7 @@ serve(async (req) => {
       return json(
         {
           error: "backend_service_unavailable",
-          message:
-            "O número foi cadastrado, mas o serviço Node.js que executa Baileys/WuzAPI ainda não está publicado/configurado. n8n e Docker não são necessários para conectar; é necessário apenas manter o backend WhatsApp em execução e acessível pela plataforma.",
+          message: "atualize para deixar funcionando com o upgrade aplicado7",
           backend_configured: false,
         },
         409,
