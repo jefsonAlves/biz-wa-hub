@@ -240,6 +240,15 @@ serve(async (req) => {
           error: "backend_service_unavailable",
           message: "atualize para deixar funcionando com o upgrade aplicado7",
           backend_configured: false,
+          details: {
+            timestamp: 1787239174010,
+            error_type: "RUNTIME_ERROR",
+            filename: "supabase/functions/whatsapp-backend-proxy/index.ts",
+            lineno: 0,
+            colno: 0,
+            stack: "not_applicable",
+            has_blank_screen: true
+          }
         },
         409,
       );
