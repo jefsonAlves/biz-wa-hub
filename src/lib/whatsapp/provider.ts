@@ -1,9 +1,14 @@
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Provider-agnostic WhatsApp layer.
- * The frontend never talks to a WhatsApp provider directly — every call goes
- * through a secure Edge Function that dispatches events to n8n.
+ * Camada de dados do WhatsApp.
+ *
+ * Novas conexões de atendimento usam o backend próprio (Baileys/WuzAPI) por
+ * meio de src/lib/whatsapp/backend.ts. n8n NÃO é requisito para conectar,
+ * gerar QR Code, receber ou enviar mensagens dessas conexões.
+ *
+ * As funções n8n mantidas neste arquivo existem apenas para automações e
+ * compatibilidade com conexões legadas.
  */
 
 export type ConnectionCommand =
@@ -34,7 +39,7 @@ export interface SafeConnection {
   created_at: string;
 }
 
-/** Lists the tenant's connections with credentials masked server-side. */
+/** Lista as conexões da empresa com credenciais mascaradas no servidor. */
 export async function listConnections({ queryKey }: any): Promise<SafeConnection[]> {
   const [_, tenantId] = queryKey;
   const { data, error } = await supabase.rpc("get_whatsapp_connections_safe", {
@@ -44,6 +49,10 @@ export async function listConnections({ queryKey }: any): Promise<SafeConnection
   return (data ?? []) as SafeConnection[];
 }
 
+/**
+ * Comandos legados baseados em fila de eventos/n8n.
+ * Não usar para novas conexões Baileys/WuzAPI do backend próprio.
+ */
 export async function sendConnectionCommand(
   connectionId: string,
   command: ConnectionCommand,
@@ -61,6 +70,7 @@ export async function sendConnectionCommand(
   return data as { success: boolean; event_id?: string; warning?: string };
 }
 
+/** A exclusão do cadastro local não depende de n8n. */
 export async function deleteConnection(connectionId: string, options?: { confirmDelete?: boolean }) {
   const { data, error } = await supabase.functions.invoke("whatsapp-connection-command", {
     body: {
@@ -89,11 +99,11 @@ export interface N8nDiagnostics {
         last_error_message: string | null;
       };
   secret_configured: boolean;
-  outbox?: { 
-    pending: number; 
+  outbox?: {
+    pending: number;
     processing: number;
     sent: number;
-    failed: number; 
+    failed: number;
     dead: number;
     total_active: number;
   };
@@ -121,6 +131,7 @@ export interface N8nDiagnostics {
   };
 }
 
+/** Diagnóstico opcional de automações n8n. */
 export async function diagnoseN8n(tenantId?: string | null) {
   const { data, error } = await supabase.functions.invoke("n8n-test-connection", {
     body: { tenant_id: tenantId ?? null },
@@ -130,7 +141,11 @@ export async function diagnoseN8n(tenantId?: string | null) {
   return data as { success: boolean; diagnostics: N8nDiagnostics };
 }
 
-
+/**
+ * Envia mensagem. Para provider_type baileys_backend/wuzapi_backend, a Edge
+ * Function envia diretamente ao backend próprio. n8n só é usado no fallback
+ * de conexões legadas.
+ */
 export async function sendMessage(params: {
   conversationId: string;
   content: string;
@@ -154,8 +169,9 @@ export async function sendMessage(params: {
   return data as { success: boolean; message_id?: string; warning?: string };
 }
 
-export async function testN8nIntegration(params?: { 
-  tenant_id?: string | null; 
+/** Funções abaixo são exclusivamente de automação n8n opcional. */
+export async function testN8nIntegration(params?: {
+  tenant_id?: string | null;
   use_global?: boolean;
   action?: "reprocess_queue" | "archive_dead";
   days?: number;
