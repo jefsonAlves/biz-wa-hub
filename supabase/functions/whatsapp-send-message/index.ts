@@ -29,7 +29,6 @@ serve(async (req) => {
       .maybeSingle();
     if (!conversation) return json({ error: "Conversa não encontrada" }, 404);
 
-    // Resolve a conexão: explícita, vinculada à conversa ou a primeira da empresa.
     let connectionId = (body?.connection_id as string | undefined) ?? conversation.whatsapp_connection_id ?? null;
     if (!connectionId) {
       const { data: fallback } = await svc
@@ -45,13 +44,12 @@ serve(async (req) => {
 
     const { data: connection } = await svc
       .from("whatsapp_connections")
-      .select("id, status, provider_type, provider_instance_id, provider_session_id, provider_token")
+      .select("id, status, provider_type, provider_instance_id, provider_session_id")
       .eq("id", connectionId)
       .eq("tenant_id", auth.tenantId)
       .maybeSingle();
     if (!connection) return json({ error: "Conexão não encontrada" }, 404);
 
-    // Permissão por conexão (ACL vazia = acesso para toda a empresa).
     const { data: acl } = await svc
       .from("user_connection_access")
       .select("user_id, can_reply")
@@ -66,7 +64,6 @@ serve(async (req) => {
       (contact?.phone ? `${contact.phone.replace(/\D/g, "")}@c.us` : null);
     if (!chatId) return json({ error: "Destinatário não identificado" }, 400);
 
-    // Respeita opt-out/bloqueio.
     const { data: contactRow } = await svc
       .from("contacts")
       .select("id, tags")
@@ -78,7 +75,6 @@ serve(async (req) => {
       return json({ error: "Contato optou por não receber mensagens" }, 403);
     }
 
-    // Modo sugestão: salva rascunho e nunca envia ao WhatsApp.
     if (body?.mode === "suggest") {
       const { data: draft, error: draftError } = await svc.from("messages").insert({
         conversation_id: conversation.id,
@@ -119,26 +115,21 @@ serve(async (req) => {
       }
     };
 
-    // Backend próprio: Baileys e WuzAPI são enviados DIRETAMENTE pelo backend Node.js.
-    // n8n não é necessário para o atendimento básico.
-    const isDirectBackend =
-      connection.provider_type === "baileys_backend" ||
-      connection.provider_type === "wuzapi_backend";
+    const isDirectBackend = connection.provider_type === "baileys_backend" || connection.provider_type === "wuzapi_backend";
 
     if (isDirectBackend) {
       const backend = await getBackend(svc, auth.tenantId as string);
-      if (!backend) return json({ error: "Backend de WhatsApp não configurado" }, 400);
+      if (!backend) return json({ error: "Serviço WhatsApp não configurado no servidor" }, 503);
 
       const number = chatId.replace(/\D/g, "");
+      const sessionId = connection.provider_instance_id || connection.provider_session_id;
+      if (!sessionId) return json({ error: "Sessão WhatsApp ainda não foi criada" }, 409);
+
       try {
-        // O backend fornecido expõe POST /api/send e usa o token da própria conexão.
-        // A mesma rota abstrai Baileys e WuzAPI internamente.
         const sent = await backendCall(svc, backend, "/api/send", {
           method: "POST",
-          headers: connection.provider_token
-            ? { Authorization: `Bearer ${connection.provider_token}` }
-            : undefined,
           body: JSON.stringify({
+            sessionId,
             number,
             body: content,
             noRegister: false,
@@ -151,25 +142,16 @@ serve(async (req) => {
           metadata: ok ? null : { error: `HTTP ${sent.status}` },
         }).eq("id", message.id);
 
-        if (!ok) return json({ error: "Backend recusou o envio", details: `HTTP ${sent.status}` }, 502);
+        if (!ok) return json({ error: "Serviço WhatsApp recusou o envio", details: sent.body?.error ?? `HTTP ${sent.status}` }, 502);
         await touchConversation();
-        return json({
-          success: true,
-          message_id: message.id,
-          delivered_via: connection.provider_type,
-        });
+        return json({ success: true, message_id: message.id, delivered_via: connection.provider_type });
       } catch (e) {
         const detail = humanizeBackendError(e instanceof Error ? e.message : "erro desconhecido");
-        await svc.from("messages").update({
-          delivery_status: "failed",
-          metadata: { error: detail },
-        }).eq("id", message.id);
+        await svc.from("messages").update({ delivery_status: "failed", metadata: { error: detail } }).eq("id", message.id);
         return json({ error: detail, cause: "backend_unreachable" }, 502);
       }
     }
 
-    // Compatibilidade com conexões legadas baseadas em n8n.
-    // Este bloco NÃO é usado pelas novas conexões Baileys/WuzAPI.
     const event = buildEvent({
       event_type: mediaUrl ? "whatsapp.media.send" : "whatsapp.message.send",
       tenant_id: auth.tenantId,
