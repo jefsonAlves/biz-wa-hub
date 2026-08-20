@@ -1,0 +1,20 @@
+{
+  "name": "biz-wa-hub-baileys",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Serviço Node.js persistente para WhatsApp via Baileys. Não depende de n8n nem Docker.",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.16",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "pino": "^9.6.0"
+  }
+}
