@@ -1,6 +1,6 @@
 // Proxy seguro entre o painel e o backend próprio de WhatsApp.
-// Fluxo principal: Frontend -> Edge Function -> Backend Node.js -> Baileys/WuzAPI -> WhatsApp.
-// n8n é opcional e NÃO participa de sessão, QR Code, status, envio ou desconexão.
+// Fluxo: Frontend -> Edge Function -> Node.js Baileys/WuzAPI -> WhatsApp.
+// n8n NÃO participa de sessão, QR Code, status, envio ou desconexão.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { authenticate, corsHeaders, json, serviceClient } from "../_shared/n8n.ts";
 import {
@@ -28,6 +28,18 @@ const providerTypeOf = (provider: BackendProvider) =>
 const providerFromType = (providerType: string): BackendProvider =>
   providerType === "wuzapi_backend" ? "wuzapi" : "baileys";
 
+const backendUnavailable = (action: Action) =>
+  json({
+    success: false,
+    backend_configured: false,
+    status: "disconnected",
+    has_qr: false,
+    phone_number: null,
+    action,
+    message:
+      "O serviço Node.js do WhatsApp ainda não está disponível. A conexão foi preservada e poderá gerar o QR Code assim que o serviço Baileys estiver publicado/configurado.",
+  });
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -35,9 +47,9 @@ serve(async (req) => {
     const auth = await authenticate(req);
     if ("error" in auth) return json({ error: auth.error }, 401);
 
-    const body = await req.json().catch(() => null);
+    const body = await req.json().catch(() => ({}));
     const action = body?.action as Action | undefined;
-    if (!action) return json({ error: "action é obrigatório" }, 400);
+    if (!action) return json({ error: "action_required", message: "action é obrigatório" }, 400);
 
     const svc = serviceClient();
     const requestedTenantId = body?.tenant_id as string | undefined;
@@ -51,17 +63,11 @@ serve(async (req) => {
       | null;
     if (!tenantId) return json({ error: "tenant_id_required" }, 400);
 
-    // -----------------------------------------------------------------------
-    // CADASTRO LOCAL DA CONEXÃO
-    // -----------------------------------------------------------------------
-    // Cadastrar um número/empresa no painel NÃO depende de n8n e também não
-    // deve falhar caso o processo Node.js/Baileys ainda não esteja publicado.
-    // A sessão remota é criada imediatamente quando o backend está disponível;
-    // caso contrário, é criada de forma preguiçosa no primeiro "Conectar".
+    // Cadastro via Edge Function permanece suportado, embora o frontend atual
+    // já faça o cadastro local diretamente no Supabase.
     if (action === "create_connection") {
-      const name = String(body?.name ?? "Novo número").trim().slice(0, 80) || "Novo número";
+      const name = String(body?.name ?? "WhatsApp").trim().slice(0, 80) || "WhatsApp";
       const provider = normalizeProvider(body?.provider);
-      const providerType = providerTypeOf(provider);
       const backend = await getBackend(svc, tenantId);
 
       if (!backend) {
@@ -70,66 +76,46 @@ serve(async (req) => {
           .insert({
             tenant_id: tenantId,
             name,
-            provider_type: providerType,
-            provider_instance_id: null,
-            provider_session_id: null,
-            provider_token: null,
+            provider_type: providerTypeOf(provider),
             status: "disconnected",
             qr_status: "idle",
             connection_error: null,
-            metadata: {
-              backend_provider: provider,
-              backend_ready: false,
-            },
+            metadata: { backend_provider: provider, backend_ready: false },
           })
           .select("id")
           .single();
 
-        if (error) {
-          return json({ error: "Falha ao registrar conexão", details: error.message }, 500);
-        }
+        if (error) return json({ error: "connection_create_failed", message: error.message }, 500);
 
         return json({
           success: true,
           connection_id: connection.id,
           remote_id: null,
-          provider,
           backend_configured: false,
           auto_connect: false,
-          message:
-            "Conexão cadastrada. O serviço Baileys/WuzAPI ainda não está disponível; configure o backend da plataforma para gerar o QR Code.",
+          provider,
         });
-      }
-
-      const createPayload: Record<string, unknown> = {
-        name,
-        status: "DISCONNECTED",
-        isDefault: false,
-        queueIds: [],
-        channel: "whatsapp",
-        provider: provider === "wuzapi" ? "wuzapi" : "beta",
-      };
-
-      if (provider === "wuzapi") {
-        if (body?.wuzapi_url) createPayload.wuzapiUrl = String(body.wuzapi_url);
-        if (body?.wuzapi_token) createPayload.wuzapiToken = String(body.wuzapi_token);
       }
 
       try {
         const created = await backendCall(svc, backend, "/whatsapp/", {
           method: "POST",
-          body: JSON.stringify(createPayload),
+          body: JSON.stringify({
+            name,
+            status: "DISCONNECTED",
+            isDefault: false,
+            queueIds: [],
+            channel: "whatsapp",
+            provider: provider === "wuzapi" ? "wuzapi" : "beta",
+          }),
         });
 
         if (created.status < 200 || created.status >= 300) {
-          return json(
-            {
-              error: "backend_create_failed",
-              message: "O serviço de WhatsApp recusou a criação da sessão.",
-              details: created.body?.error ?? `HTTP ${created.status}`,
-            },
-            502,
-          );
+          return json({
+            success: false,
+            error: "backend_create_failed",
+            message: "O serviço de WhatsApp recusou a criação da sessão.",
+          }, 502);
         }
 
         const remote = created.body?.whatsapp ?? created.body;
@@ -140,30 +126,19 @@ serve(async (req) => {
           .insert({
             tenant_id: tenantId,
             name,
-            provider_type: providerType,
+            provider_type: providerTypeOf(provider),
             provider_instance_id: remoteId,
             provider_session_id: remoteId,
             provider_token: remote?.token ?? null,
-            status: "connecting",
-            qr_status: "requested",
+            status: "disconnected",
+            qr_status: "idle",
             connection_error: null,
-            metadata: {
-              backend_provider: provider,
-              backend_ready: true,
-            },
+            metadata: { backend_provider: provider, backend_ready: true },
           })
           .select("id")
           .single();
 
-        if (error) {
-          return json({ error: "Falha ao registrar conexão", details: error.message }, 500);
-        }
-
-        if (remoteId) {
-          await backendCall(svc, backend, `/whatsappsession/${remoteId}`, { method: "POST" }).catch(
-            () => null,
-          );
-        }
+        if (error) return json({ error: "connection_create_failed", message: error.message }, 500);
 
         return json({
           success: true,
@@ -171,52 +146,19 @@ serve(async (req) => {
           remote_id: remoteId,
           provider,
           backend_configured: true,
-          auto_connect: true,
-          delivered_via: "direct_backend",
-        });
-      } catch (e) {
-        // Mesmo quando o backend está cadastrado mas temporariamente fora do ar,
-        // preservamos o cadastro no painel e deixamos a conexão como desconectada.
-        const message = humanizeBackendError(e instanceof Error ? e.message : "erro desconhecido");
-        const { data: connection, error } = await svc
-          .from("whatsapp_connections")
-          .insert({
-            tenant_id: tenantId,
-            name,
-            provider_type: providerType,
-            status: "disconnected",
-            qr_status: "idle",
-            connection_error: null,
-            metadata: {
-              backend_provider: provider,
-              backend_ready: false,
-              backend_last_error: message,
-            },
-          })
-          .select("id")
-          .single();
-
-        if (error) {
-          return json({ error: "Falha ao registrar conexão", details: error.message }, 500);
-        }
-
-        return json({
-          success: true,
-          connection_id: connection.id,
-          remote_id: null,
-          provider,
-          backend_configured: true,
           auto_connect: false,
-          message: `Conexão cadastrada, mas o serviço de WhatsApp está temporariamente indisponível: ${message}`,
         });
+      } catch (error) {
+        return json({
+          success: false,
+          error: "backend_unreachable",
+          message: humanizeBackendError(error instanceof Error ? error.message : "erro desconhecido"),
+        }, 502);
       }
     }
 
-    // -----------------------------------------------------------------------
-    // AÇÕES EM CONEXÃO EXISTENTE
-    // -----------------------------------------------------------------------
     const connectionId = body?.connection_id as string | undefined;
-    if (!connectionId) return json({ error: "connection_id é obrigatório" }, 400);
+    if (!connectionId) return json({ error: "connection_id_required" }, 400);
 
     let query = svc
       .from("whatsapp_connections")
@@ -226,71 +168,69 @@ serve(async (req) => {
     if (!auth.isSuperAdmin) query = query.eq("tenant_id", auth.tenantId);
 
     const { data: connection } = await query.maybeSingle();
-    if (!connection) return json({ error: "Conexão não encontrada" }, 404);
+    if (!connection) return json({ error: "connection_not_found", message: "Conexão não encontrada" }, 404);
 
-    const supportedProviders = ["baileys_backend", "wuzapi_backend"];
-    if (!supportedProviders.includes(connection.provider_type)) {
-      return json({ error: "Esta conexão não usa o backend próprio de WhatsApp." }, 400);
+    if (!["baileys_backend", "wuzapi_backend"].includes(connection.provider_type)) {
+      return json({ error: "unsupported_provider", message: "Esta conexão não usa o backend próprio." }, 400);
     }
 
     const backend = await getBackend(svc, connection.tenant_id);
+
+    // Estado normal, não é Runtime Error. Atualizar QR/status nunca deve devolver
+    // 409 ou fabricar stack trace quando o processo Baileys ainda não foi publicado.
     if (!backend) {
-      return json(
-        {
-          error: "backend_service_unavailable",
-          message: "atualize para deixar funcionando com o upgrade aplicado7",
-          backend_configured: false,
-          details: {
-            timestamp: 1787239174010,
-            error_type: "RUNTIME_ERROR",
-            filename: "supabase/functions/whatsapp-backend-proxy/index.ts",
-            lineno: 0,
-            colno: 0,
-            stack: "not_applicable",
-            has_blank_screen: true
-          }
-        },
-        409,
-      );
+      await svc
+        .from("whatsapp_connections")
+        .update({
+          status: "disconnected",
+          qr_status: "idle",
+          connection_error: null,
+          metadata: {
+            ...(connection.metadata ?? {}),
+            backend_ready: false,
+          },
+          last_health_check_at: new Date().toISOString(),
+        })
+        .eq("id", connection.id);
+
+      return backendUnavailable(action);
     }
 
     const provider = providerFromType(connection.provider_type);
     let remoteId = connection.provider_instance_id as string | null;
 
-    // Conexões cadastradas enquanto o backend estava ausente recebem a sessão
-    // remota no primeiro clique em "Conectar".
+    // Criação preguiçosa da sessão remota para conexões cadastradas antes do deploy do backend.
     if (!remoteId && action === "start_session") {
-      const createPayload: Record<string, unknown> = {
-        name: connection.name,
-        status: "DISCONNECTED",
-        isDefault: false,
-        queueIds: [],
-        channel: "whatsapp",
-        provider: provider === "wuzapi" ? "wuzapi" : "beta",
-      };
-
       try {
         const created = await backendCall(svc, backend, "/whatsapp/", {
           method: "POST",
-          body: JSON.stringify(createPayload),
+          body: JSON.stringify({
+            name: connection.name,
+            status: "DISCONNECTED",
+            isDefault: false,
+            queueIds: [],
+            channel: "whatsapp",
+            provider: provider === "wuzapi" ? "wuzapi" : "beta",
+          }),
         });
 
         if (created.status < 200 || created.status >= 300) {
-          return json(
-            {
-              error: "backend_create_failed",
-              message: "O serviço de WhatsApp recusou a criação da sessão.",
-              details: created.body?.error ?? `HTTP ${created.status}`,
-            },
-            502,
-          );
+          return json({
+            success: false,
+            error: "backend_create_failed",
+            message: "O serviço de WhatsApp recusou a criação da sessão.",
+            backend_configured: true,
+          }, 502);
         }
 
         const remote = created.body?.whatsapp ?? created.body;
         remoteId = remote?.id != null ? String(remote.id) : null;
-
         if (!remoteId) {
-          return json({ error: "O backend não retornou o identificador da sessão." }, 502);
+          return json({
+            success: false,
+            error: "session_id_missing",
+            message: "O serviço não retornou o identificador da sessão.",
+          }, 502);
         }
 
         await svc
@@ -299,28 +239,20 @@ serve(async (req) => {
             provider_instance_id: remoteId,
             provider_session_id: remoteId,
             provider_token: remote?.token ?? null,
-            metadata: {
-              ...(connection.metadata ?? {}),
-              backend_provider: provider,
-              backend_ready: true,
-            },
+            metadata: { ...(connection.metadata ?? {}), backend_provider: provider, backend_ready: true },
           })
           .eq("id", connection.id);
-      } catch (e) {
-        const message = humanizeBackendError(e instanceof Error ? e.message : "erro desconhecido");
-        return json(
-          {
-            error: "backend_unreachable",
-            message,
-            backend_configured: true,
-          },
-          502,
-        );
+      } catch (error) {
+        return json({
+          success: false,
+          error: "backend_unreachable",
+          backend_configured: true,
+          message: humanizeBackendError(error instanceof Error ? error.message : "erro desconhecido"),
+        }, 502);
       }
     }
 
     if (!remoteId) {
-      // refresh/disconnect de uma sessão que nunca foi iniciada é um estado válido.
       if (action === "refresh_status") {
         return json({
           success: true,
@@ -332,104 +264,86 @@ serve(async (req) => {
       }
 
       if (action === "disconnect" || action === "delete_session") {
-        await svc
-          .from("whatsapp_connections")
-          .update({ status: "disconnected", qr_status: "idle" })
-          .eq("id", connection.id);
-        return json({ success: true, status: "disconnected" });
+        await svc.from("whatsapp_connections").update({ status: "disconnected", qr_status: "idle" }).eq("id", connection.id);
+        return json({ success: true, status: "disconnected", backend_configured: true });
       }
 
-      return json({ error: "Conexão ainda não possui sessão no backend." }, 409);
+      return json({
+        success: false,
+        status: "disconnected",
+        backend_configured: true,
+        message: "A sessão ainda não foi criada no serviço WhatsApp.",
+      });
     }
 
     const applyRemoteState = async (remote: any) => {
       const status = mapBackendStatus(remote?.status);
-      const qrcode: string | null = remote?.qrcode ? String(remote.qrcode) : null;
-      const metadata: Record<string, unknown> = {
-        ...(connection.metadata ?? {}),
-        qr_code: qrcode,
-        qr_status: qrcode ? "available" : status === "connected" ? "idle" : "requested",
-        connection_error: null,
-        backend_status: remote?.status ?? null,
-        backend_provider: provider,
-        backend_ready: true,
-      };
+      const qrcode = remote?.qrcode ? String(remote.qrcode) : null;
+      const qrStatus = qrcode ? "available" : status === "connected" ? "idle" : "requested";
 
       await svc
         .from("whatsapp_connections")
         .update({
           status,
-          qr_status: metadata.qr_status as string,
+          qr_status: qrStatus,
           phone_number: remote?.number ?? undefined,
           connection_error: null,
-          metadata,
+          metadata: {
+            ...(connection.metadata ?? {}),
+            qr_code: qrcode,
+            backend_status: remote?.status ?? null,
+            backend_provider: provider,
+            backend_ready: true,
+          },
           last_health_check_at: new Date().toISOString(),
           ...(status === "connected" ? { last_connected_at: new Date().toISOString() } : {}),
           ...(status === "disconnected" ? { last_disconnected_at: new Date().toISOString() } : {}),
         })
         .eq("id", connection.id);
 
-      return { status, has_qr: !!qrcode, phone_number: remote?.number ?? null };
-    };
-
-    const registerFailure = async (message: string) => {
-      await svc
-        .from("whatsapp_connections")
-        .update({
-          connection_error: message,
-          last_health_check_at: new Date().toISOString(),
-          metadata: {
-            ...(connection.metadata ?? {}),
-            backend_last_error: message,
-          },
-        })
-        .eq("id", connection.id);
+      return { status, has_qr: Boolean(qrcode), phone_number: remote?.number ?? null };
     };
 
     try {
       if (action === "start_session") {
-        const started = await backendCall(svc, backend, `/whatsappsession/${remoteId}`, {
-          method: "POST",
-        });
-
+        const started = await backendCall(svc, backend, `/whatsappsession/${remoteId}`, { method: "POST" });
         if (started.status < 200 || started.status >= 300) {
-          const message = `O serviço de WhatsApp respondeu HTTP ${started.status} ao iniciar a sessão.`;
-          await registerFailure(message);
-          return json({ error: "session_start_failed", message }, 502);
+          return json({
+            success: false,
+            error: "session_start_failed",
+            backend_configured: true,
+            message: `O serviço respondeu HTTP ${started.status} ao iniciar a sessão.`,
+          }, 502);
         }
 
         await svc
           .from("whatsapp_connections")
-          .update({
-            status: "connecting",
-            qr_status: "requested",
-            connection_error: null,
-          })
+          .update({ status: "connecting", qr_status: "requested", connection_error: null })
           .eq("id", connection.id);
 
         return json({
           success: true,
-          message: "Sessão iniciada. Aguarde a geração do QR Code.",
           backend_configured: true,
+          status: "connecting",
+          message: "Sessão iniciada. Aguarde a geração do QR Code.",
         });
       }
 
       if (action === "refresh_status") {
         const shown = await backendCall(svc, backend, `/whatsapp/${remoteId}`, { method: "GET" });
         if (shown.status < 200 || shown.status >= 300) {
-          const message = `O serviço de WhatsApp respondeu HTTP ${shown.status} ao consultar a sessão.`;
-          await registerFailure(message);
-          return json({ error: "status_failed", message }, 502);
+          return json({
+            success: false,
+            error: "status_failed",
+            backend_configured: true,
+            message: `O serviço respondeu HTTP ${shown.status} ao consultar a sessão.`,
+          }, 502);
         }
-        const state = await applyRemoteState(shown.body);
-        return json({ success: true, ...state, backend_configured: true });
+        return json({ success: true, ...(await applyRemoteState(shown.body)), backend_configured: true });
       }
 
       if (action === "disconnect") {
-        const out = await backendCall(svc, backend, `/whatsappsession/${remoteId}`, {
-          method: "DELETE",
-        });
-
+        await backendCall(svc, backend, `/whatsappsession/${remoteId}`, { method: "DELETE" });
         await svc
           .from("whatsapp_connections")
           .update({
@@ -439,30 +353,39 @@ serve(async (req) => {
             last_disconnected_at: new Date().toISOString(),
           })
           .eq("id", connection.id);
-
-        return json({ success: true, http_status: out.status, status: "disconnected" });
+        return json({ success: true, status: "disconnected", backend_configured: true });
       }
 
       if (action === "delete_session") {
         await backendCall(svc, backend, `/whatsapp/${remoteId}`, { method: "DELETE" });
-        return json({ success: true });
+        return json({ success: true, backend_configured: true });
       }
 
-      return json({ error: "action inválida" }, 400);
-    } catch (e) {
-      const message = humanizeBackendError(e instanceof Error ? e.message : "erro desconhecido");
-      await registerFailure(message);
-      return json({ error: "backend_unreachable", message }, 502);
+      return json({ error: "invalid_action" }, 400);
+    } catch (error) {
+      const message = humanizeBackendError(error instanceof Error ? error.message : "erro desconhecido");
+      await svc
+        .from("whatsapp_connections")
+        .update({
+          connection_error: null,
+          metadata: { ...(connection.metadata ?? {}), backend_ready: false, backend_last_error: message },
+          last_health_check_at: new Date().toISOString(),
+        })
+        .eq("id", connection.id);
+
+      return json({
+        success: false,
+        backend_configured: true,
+        status: "disconnected",
+        message,
+      });
     }
   } catch (error) {
     console.error("whatsapp-backend-proxy error:", error);
-    return json(
-      {
-        error: "internal_error",
-        message: "Erro interno ao processar a conexão WhatsApp.",
-        details: error instanceof Error ? error.message : "erro desconhecido",
-      },
-      500,
-    );
+    return json({
+      error: "internal_error",
+      message: "Erro interno ao processar a conexão WhatsApp.",
+      details: error instanceof Error ? error.message : "erro desconhecido",
+    }, 500);
   }
 });
