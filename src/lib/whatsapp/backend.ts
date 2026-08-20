@@ -2,9 +2,9 @@ import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Conexão WhatsApp pelo backend próprio.
- * Fluxo: Frontend → Edge Function → Backend Node.js → Baileys/WuzAPI → WhatsApp.
- * n8n não participa do fluxo principal e permanece apenas como automação opcional.
- * Docker também não é requisito lógico: o backend pode rodar com ou sem container.
+ * Cadastro local: Frontend -> Supabase.
+ * Conexão real: Frontend -> Edge Function -> Backend Node.js -> Baileys/WuzAPI -> WhatsApp.
+ * n8n não participa do fluxo principal.
  */
 
 export type DirectWhatsAppProvider = "baileys" | "wuzapi";
@@ -15,35 +15,43 @@ type ProxyErrorPayload = {
   details?: string;
 };
 
+function normalizeServiceError(raw: string): string {
+  const text = String(raw || "");
+  if (text.includes("backend_not_configured")) {
+    return "O serviço do WhatsApp ainda não está configurado no servidor. O cadastro foi preservado; publique/configure o backend Node.js com Baileys e tente Conectar novamente.";
+  }
+  if (text.includes("Edge function returned 503")) {
+    return "O serviço do WhatsApp está temporariamente indisponível. O cadastro foi preservado; tente conectar novamente quando o backend estiver disponível.";
+  }
+  return text.length > 320 ? `${text.slice(0, 320)}…` : text;
+}
+
 async function readFunctionError(error: any): Promise<string> {
   const context = error?.context;
-
   try {
     if (context && typeof context.json === "function") {
       const payload = (await context.clone().json()) as ProxyErrorPayload;
-      return payload.message || payload.details || payload.error || error.message;
+      return normalizeServiceError(payload.message || payload.details || payload.error || error.message);
     }
   } catch {
-    // ignora e usa a mensagem padrão abaixo
+    // Usa a mensagem padrão abaixo.
   }
-
-  return context?.message || context?.details || error?.message || "Falha ao comunicar com o serviço de WhatsApp.";
+  return normalizeServiceError(
+    context?.message || context?.details || error?.message || "Falha ao comunicar com o serviço de WhatsApp.",
+  );
 }
 
 async function callProxy<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke("whatsapp-backend-proxy", { body });
-
-  if (error) {
-    throw new Error(await readFunctionError(error));
-  }
-
-  if (data?.error) {
-    throw new Error(data.message || data.details || data.error);
-  }
-
+  if (error) throw new Error(await readFunctionError(error));
+  if (data?.error) throw new Error(normalizeServiceError(data.message || data.details || data.error));
   return data as T;
 }
 
+/**
+ * O cadastro NÃO chama Edge Function e NÃO exige backend/n8n/Docker.
+ * A sessão remota só será criada quando o usuário clicar em Conectar WhatsApp.
+ */
 export async function createBackendConnection(params: {
   tenantId?: string | null;
   name: string;
@@ -51,30 +59,45 @@ export async function createBackendConnection(params: {
   wuzapiUrl?: string;
   wuzapiToken?: string;
 }) {
-  const result = await callProxy<{
-    success: boolean;
-    connection_id: string;
-    remote_id: string | null;
-    provider?: DirectWhatsAppProvider;
-    backend_configured?: boolean;
-    auto_connect?: boolean;
-    message?: string;
-  }>({
-    action: "create_connection",
-    tenant_id: params.tenantId ?? null,
-    name: params.name,
-    provider: params.provider ?? "baileys",
-    ...(params.provider === "wuzapi" && params.wuzapiUrl ? { wuzapi_url: params.wuzapiUrl } : {}),
-    ...(params.provider === "wuzapi" && params.wuzapiToken ? { wuzapi_token: params.wuzapiToken } : {}),
-  });
+  if (!params.tenantId) throw new Error("Empresa não identificada.");
 
-  // A tela atual chama connect() automaticamente quando recebe um connection_id.
-  // Se o serviço Baileys ainda não estiver publicado/configurado, preservamos o
-  // cadastro local e evitamos disparar uma tentativa que resultaria em erro 503.
+  const provider = params.provider ?? "baileys";
+  const providerType: "baileys_backend" | "custom" =
+    provider === "baileys" ? "baileys_backend" : "custom";
+
+  const metadata: any = {
+    backend_provider: provider,
+    pending_backend: true,
+  };
+  if (provider === "wuzapi") {
+    if (params.wuzapiUrl) metadata.wuzapi_url = params.wuzapiUrl;
+    if (params.wuzapiToken) metadata.wuzapi_token_configured = true;
+  }
+
+  const { data, error } = await supabase
+    .from("whatsapp_connections")
+    .insert({
+      tenant_id: params.tenantId,
+      name: params.name.trim() || "WhatsApp",
+      provider_type: providerType,
+      metadata,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    throw new Error(`Não foi possível cadastrar a conexão: ${error.message}`);
+  }
+
   return {
-    ...result,
-    registered_connection_id: result.connection_id,
-    connection_id: result.auto_connect === false ? "" : result.connection_id,
+    success: true,
+    connection_id: "",
+    registered_connection_id: data.id,
+    remote_id: null,
+    provider,
+    backend_configured: false,
+    auto_connect: false,
+    message: "Conexão cadastrada. Agora clique em Conectar WhatsApp para gerar o QR Code.",
   };
 }
 
