@@ -62,11 +62,10 @@ export async function createBackendConnection(params: {
   if (!params.tenantId) throw new Error("Empresa não identificada.");
 
   const provider = params.provider ?? "baileys";
-  // O enum atual do banco já suporta baileys_backend. WuzAPI será ativado
-  // apenas quando a migration correspondente estiver disponível.
-  const providerType = provider === "baileys" ? "baileys_backend" : "custom";
+  const providerType: "baileys_backend" | "custom" =
+    provider === "baileys" ? "baileys_backend" : "custom";
 
-  const metadata: Record<string, unknown> = {
+  const metadata: any = {
     backend_provider: provider,
     pending_backend: true,
   };
