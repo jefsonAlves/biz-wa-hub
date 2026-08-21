@@ -26,9 +26,10 @@ function normalizeServiceError(raw: string): string {
   if (
     text.includes("backend_not_configured") ||
     text.includes("backend_service_unavailable") ||
-    text.includes("upgrade aplicado7")
+    text.includes("upgrade aplicado7") ||
+    text.includes("RUNTIME_ERROR")
   ) {
-    return "O serviço WhatsApp ainda não está configurado no Supabase. Verifique os Secrets da plataforma e tente novamente.";
+    return text;
   }
 
   if (

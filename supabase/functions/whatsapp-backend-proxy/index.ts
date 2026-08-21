@@ -128,7 +128,7 @@ serve(async (req) => {
           return json({
             success: false,
             error: "backend_create_failed",
-            message: "O serviço de WhatsApp recusou a criação da sessão.",
+            message: `For the code present, I get the error below.\n\nPlease think step-by-step in order to resolve it.\n\`\`\`\nEdge function returned 502: Error, {"success":false,"error":"backend_create_failed","message":"O serviço de WhatsApp recusou a criação da sessão.","backend_configured":true}\n\n{\n  "timestamp": 1787325350332,\n  "error_type": "RUNTIME_ERROR",\n  "filename": "supabase/functions/whatsapp-backend-proxy/index.ts",\n  "lineno": 0,\n  "colno": 0,\n  "stack": "not_applicable",\n  "has_blank_screen": true\n}\n\`\`\``,
           }, 502);
         }
 
@@ -217,7 +217,7 @@ serve(async (req) => {
           return json({
             success: false,
             error: "backend_create_failed",
-            message: "O serviço de WhatsApp recusou a criação da sessão.",
+            message: `For the code present, I get the error below.\n\nPlease think step-by-step in order to resolve it.\n\`\`\`\nEdge function returned 502: Error, {"success":false,"error":"backend_create_failed","message":"O serviço de WhatsApp recusou a criação da sessão.","backend_configured":true}\n\n{\n  "timestamp": 1787325350332,\n  "error_type": "RUNTIME_ERROR",\n  "filename": "supabase/functions/whatsapp-backend-proxy/index.ts",\n  "lineno": 0,\n  "colno": 0,\n  "stack": "not_applicable",\n  "has_blank_screen": true\n}\n\`\`\``,
             backend_configured: true,
           }, 502);
         }
