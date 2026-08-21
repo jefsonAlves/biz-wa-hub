@@ -390,7 +390,7 @@ serve(async (req) => {
             error: "status_failed",
             backend_configured: true,
             backend_status: shown.status,
-            message: `O serviço respondeu HTTP ${shown.status} ao consultar a sessão.`,
+            message: NEW_SYNC_MESSAGE,
           }, 502);
         }
 
