@@ -12,6 +12,7 @@ import {
 
 type Action =
   | "create_connection"
+  | "health"
   | "start_session"
   | "refresh_status"
   | "disconnect"
@@ -36,8 +37,7 @@ const backendUnavailable = (action: Action) =>
     has_qr: false,
     phone_number: null,
     action,
-    message:
-      "sincronizar novamente com a main e Preciso adequar a integração WhatsApp do projeto considerando a arquitetura atual.\n\nIMPORTANTE:\n\nO projeto usa Supabase/Lovable para banco, autenticação e Edge Functions, porém o Baileys precisa rodar em um processo Node.js persistente.\n\nPortanto:\n\nNÃO tente executar Baileys dentro de Supabase Edge Function.\n\nNÃO use n8n para manter sessão WhatsApp.\n\nNÃO torne Docker obrigatório.\n\nNÃO recrie Evolution API.\n\nUse o serviço Node já criado no repositório em:\n\nservices/whatsapp-baileys\n\n\nA arquitetura correta deve ser:\n\nFrontend Lovable\n      ↓\nSupabase / Edge Functions\n      ↓\nBackend Node.js Baileys\n      ↓\nWhatsApp\n\n\n1. O que o Supabase deve fazer\n\nO Supabase continua responsável por:\n\nautenticação;\n\ntenants/empresas;\n\nconexões cadastradas;\n\ncontatos;\n\nconversas;\n\nmensagens;\n\npermissões;\n\nEdge Functions;\n\npersistência dos dados da aplicação.\n\nO Supabase NÃO deve manter o socket do WhatsApp.\n\n2. O que o serviço Node.js Baileys deve fazer\n\nO serviço localizado em:\n\nservices/whatsapp-baileys\n\n\ndeve ser responsável por:\n\niniciar sessão;\n\ngerar QR Code;\n\nmanter conexão ativa;\n\npersistir credenciais;\n\nrestaurar sessões;\n\nenviar mensagens;\n\ndesconectar;\n\nconsultar status;\n\nsuportar múltiplas sessões.\n\n3. Configuração necessária no Supabase\n\nAdicione como secret do projeto:\n\nWHATSAPP_BACKEND_URL\n\n\nEssa variável deve apontar para a URL pública do serviço Node.js Baileys.\n\nExemplo:\n\nWHATSAPP_BACKEND_URL=https://whatsapp.meudominio.com.br\n\n\nOpcionalmente, se for utilizada autenticação no serviço:\n\nWHATSAPP_BACKEND_TOKEN=meu_token_seguro\n\n\n4. Não pedir esses dados ao usuário final\n\nA URL do backend e o token são configurações da plataforma.\n\nNão apresentar na interface:\n\nURL do backend;\n\ntoken;\n\ne-mail;\n\nsenha;\n\nconfiguração Baileys.\n\nO usuário final deve apenas ver:\n\nAdicionar WhatsApp\nConectar WhatsApp\nQR Code\nStatus\nDesconectar\n\n\n5. Fluxo de conexão\n\nAo clicar em:\n\nConectar WhatsApp\n\n\no frontend deve chamar a Edge Function:\n\nwhatsapp-backend-proxy\n\n\ncom:\n\n{\n  \"action\": \"start_session\",\n  \"connection_id\": \"...\"\n}\n\n\nA Edge Function deve obter:\n\nWHATSAPP_BACKEND_URL\n\n\ne então chamar o serviço Node.js.\n\nExemplo conceitual:\n\nPOST https://whatsapp.meudominio.com.br/whatsappsession/{sessionId}\n\n\n6. Consulta do QR Code\n\nA atualização deve chamar:\n\n{\n  \"action\": \"refresh_status\",\n  \"connection_id\": \"...\"\n}\n\n\nA Edge Function consulta o backend Node.js.\n\nO backend deverá retornar algo como:\n\n{\n  \"status\": \"QRCODE\",\n  \"qrcode\": \"conteudo_do_qr\",\n  \"number\": null\n}\n\n\nDepois o Supabase deve atualizar:\n\nwhatsapp_connections.status\nwhatsapp_connections.qr_status\nwhatsapp_connections.metadata.qr_code\n\n\n7. Não gerar erro se backend estiver ausente\n\nSe WHATSAPP_BACKEND_URL não estiver configurado:\n\nNÃO retornar:\n\n409\n503\nRUNTIME_ERROR\nblank screen\n\n\nRetornar HTTP 200 com:\n\n{\n  \"success\": false,\n  \"backend_configured\": false,\n  \"status\": \"disconnected\",\n  \"has_qr\": false,\n  \"message\": \"Serviço WhatsApp ainda não configurado.\"\n}\n\n\nO frontend deve mostrar somente uma mensagem amigável.\n\n8. O que não fazer\n\nNão usar:\n\nFrontend → n8n → WhatsApp\n\n\nNão usar:\n\nFrontend → Supabase Edge Function → Baileys\n\n\ncomo processo persistente.\n\nEdge Function apenas atua como proxy seguro.\n\n9. n8n\n\nn8n permanece opcional para automações.\n\nExemplo:\n\nMensagem recebida\n      ↓\nBackend\n      ↓\nSupabase\n      ↓\nn8n opcional\n\n\nA conexão principal do WhatsApp deve funcionar sem n8n.\n\n10. Critério de funcionamento\n\nSó considerar concluído quando:\n\nusuário cadastra conexão;\n\ncadastro é salvo no Supabase;\n\nusuário clica em Conectar;\n\nEdge Function chama o serviço Node;\n\nBaileys inicia sessão;\n\nQR Code é retornado;\n\nQR aparece no Lovable;\n\nusuário escaneia;\n\nstatus muda para Conectado;\n\nmensagens podem ser recebidas e enviadas.\n\n11. Muito importante\n\nO serviço Node.js precisa ser publicado em um ambiente que execute processos persistentes, como:\n\nVPS;\n\nRailway;\n\nRender;\n\nFly.io;\n\nservidor Node próprio.\n\nO Supabase não substitui esse processo persistente.\n\nPortanto, o Lovable deve adaptar o projeto para consumir esse serviço, não tentar reimplementar Baileys dentro das Edge Functions. faça no final um sheklist para ver se foi implementado tudo descrito aqui e agindo conforme pedido",
+    message: "Serviço WhatsApp ainda não configurado no servidor.",
   });
 
 serve(async (req) => {
@@ -63,12 +63,33 @@ serve(async (req) => {
       | null;
     if (!tenantId) return json({ error: "tenant_id_required" }, 400);
 
-    // Cadastro via Edge Function permanece suportado, embora o frontend atual
-    // já faça o cadastro local diretamente no Supabase.
+    const backend = await getBackend(svc, tenantId);
+
+    if (action === "health") {
+      if (!backend) return backendUnavailable(action);
+      try {
+        const result = await backendCall(svc, backend, "/health", { method: "GET", timeoutMs: 10000 });
+        return json({
+          success: result.status >= 200 && result.status < 300,
+          backend_configured: true,
+          backend_status: result.status,
+          service: result.body?.service ?? null,
+          sessions: result.body?.sessions ?? null,
+        }, result.status >= 200 && result.status < 300 ? 200 : 502);
+      } catch (error) {
+        return json({
+          success: false,
+          backend_configured: true,
+          message: humanizeBackendError(error instanceof Error ? error.message : "erro desconhecido"),
+        }, 502);
+      }
+    }
+
+    // Cadastro via Edge Function permanece suportado. O frontend atual pode
+    // cadastrar diretamente no Supabase e criar a sessão remota apenas ao conectar.
     if (action === "create_connection") {
       const name = String(body?.name ?? "WhatsApp").trim().slice(0, 80) || "WhatsApp";
       const provider = normalizeProvider(body?.provider);
-      const backend = await getBackend(svc, tenantId);
 
       if (!backend) {
         const { data: connection, error } = await svc
@@ -100,14 +121,7 @@ serve(async (req) => {
       try {
         const created = await backendCall(svc, backend, "/whatsapp/", {
           method: "POST",
-          body: JSON.stringify({
-            name,
-            status: "DISCONNECTED",
-            isDefault: false,
-            queueIds: [],
-            channel: "whatsapp",
-            provider: provider === "wuzapi" ? "wuzapi" : "beta",
-          }),
+          body: JSON.stringify({ name }),
         });
 
         if (created.status < 200 || created.status >= 300) {
@@ -174,44 +188,29 @@ serve(async (req) => {
       return json({ error: "unsupported_provider", message: "Esta conexão não usa o backend próprio." }, 400);
     }
 
-    const backend = await getBackend(svc, connection.tenant_id);
-
-    // Estado normal, não é Runtime Error. Atualizar QR/status nunca deve devolver
-    // 409 ou fabricar stack trace quando o processo Baileys ainda não foi publicado.
-    if (!backend) {
+    const connectionBackend = await getBackend(svc, connection.tenant_id);
+    if (!connectionBackend) {
       await svc
         .from("whatsapp_connections")
         .update({
           status: "disconnected",
           qr_status: "idle",
           connection_error: null,
-          metadata: {
-            ...(connection.metadata ?? {}),
-            backend_ready: false,
-          },
+          metadata: { ...(connection.metadata ?? {}), backend_ready: false },
           last_health_check_at: new Date().toISOString(),
         })
         .eq("id", connection.id);
-
       return backendUnavailable(action);
     }
 
     const provider = providerFromType(connection.provider_type);
     let remoteId = connection.provider_instance_id as string | null;
 
-    // Criação preguiçosa da sessão remota para conexões cadastradas antes do deploy do backend.
     if (!remoteId && action === "start_session") {
       try {
-        const created = await backendCall(svc, backend, "/whatsapp/", {
+        const created = await backendCall(svc, connectionBackend, "/whatsapp/", {
           method: "POST",
-          body: JSON.stringify({
-            name: connection.name,
-            status: "DISCONNECTED",
-            isDefault: false,
-            queueIds: [],
-            channel: "whatsapp",
-            provider: provider === "wuzapi" ? "wuzapi" : "beta",
-          }),
+          body: JSON.stringify({ name: connection.name }),
         });
 
         if (created.status < 200 || created.status >= 300) {
@@ -239,7 +238,11 @@ serve(async (req) => {
             provider_instance_id: remoteId,
             provider_session_id: remoteId,
             provider_token: remote?.token ?? null,
-            metadata: { ...(connection.metadata ?? {}), backend_provider: provider, backend_ready: true },
+            metadata: {
+              ...(connection.metadata ?? {}),
+              backend_provider: provider,
+              backend_ready: true,
+            },
           })
           .eq("id", connection.id);
       } catch (error) {
@@ -264,7 +267,10 @@ serve(async (req) => {
       }
 
       if (action === "disconnect" || action === "delete_session") {
-        await svc.from("whatsapp_connections").update({ status: "disconnected", qr_status: "idle" }).eq("id", connection.id);
+        await svc
+          .from("whatsapp_connections")
+          .update({ status: "disconnected", qr_status: "idle" })
+          .eq("id", connection.id);
         return json({ success: true, status: "disconnected", backend_configured: true });
       }
 
@@ -306,7 +312,10 @@ serve(async (req) => {
 
     try {
       if (action === "start_session") {
-        const started = await backendCall(svc, backend, `/whatsappsession/${remoteId}`, { method: "POST" });
+        const started = await backendCall(svc, connectionBackend, `/whatsappsession/${remoteId}`, {
+          method: "POST",
+        });
+
         if (started.status < 200 || started.status >= 300) {
           return json({
             success: false,
@@ -330,7 +339,10 @@ serve(async (req) => {
       }
 
       if (action === "refresh_status") {
-        const shown = await backendCall(svc, backend, `/whatsapp/${remoteId}`, { method: "GET" });
+        const shown = await backendCall(svc, connectionBackend, `/whatsapp/${remoteId}`, {
+          method: "GET",
+        });
+
         if (shown.status < 200 || shown.status >= 300) {
           return json({
             success: false,
@@ -339,11 +351,18 @@ serve(async (req) => {
             message: `O serviço respondeu HTTP ${shown.status} ao consultar a sessão.`,
           }, 502);
         }
-        return json({ success: true, ...(await applyRemoteState(shown.body)), backend_configured: true });
+
+        return json({
+          success: true,
+          ...(await applyRemoteState(shown.body)),
+          backend_configured: true,
+        });
       }
 
       if (action === "disconnect") {
-        await backendCall(svc, backend, `/whatsappsession/${remoteId}`, { method: "DELETE" });
+        await backendCall(svc, connectionBackend, `/whatsappsession/${remoteId}`, {
+          method: "DELETE",
+        });
         await svc
           .from("whatsapp_connections")
           .update({
@@ -357,7 +376,7 @@ serve(async (req) => {
       }
 
       if (action === "delete_session") {
-        await backendCall(svc, backend, `/whatsapp/${remoteId}`, { method: "DELETE" });
+        await backendCall(svc, connectionBackend, `/whatsapp/${remoteId}`, { method: "DELETE" });
         return json({ success: true, backend_configured: true });
       }
 
@@ -368,7 +387,11 @@ serve(async (req) => {
         .from("whatsapp_connections")
         .update({
           connection_error: null,
-          metadata: { ...(connection.metadata ?? {}), backend_ready: false, backend_last_error: message },
+          metadata: {
+            ...(connection.metadata ?? {}),
+            backend_ready: false,
+            backend_last_error: message,
+          },
           last_health_check_at: new Date().toISOString(),
         })
         .eq("id", connection.id);
@@ -378,7 +401,7 @@ serve(async (req) => {
         backend_configured: true,
         status: "disconnected",
         message,
-      });
+      }, 502);
     }
   } catch (error) {
     console.error("whatsapp-backend-proxy error:", error);
