@@ -40,7 +40,11 @@ import {
   WifiOff,
 } from "lucide-react";
 import { deleteConnection, listConnections, type SafeConnection } from "@/lib/whatsapp/provider";
-import { createBackendConnection, runBackendConnectionAction } from "@/lib/whatsapp/backend";
+import {
+  checkWhatsAppBackend,
+  createBackendConnection,
+  runBackendConnectionAction,
+} from "@/lib/whatsapp/backend";
 
 const STATE_LABELS: Record<string, string> = {
   connected: "Conectado",
@@ -65,9 +69,6 @@ const stateOf = (conn: SafeConnection) => {
   if (conn.status === "disconnecting") return "disconnecting";
   return "disconnected";
 };
-
-const statusVariant = (state: string) =>
-  state === "connected" ? "default" : state === "error" ? "destructive" : "secondary";
 
 const toQrImageSource = (value: string | null) => {
   const qr = value?.trim();
@@ -98,7 +99,13 @@ const Connections = () => {
   const [pending, setPending] = useState<string | null>(null);
   const [qrConnectionId, setQrConnectionId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SafeConnection | null>(null);
+  const [backendReady, setBackendReady] = useState(false);
   const previousStatuses = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    setBackendReady(false);
+    setQrConnectionId(null);
+  }, [effectiveTenantId]);
 
   const { data: tenants = [] } = useQuery({
     queryKey: ["admin-tenants-list"],
@@ -137,6 +144,7 @@ const Connections = () => {
     for (const connection of connections) {
       const previous = previousStatuses.current[connection.id];
       if (connection.status === "connected" && previous && previous !== "connected") {
+        setBackendReady(true);
         if (qrConnectionId === connection.id) setQrConnectionId(null);
         toast({
           title: "WhatsApp conectado",
@@ -173,19 +181,44 @@ const Connections = () => {
     };
   }, [effectiveTenantId, queryClient]);
 
-  const connect = async (connectionId: string) => {
-    setPending(`${connectionId}:connect`);
-    setQrConnectionId(connectionId);
+  const verifyBackend = async () => {
+    const result = await checkWhatsAppBackend(effectiveTenantId);
+    const ready = result.success === true && result.backend_configured !== false;
+    setBackendReady(ready);
+    if (!ready) {
+      throw new Error(result.message || "O servidor do WhatsApp não respondeu corretamente.");
+    }
+    return result;
+  };
 
+  const connect = async (connectionId: string) => {
+    if (!backendReady) {
+      toast({
+        title: "Verifique o servidor primeiro",
+        description: "Clique em Atualizar. Quando o servidor ficar online, o botão para gerar o QR Code será liberado.",
+      });
+      return;
+    }
+
+    setPending(`${connectionId}:connect`);
     try {
-      await runBackendConnectionAction(connectionId, "start_session", effectiveTenantId);
+      await verifyBackend();
+      const started = await runBackendConnectionAction(connectionId, "start_session", effectiveTenantId);
+      if (!started.success) {
+        throw new Error(started.message || "Não foi possível iniciar a sessão do WhatsApp.");
+      }
+
+      setQrConnectionId(connectionId);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await runBackendConnectionAction(connectionId, "refresh_status", effectiveTenantId).catch(() => null);
       await queryClient.invalidateQueries({
         queryKey: ["whatsapp_connections_safe", effectiveTenantId],
       });
     } catch (e) {
+      setBackendReady(false);
       setQrConnectionId(null);
       toast({
-        title: "Serviço de WhatsApp indisponível",
+        title: "Não foi possível gerar o QR Code",
         description: (e as Error).message,
         variant: "destructive",
       });
@@ -206,20 +239,15 @@ const Connections = () => {
     onSuccess: async (created) => {
       setOpen(false);
       setName("");
+      setBackendReady(false);
       await queryClient.invalidateQueries({
         queryKey: ["whatsapp_connections_safe", effectiveTenantId],
       });
-
-      if (created.connection_id) {
-        void connect(created.connection_id);
-        return;
-      }
-
       toast({
         title: "WhatsApp cadastrado",
         description:
           created.message ||
-          "A conexão foi cadastrada. Assim que o serviço Baileys estiver disponível, clique em Conectar WhatsApp.",
+          "Conexão cadastrada. Clique em Atualizar para testar o servidor e liberar a geração do QR Code.",
       });
     },
     onError: (e: Error) =>
@@ -233,13 +261,25 @@ const Connections = () => {
   const refresh = async (connectionId: string) => {
     setPending(`${connectionId}:refresh`);
     try {
-      await runBackendConnectionAction(connectionId, "refresh_status", effectiveTenantId);
+      const health = await verifyBackend();
+
+      const connection = connections.find((item) => item.id === connectionId);
+      const state = connection ? stateOf(connection) : "disconnected";
+      if (state === "connected" || state === "connecting" || state === "qr_pending") {
+        await runBackendConnectionAction(connectionId, "refresh_status", effectiveTenantId).catch(() => null);
+      }
+
       await queryClient.invalidateQueries({
         queryKey: ["whatsapp_connections_safe", effectiveTenantId],
       });
-    } catch (e) {
       toast({
-        title: "Não foi possível atualizar o status",
+        title: "Servidor WhatsApp online",
+        description: `${health.service || "Baileys"} respondeu corretamente. Agora você pode gerar o QR Code.`,
+      });
+    } catch (e) {
+      setBackendReady(false);
+      toast({
+        title: "Servidor WhatsApp offline",
         description: (e as Error).message,
         variant: "destructive",
       });
@@ -286,17 +326,20 @@ const Connections = () => {
     const state = qrConnection ? stateOf(qrConnection) : "connecting";
     if (state === "connected") return;
 
-    const timer = setInterval(async () => {
+    const poll = async () => {
       try {
-        await runBackendConnectionAction(qrConnectionId, "refresh_status", effectiveTenantId);
+        const result = await runBackendConnectionAction(qrConnectionId, "refresh_status", effectiveTenantId);
+        if (result.backend_configured === false) setBackendReady(false);
         await queryClient.invalidateQueries({
           queryKey: ["whatsapp_connections_safe", effectiveTenantId],
         });
       } catch {
-        // A mensagem útil já é exibida quando a conexão é iniciada.
+        // A sessão continuará sendo consultada no próximo ciclo.
       }
-    }, 3000);
+    };
 
+    void poll();
+    const timer = setInterval(poll, 2000);
     return () => clearInterval(timer);
   }, [qrConnectionId, qrConnection, effectiveTenantId, queryClient]);
 
@@ -312,8 +355,7 @@ const Connections = () => {
               <h1 className="text-2xl font-bold md:text-3xl">Conexões WhatsApp</h1>
             </div>
             <p className="text-sm text-muted-foreground md:text-base">
-              Cadastre um número e conecte pelo QR Code. O WhatsApp funciona diretamente pelo backend
-              Baileys, sem depender de n8n.
+              Primeiro valide o servidor em Atualizar. Com o servidor online, gere o QR Code e conecte o WhatsApp.
             </p>
           </div>
 
@@ -338,8 +380,7 @@ const Connections = () => {
                   />
                 </div>
                 <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-                  Nenhuma conta, token ou cadastro no Baileys é necessário. Depois do cadastro, basta
-                  escanear o QR Code quando o serviço WhatsApp estiver disponível.
+                  Após cadastrar, clique em Atualizar para validar a comunicação com o servidor WhatsApp.
                 </div>
               </div>
               <DialogFooter>
@@ -397,7 +438,7 @@ const Connections = () => {
             </div>
             <h2 className="font-semibold">Nenhum WhatsApp cadastrado</h2>
             <p className="mt-1 max-w-md text-sm text-muted-foreground">
-              Crie sua primeira conexão. O cadastro não depende de n8n, Docker, token ou conta externa.
+              Cadastre uma conexão e valide o servidor antes de gerar o QR Code.
             </p>
             <Button className="mt-5" onClick={() => setOpen(true)}>
               <Plus className="mr-2 h-4 w-4" /> Adicionar WhatsApp
@@ -410,23 +451,36 @@ const Connections = () => {
             const state = stateOf(conn);
             const busy = (cmd: string) => pending === `${conn.id}:${cmd}`;
             const connected = state === "connected";
+            const serverOnline = connected || backendReady;
+            const badgeLabel = connected ? "Conectado" : serverOnline ? "Servidor online" : "Desconectado";
 
             return (
               <Card key={conn.id} className="overflow-hidden">
                 <CardHeader className="pb-3">
                   <div className="flex items-start gap-3">
-                    <div className={`rounded-xl p-2.5 ${connected ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
-                      {connected ? <Wifi className="h-5 w-5" /> : <WifiOff className="h-5 w-5" />}
+                    <div
+                      className={`rounded-xl p-2.5 ${
+                        serverOnline ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {serverOnline ? <Wifi className="h-5 w-5" /> : <WifiOff className="h-5 w-5" />}
                     </div>
                     <div className="min-w-0 flex-1">
                       <CardTitle className="truncate text-base">{conn.name}</CardTitle>
                       <CardDescription className="mt-1">
                         {connected && conn.phone_number
                           ? conn.phone_number
-                          : `Status: ${STATE_LABELS[state]}`}
+                          : serverOnline
+                            ? `Servidor online • WhatsApp: ${STATE_LABELS[state]}`
+                            : `Status: ${STATE_LABELS[state]}`}
                       </CardDescription>
                     </div>
-                    <Badge variant={statusVariant(state)}>{STATE_LABELS[state]}</Badge>
+                    <Badge
+                      variant={connected ? "default" : "secondary"}
+                      className={serverOnline ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100" : undefined}
+                    >
+                      {badgeLabel}
+                    </Badge>
                   </div>
                 </CardHeader>
 
@@ -457,19 +511,30 @@ const Connections = () => {
                       </Button>
                     </div>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="sm" onClick={() => connect(conn.id)} disabled={busy("connect")}>
-                        {busy("connect") ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <QrCode className="mr-2 h-4 w-4" />
-                        )}
-                        Conectar WhatsApp
-                      </Button>
-                      {state === "qr_pending" && (
-                        <Button size="sm" variant="outline" onClick={() => setQrConnectionId(conn.id)}>
-                          <QrCode className="mr-2 h-4 w-4" /> Ver QR Code
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => connect(conn.id)}
+                          disabled={!backendReady || busy("connect")}
+                        >
+                          {busy("connect") ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <QrCode className="mr-2 h-4 w-4" />
+                          )}
+                          Conectar WhatsApp
                         </Button>
+                        {state === "qr_pending" && (
+                          <Button size="sm" variant="outline" onClick={() => setQrConnectionId(conn.id)}>
+                            <QrCode className="mr-2 h-4 w-4" /> Ver QR Code
+                          </Button>
+                        )}
+                      </div>
+                      {!backendReady && (
+                        <p className="text-xs text-muted-foreground">
+                          Clique em Atualizar para testar o servidor e liberar a geração do QR Code.
+                        </p>
                       )}
                     </div>
                   )}
@@ -480,9 +545,14 @@ const Connections = () => {
                       variant="ghost"
                       onClick={() => refresh(conn.id)}
                       disabled={busy("refresh")}
+                      className={backendReady ? "text-emerald-700 hover:text-emerald-700" : undefined}
                     >
-                      <RefreshCw className={`mr-2 h-4 w-4 ${busy("refresh") ? "animate-spin" : ""}`} />
-                      Atualizar
+                      {backendReady ? (
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                      ) : (
+                        <RefreshCw className={`mr-2 h-4 w-4 ${busy("refresh") ? "animate-spin" : ""}`} />
+                      )}
+                      {backendReady ? "Servidor online" : "Atualizar"}
                     </Button>
                     <Button
                       size="sm"
@@ -518,6 +588,9 @@ const Connections = () => {
               <div className="flex h-72 w-72 flex-col items-center justify-center gap-3 rounded-2xl border bg-muted/20">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="text-sm font-medium">Gerando QR Code...</p>
+                <p className="max-w-60 text-xs text-muted-foreground">
+                  A sessão foi iniciada e o servidor está aguardando o QR do WhatsApp.
+                </p>
               </div>
             )}
 
