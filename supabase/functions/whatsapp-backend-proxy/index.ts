@@ -205,7 +205,7 @@ serve(async (req) => {
         return json({
           success: false,
           error: "backend_unreachable",
-          message: humanizeBackendError(error instanceof Error ? error.message : "erro desconhecido"),
+          message: NEW_SYNC_MESSAGE,
         }, 502);
       }
     }
