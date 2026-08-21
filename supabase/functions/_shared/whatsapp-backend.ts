@@ -2,6 +2,8 @@
 // Nunca expõe tokens: apenas as Edge Functions leem a configuração do servidor.
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const DEFAULT_WHATSAPP_BACKEND_URL = "https://site--biz-wa-hub--xzvlmtkkj4np.code.run";
+
 export interface BackendConfig {
   id: string;
   tenant_id: string;
@@ -25,21 +27,24 @@ export function normalizeBaseUrl(raw: string): string {
 
 /**
  * Resolve o backend WhatsApp da plataforma.
- * Prioridade: WHATSAPP_BACKEND_URL/TOKEN no servidor -> configuração legada por tenant.
- * O usuário final nunca informa URL, conta, e-mail ou senha do Baileys.
+ * Prioridade: WHATSAPP_BACKEND_URL -> URL pública padrão do Northflank -> configuração legada por tenant.
+ * O token continua exclusivamente em WHATSAPP_BACKEND_TOKEN no ambiente do Supabase.
  */
 export async function getBackend(
   svc: SupabaseClient,
   tenantId: string,
 ): Promise<BackendConfig | null> {
-  const envUrl = Deno.env.get("WHATSAPP_BACKEND_URL");
-  if (envUrl?.trim()) {
+  const envUrl = Deno.env.get("WHATSAPP_BACKEND_URL")?.trim();
+  const envToken = Deno.env.get("WHATSAPP_BACKEND_TOKEN")?.trim() || null;
+  const resolvedUrl = envUrl || DEFAULT_WHATSAPP_BACKEND_URL;
+
+  if (resolvedUrl) {
     return {
       id: "env",
       tenant_id: tenantId,
       name: "Backend WhatsApp",
-      base_url: envUrl.trim(),
-      api_token: Deno.env.get("WHATSAPP_BACKEND_TOKEN")?.trim() || null,
+      base_url: resolvedUrl,
+      api_token: envToken,
       auth_email: Deno.env.get("WHATSAPP_BACKEND_EMAIL")?.trim() || null,
       auth_password: Deno.env.get("WHATSAPP_BACKEND_PASSWORD") || null,
       session_token: null,
@@ -70,13 +75,14 @@ export function humanizeBackendError(message: string): string {
   if (lowered.includes("timed out") || lowered.includes("aborted")) {
     return "O serviço WhatsApp não respondeu no tempo limite.";
   }
+  if (lowered.includes("unauthorized") || lowered.includes("401")) {
+    return "O servidor WhatsApp respondeu, mas o token interno do Supabase está ausente ou inválido.";
+  }
   return message.slice(0, 300);
 }
 
 async function login(svc: SupabaseClient, backend: BackendConfig): Promise<string> {
   if (!backend.auth_email || !backend.auth_password) {
-    // O serviço Baileys nativo deste projeto pode ser usado sem autenticação
-    // em rede privada. Em produção pública, prefira BACKEND_TOKEN.
     return "";
   }
 
@@ -102,7 +108,6 @@ async function login(svc: SupabaseClient, backend: BackendConfig): Promise<strin
   return token;
 }
 
-/** Retorna token quando configurado; string vazia significa backend sem autenticação. */
 export async function resolveToken(svc: SupabaseClient, backend: BackendConfig): Promise<string> {
   if (backend.api_token) return backend.api_token;
   const expires = backend.session_token_expires_at
@@ -146,7 +151,6 @@ export async function backendCall(
   let token = await resolveToken(svc, backend);
   let resp = await backendFetch(backend, path, { ...init, token });
 
-  // Só tenta renovar login quando este backend realmente usa e-mail/senha.
   if (
     resp.status === 401 &&
     !backend.api_token &&
