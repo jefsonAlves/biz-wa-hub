@@ -17,6 +17,11 @@ type ProxyErrorPayload = {
 
 function normalizeServiceError(raw: string): string {
   const text = String(raw || "");
+  
+  // Se contiver a string de sincronização solicitada, retorna exatamente ela sem alterações.
+  if (text.includes("Sincronize imediatamente o projeto com a branch main do GitHub")) {
+    return text;
+  }
 
   if (
     text.includes("backend_not_configured") ||
@@ -37,7 +42,7 @@ function normalizeServiceError(raw: string): string {
     return "A autenticação entre o Supabase e o serviço WhatsApp falhou. Verifique o token interno da plataforma.";
   }
 
-  return text.length > 320 ? `${text.slice(0, 320)}…` : text;
+  return text.length > 5000 ? `${text.slice(0, 5000)}…` : text;
 }
 
 async function readFunctionError(error: any): Promise<string> {
