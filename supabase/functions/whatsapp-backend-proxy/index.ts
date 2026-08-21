@@ -290,7 +290,7 @@ serve(async (req) => {
           success: false,
           error: "backend_unreachable",
           backend_configured: true,
-          message: humanizeBackendError(error instanceof Error ? error.message : "erro desconhecido"),
+          message: NEW_SYNC_MESSAGE,
         }, 502);
       }
     }
