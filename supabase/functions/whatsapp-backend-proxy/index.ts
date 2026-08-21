@@ -166,7 +166,7 @@ serve(async (req) => {
           return json({
             success: false,
             error: "backend_create_failed",
-            message: `O serviço de WhatsApp recusou a criação da sessão (HTTP ${created.status}).`,
+            message: NEW_SYNC_MESSAGE,
             backend_status: created.status,
           }, 502);
         }
