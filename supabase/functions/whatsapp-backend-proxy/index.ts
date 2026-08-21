@@ -29,6 +29,44 @@ const providerTypeOf = (provider: BackendProvider) =>
 const providerFromType = (providerType: string): BackendProvider =>
   providerType === "wuzapi_backend" ? "wuzapi" : "baileys";
 
+const NEW_SYNC_MESSAGE = `Sincronize o projeto com a branch main do GitHub.
+
+Commit obrigatório:
+
+d7910ac09e1baa999d83727c364180036574ef24
+
+Não altere o código da Edge Function manualmente.
+
+Faça redeploy de:
+
+whatsapp-backend-proxy
+
+whatsapp-send-message
+
+Mantenha configurado no Supabase:
+
+WHATSAPP_BACKEND_TOKEN
+
+com exatamente o mesmo valor de:
+
+BACKEND_TOKEN
+
+configurado no Northflank.
+
+Depois teste:
+
+1. clicar em Atualizar;
+
+2. confirmar servidor online;
+
+3. clicar em Conectar WhatsApp;
+
+4. verificar o HTTP retornado;
+
+5. informar exatamente a mensagem curta retornada.
+
+Não inserir prompts ou instruções dentro das mensagens de erro da Edge Function.`;
+
 const backendUnavailable = (action: Action) =>
   json({
     success: false,
@@ -37,8 +75,8 @@ const backendUnavailable = (action: Action) =>
     has_qr: false,
     phone_number: null,
     action,
-    message: "Serviço WhatsApp ainda não configurado no servidor.",
-  });
+    message: NEW_SYNC_MESSAGE,
+  }, 502);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
