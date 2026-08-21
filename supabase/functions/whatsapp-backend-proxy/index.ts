@@ -442,7 +442,7 @@ serve(async (req) => {
         success: false,
         backend_configured: true,
         status: "disconnected",
-        message,
+        message: NEW_SYNC_MESSAGE,
       }, 502);
     }
   } catch (error) {
