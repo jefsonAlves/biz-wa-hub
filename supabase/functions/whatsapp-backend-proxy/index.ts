@@ -362,7 +362,7 @@ serve(async (req) => {
             error: "session_start_failed",
             backend_configured: true,
             backend_status: started.status,
-            message: `O serviço respondeu HTTP ${started.status} ao iniciar a sessão.`,
+            message: NEW_SYNC_MESSAGE,
           }, 502);
         }
 
