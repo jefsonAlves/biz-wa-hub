@@ -19,7 +19,7 @@ function normalizeServiceError(raw: string): string {
   const text = String(raw || "");
   
   // Se contiver a string de sincronização solicitada, retorna exatamente ela sem alterações.
-  if (text.includes("Sincronize imediatamente o projeto com a branch main do GitHub")) {
+  if (text.includes("Sincronize o projeto com a branch main do GitHub")) {
     return text;
   }
 
