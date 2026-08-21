@@ -17,19 +17,26 @@ type ProxyErrorPayload = {
 
 function normalizeServiceError(raw: string): string {
   const text = String(raw || "");
+
   if (
     text.includes("backend_not_configured") ||
     text.includes("backend_service_unavailable") ||
     text.includes("upgrade aplicado7")
   ) {
-    return "O serviço Node.js do WhatsApp ainda não está disponível. A conexão foi preservada; assim que o serviço Baileys estiver publicado/configurado, tente Conectar novamente.";
+    return "O serviço WhatsApp ainda não está configurado no Supabase. Verifique os Secrets da plataforma e tente novamente.";
   }
+
   if (
     text.includes("Edge function returned 503") ||
     text.includes("Edge function returned 409")
   ) {
-    return "O serviço do WhatsApp está temporariamente indisponível. A conexão foi preservada e nenhum dado foi perdido.";
+    return "O serviço do WhatsApp está temporariamente indisponível. Tente novamente em alguns instantes.";
   }
+
+  if (text.includes("unauthorized") || text.includes("HTTP 401")) {
+    return "A autenticação entre o Supabase e o serviço WhatsApp falhou. Verifique o token interno da plataforma.";
+  }
+
   return text.length > 320 ? `${text.slice(0, 320)}…` : text;
 }
 
@@ -43,6 +50,7 @@ async function readFunctionError(error: any): Promise<string> {
   } catch {
     // Usa a mensagem padrão abaixo.
   }
+
   return normalizeServiceError(
     context?.message || context?.details || error?.message || "Falha ao comunicar com o serviço de WhatsApp.",
   );
@@ -69,13 +77,14 @@ export async function createBackendConnection(params: {
   if (!params.tenantId) throw new Error("Empresa não identificada.");
 
   const provider = params.provider ?? "baileys";
-  const providerType: "baileys_backend" | "custom" =
-    provider === "baileys" ? "baileys_backend" : "custom";
+  const providerType: "baileys_backend" | "wuzapi_backend" =
+    provider === "baileys" ? "baileys_backend" : "wuzapi_backend";
 
-  const metadata: any = {
+  const metadata: Record<string, unknown> = {
     backend_provider: provider,
     pending_backend: true,
   };
+
   if (provider === "wuzapi") {
     if (params.wuzapiUrl) metadata.wuzapi_url = params.wuzapiUrl;
     if (params.wuzapiToken) metadata.wuzapi_token_configured = true;
@@ -100,13 +109,14 @@ export async function createBackendConnection(params: {
     registered_connection_id: data.id,
     remote_id: null,
     provider,
-    backend_configured: false,
+    backend_configured: true,
     auto_connect: false,
-    message: "Conexão cadastrada. Agora clique em Conectar WhatsApp para gerar o QR Code.",
+    message: "Conexão cadastrada. Clique em Conectar WhatsApp para gerar o QR Code.",
   };
 }
 
 export type BackendConnectionAction =
+  | "health"
   | "start_session"
   | "refresh_status"
   | "disconnect"
@@ -119,11 +129,14 @@ type ConnectionActionResult = {
   phone_number?: string | null;
   message?: string;
   backend_configured?: boolean;
+  backend_status?: number;
+  service?: string | null;
+  sessions?: number | null;
 };
 
 export async function runBackendConnectionAction(
   connectionId: string,
-  action: BackendConnectionAction,
+  action: Exclude<BackendConnectionAction, "health">,
   tenantId?: string | null,
 ) {
   const result = await callProxy<ConnectionActionResult>({
@@ -132,15 +145,19 @@ export async function runBackendConnectionAction(
     tenant_id: tenantId ?? null,
   });
 
-  // Atualizar status/QR sem backend publicado é um estado normal: não lança erro.
-  // Para "Conectar", porém, precisamos avisar o usuário porque não existe QR real
-  // até que o processo Node.js/Baileys esteja executando.
   if (result.backend_configured === false && action === "start_session") {
     throw new Error(
       result.message ||
-        "O serviço Node.js do WhatsApp ainda não está disponível. Publique/configure o serviço Baileys e tente novamente.",
+        "O serviço WhatsApp ainda não está configurado no Supabase. Verifique os Secrets da plataforma.",
     );
   }
 
   return result;
+}
+
+export async function checkWhatsAppBackend(tenantId?: string | null) {
+  return callProxy<ConnectionActionResult>({
+    action: "health",
+    tenant_id: tenantId ?? null,
+  });
 }
