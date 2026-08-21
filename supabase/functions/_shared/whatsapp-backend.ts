@@ -75,8 +75,11 @@ export function humanizeBackendError(message: string): string {
   if (lowered.includes("timed out") || lowered.includes("aborted")) {
     return "O serviço WhatsApp não respondeu no tempo limite.";
   }
-  if (lowered.includes("unauthorized") || lowered.includes("401")) {
-    return "O servidor WhatsApp respondeu, mas o token interno do Supabase está ausente ou inválido.";
+  if (lowered.includes("backend_auth_failed") || lowered.includes("unauthorized") || lowered.includes("401")) {
+    return "O servidor WhatsApp está online, mas o WHATSAPP_BACKEND_TOKEN do Supabase está ausente ou diferente do BACKEND_TOKEN do Northflank.";
+  }
+  if (lowered.includes("forbidden") || lowered.includes("403")) {
+    return "O servidor WhatsApp recusou a autorização da plataforma. Verifique o token interno configurado.";
   }
   return message.slice(0, 300);
 }
@@ -149,7 +152,8 @@ export async function backendCall(
   init: RequestInit & { timeoutMs?: number } = {},
 ): Promise<{ status: number; body: any }> {
   let token = await resolveToken(svc, backend);
-  let resp = await backendFetch(backend, path, { ...init, token });
+  const effectivePath = path === "/health" ? "/health/secure" : path;
+  let resp = await backendFetch(backend, effectivePath, { ...init, token });
 
   if (
     resp.status === 401 &&
@@ -158,7 +162,14 @@ export async function backendCall(
     backend.auth_password
   ) {
     token = await login(svc, { ...backend, session_token: null, session_token_expires_at: null });
-    resp = await backendFetch(backend, path, { ...init, token });
+    resp = await backendFetch(backend, effectivePath, { ...init, token });
+  }
+
+  if (resp.status === 401) {
+    throw new Error("backend_auth_failed: HTTP 401");
+  }
+  if (resp.status === 403) {
+    throw new Error("backend_auth_failed: HTTP 403");
   }
 
   const text = await resp.text();
