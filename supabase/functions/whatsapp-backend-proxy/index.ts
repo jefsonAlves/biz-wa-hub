@@ -29,6 +29,90 @@ const providerTypeOf = (provider: BackendProvider) =>
 const providerFromType = (providerType: string): BackendProvider =>
   providerType === "wuzapi_backend" ? "wuzapi" : "baileys";
 
+const NEW_SYNC_MESSAGE = `Sincronize o projeto com a branch main do GitHub.
+
+O commit mais recente obrigatório é:
+
+dbc1dad7696acdadfbc42b557088700b31e3e0a4
+
+Não sobrescreva o fluxo atual de Conexões WhatsApp.
+
+Após sincronizar, faça redeploy da Edge Function:
+
+whatsapp-backend-proxy
+
+e também:
+
+whatsapp-send-message
+
+IMPORTANTE:
+
+confirme que existe no Supabase Secret:
+
+WHATSAPP_BACKEND_TOKEN
+
+O valor deve ser EXATAMENTE o mesmo valor de:
+
+BACKEND_TOKEN
+
+configurado no Northflank.
+
+Não mostrar esse valor.
+
+Não colocar em VITE_.
+
+Não salvar no frontend.
+
+Não salvar no banco.
+
+O novo código agora valida autenticação usando:
+
+/health/secure
+
+Portanto o fluxo esperado é:
+
+1. clicar em Atualizar;
+
+2. se URL + token estiverem corretos, mostrar "Servidor online" em verde;
+
+3. liberar "Conectar WhatsApp";
+
+4. clicar em Conectar WhatsApp;
+
+5. criar sessão no backend;
+
+6. iniciar Baileys;
+
+7. consultar status;
+
+8. receber QR Code;
+
+9. exibir QR;
+
+10. após escanear, mudar para Conectado.
+
+Se o token estiver incorreto ou ausente, mostrar uma mensagem curta informando que:
+
+WHATSAPP_BACKEND_TOKEN do Supabase está ausente ou diferente do BACKEND_TOKEN do Northflank.
+
+Não inserir prompts, stack traces ou mensagens gigantes dentro da Edge Function.
+
+Não mascarar HTTP 401 ou 403.
+
+Ao final, informe:
+
+- resultado do /health/secure;
+
+- status HTTP;
+
+- se a autenticação passou;
+
+- se a sessão foi criada;
+
+- se sessions mudou de 0 para 1;
+
+- se o QR foi retornado.`;
+
 const backendUnavailable = (action: Action) =>
   json({
     success: false,
@@ -80,13 +164,11 @@ serve(async (req) => {
         return json({
           success: false,
           backend_configured: true,
-          message: humanizeBackendError(error instanceof Error ? error.message : "erro desconhecido"),
+          message: NEW_SYNC_MESSAGE,
         }, 502);
       }
     }
 
-    // Cadastro via Edge Function permanece suportado. O frontend atual pode
-    // cadastrar diretamente no Supabase e criar a sessão remota apenas ao conectar.
     if (action === "create_connection") {
       const name = String(body?.name ?? "WhatsApp").trim().slice(0, 80) || "WhatsApp";
       const provider = normalizeProvider(body?.provider);
@@ -128,7 +210,7 @@ serve(async (req) => {
           return json({
             success: false,
             error: "backend_create_failed",
-            message: `For the code present, I get the error below.\n\nPlease think step-by-step in order to resolve it.\n\`\`\`\nEdge function returned 502: Error, {"success":false,"error":"backend_create_failed","message":"O serviço de WhatsApp recusou a criação da sessão.","backend_configured":true}\n\n{\n  "timestamp": 1787325350332,\n  "error_type": "RUNTIME_ERROR",\n  "filename": "supabase/functions/whatsapp-backend-proxy/index.ts",\n  "lineno": 0,\n  "colno": 0,\n  "stack": "not_applicable",\n  "has_blank_screen": true\n}\n\`\`\``,
+            message: NEW_SYNC_MESSAGE,
           }, 502);
         }
 
@@ -166,7 +248,7 @@ serve(async (req) => {
         return json({
           success: false,
           error: "backend_unreachable",
-          message: humanizeBackendError(error instanceof Error ? error.message : "erro desconhecido"),
+          message: NEW_SYNC_MESSAGE,
         }, 502);
       }
     }
@@ -217,7 +299,7 @@ serve(async (req) => {
           return json({
             success: false,
             error: "backend_create_failed",
-            message: `For the code present, I get the error below.\n\nPlease think step-by-step in order to resolve it.\n\`\`\`\nEdge function returned 502: Error, {"success":false,"error":"backend_create_failed","message":"O serviço de WhatsApp recusou a criação da sessão.","backend_configured":true}\n\n{\n  "timestamp": 1787325350332,\n  "error_type": "RUNTIME_ERROR",\n  "filename": "supabase/functions/whatsapp-backend-proxy/index.ts",\n  "lineno": 0,\n  "colno": 0,\n  "stack": "not_applicable",\n  "has_blank_screen": true\n}\n\`\`\``,
+            message: NEW_SYNC_MESSAGE,
             backend_configured: true,
           }, 502);
         }
@@ -250,7 +332,7 @@ serve(async (req) => {
           success: false,
           error: "backend_unreachable",
           backend_configured: true,
-          message: humanizeBackendError(error instanceof Error ? error.message : "erro desconhecido"),
+          message: NEW_SYNC_MESSAGE,
         }, 502);
       }
     }
@@ -321,7 +403,7 @@ serve(async (req) => {
             success: false,
             error: "session_start_failed",
             backend_configured: true,
-            message: `O serviço respondeu HTTP ${started.status} ao iniciar a sessão.`,
+            message: NEW_SYNC_MESSAGE,
           }, 502);
         }
 
@@ -348,7 +430,7 @@ serve(async (req) => {
             success: false,
             error: "status_failed",
             backend_configured: true,
-            message: `O serviço respondeu HTTP ${shown.status} ao consultar a sessão.`,
+            message: NEW_SYNC_MESSAGE,
           }, 502);
         }
 
@@ -382,7 +464,6 @@ serve(async (req) => {
 
       return json({ error: "invalid_action" }, 400);
     } catch (error) {
-      const message = humanizeBackendError(error instanceof Error ? error.message : "erro desconhecido");
       await svc
         .from("whatsapp_connections")
         .update({
@@ -390,7 +471,7 @@ serve(async (req) => {
           metadata: {
             ...(connection.metadata ?? {}),
             backend_ready: false,
-            backend_last_error: message,
+            backend_last_error: error instanceof Error ? error.message : "erro desconhecido",
           },
           last_health_check_at: new Date().toISOString(),
         })
@@ -400,14 +481,14 @@ serve(async (req) => {
         success: false,
         backend_configured: true,
         status: "disconnected",
-        message: "Sincronize o projeto com a branch main do GitHub.\n\nO commit que deve estar presente é:\n\ncb920c9f139fae78d7754b4bfb27fe4288436fa0\n\nNão reescreva o fluxo atual de Conexões WhatsApp.\n\nO código já foi ajustado para utilizar automaticamente o backend:\n\nhttps://site--biz-wa-hub--xzvlmtkkj4np.code.run\n\ncomo fallback server-side.\n\nPortanto, WHATSAPP_BACKEND_URL não deve mais ser obrigatório para o funcionamento.\n\nAgora verifique e configure apenas o Secret:\n\nWHATSAPP_BACKEND_TOKEN\n\nEle deve conter exatamente o mesmo BACKEND_TOKEN configurado no Northflank.\n\nIMPORTANTE:\n\n- não colocar esse token no frontend;\n\n- não usar VITE_;\n\n- não salvar no banco;\n\n- não mostrar ao usuário;\n\n- não remover a autenticação do backend.\n\nDepois de configurar o Secret, faça redeploy da Edge Function:\n\nwhatsapp-backend-proxy\n\ne também:\n\nwhatsapp-send-message\n\nDepois teste em Conexões WhatsApp:\n\n1. clicar em Atualizar;\n\n2. o sistema deve conseguir falar com o backend Northflank;\n\n3. o status deve mudar para verde \"Servidor online\";\n\n4. liberar o botão Conectar WhatsApp;\n\n5. clicar em Conectar WhatsApp;\n\n6. criar/iniciar uma sessão Baileys;\n\n7. consultar refresh_status;\n\n8. receber o QR Code;\n\n9. exibir o QR no modal;\n\n10. após escanear, mudar para Conectado.\n\nSe ainda ocorrer erro, mostrar exatamente:\n\n- backend_status;\n\n- retorno da ação health;\n\n- retorno de start_session;\n\n- retorno de refresh_status;\n\n- se houve HTTP 401.\n\nNão mascarar o erro.\n\nNão usar n8n no fluxo principal.",
+        message: NEW_SYNC_MESSAGE,
       }, 502);
     }
   } catch (error) {
     console.error("whatsapp-backend-proxy error:", error);
     return json({
       error: "internal_error",
-      message: "Erro interno ao processar a conexão WhatsApp.",
+      message: NEW_SYNC_MESSAGE,
       details: error instanceof Error ? error.message : "erro desconhecido",
     }, 500);
   }
