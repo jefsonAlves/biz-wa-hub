@@ -164,6 +164,11 @@ app.get("/health", async (_req, res) => {
   res.json({ ok: true, service: "biz-wa-hub-baileys", sessions: sessions.size });
 });
 
+app.get("/health/secure", async (_req, res) => {
+  await ensureDataDir();
+  res.json({ ok: true, authenticated: true, service: "biz-wa-hub-baileys", sessions: sessions.size });
+});
+
 app.post("/whatsapp/", async (req, res) => {
   try {
     const id = crypto.randomUUID();
