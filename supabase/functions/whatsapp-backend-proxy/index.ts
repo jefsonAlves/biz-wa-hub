@@ -400,7 +400,7 @@ serve(async (req) => {
         success: false,
         backend_configured: true,
         status: "disconnected",
-        message,
+        message: "configure para que ao clicar em atualiizar a conexão consiga mostrar conectado para assim autorizar gerar o qrcode e o botão fica disponivel para clicar",
       }, 502);
     }
   } catch (error) {

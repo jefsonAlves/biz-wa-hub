@@ -93,11 +93,11 @@ export async function createBackendConnection(params: {
   const { data, error } = await supabase
     .from("whatsapp_connections")
     .insert({
-      tenant_id: params.tenantId,
+      tenant_id: params.tenantId as any,
       name: params.name.trim() || "WhatsApp",
       provider_type: providerType,
       metadata,
-    })
+    } as any)
     .select("id")
     .single();
 
