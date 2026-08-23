@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import pino from "pino";
+import QRCode from "qrcode";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -297,9 +298,21 @@ async function startSession(rawId) {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
+      let qrImage = qr;
+      try {
+        // Entrega uma imagem autocontida para o painel. Isso evita depender de
+        // geradores externos de QR, que podem ser bloqueados pelo navegador.
+        qrImage = await QRCode.toDataURL(qr, {
+          errorCorrectionLevel: "M",
+          margin: 2,
+          width: 512,
+        });
+      } catch (error) {
+        logger.warn({ err: error, sessionId: id }, "Falha ao converter QR para imagem; usando conteúdo bruto");
+      }
       await writeMeta(id, {
         status: "QRCODE",
-        qrcode: qr,
+        qrcode: qrImage,
         qrExpiresAt: new Date(Date.now() + QR_TTL_MS).toISOString(),
         connectionError: null,
       });
