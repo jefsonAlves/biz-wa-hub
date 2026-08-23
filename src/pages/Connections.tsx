@@ -372,9 +372,9 @@ const Connections = () => {
               </div>
               <h1 className="text-2xl font-bold md:text-3xl">Conexões WhatsApp</h1>
             </div>
-            <p className="text-sm text-muted-foreground md:text-base">
-              Primeiro valide o servidor em Atualizar. Com o servidor online, gere o QR Code e conecte o WhatsApp.
-            </p>
+              <p className="text-sm text-muted-foreground md:text-base">
+                solicite o token que vou adicionar
+              </p>
           </div>
 
           <Dialog open={open} onOpenChange={setOpen}>
