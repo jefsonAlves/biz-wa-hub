@@ -422,10 +422,10 @@ const Connections = () => {
               <h1 className="text-2xl font-bold md:text-3xl">Conexões WhatsApp</h1>
             </div>
             <p className="text-sm text-muted-foreground md:text-base whitespace-pre-wrap">
-              For the code present, I get the error below.
+              {`For the code present, I get the error below.
 
 Please think step-by-step in order to resolve it.
-```
+\`\`\`
 Edge function returned 404: Error, {"error":"connection_not_found","message":"Conexão não encontrada"}
 
 {
@@ -437,7 +437,7 @@ Edge function returned 404: Error, {"error":"connection_not_found","message":"Co
   "stack": "not_applicable",
   "has_blank_screen": true
 }
-```
+\`\`\``}
             </p>
           </div>
 
