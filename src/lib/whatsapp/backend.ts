@@ -23,7 +23,7 @@ function normalizeServiceError(raw: string): string {
     text.includes("backend_service_unavailable") ||
     text.includes("upgrade aplicado7") ||
     text.includes("RUNTIME_ERROR") ||
-    text.includes("verifique o motivo desse erro fatal")
+    text.includes("Adicionar um painel no meu painel da empresa")
   ) {
     return text;
   }
