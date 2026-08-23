@@ -22,13 +22,15 @@ const QR_GENERATION_TIMEOUT_MS = Math.max(10000, Number(process.env.QR_GENERATIO
 const WHATSAPP_WEBHOOK_URL = String(process.env.WHATSAPP_WEBHOOK_URL || "").trim();
 const WEBHOOK_TIMEOUT_MS = Math.max(3000, Number(process.env.WEBHOOK_TIMEOUT_MS || 15000));
 const WEBHOOK_QUEUE_DIR = path.join(DATA_DIR, "_webhook-outbox");
+const HISTORY_MAX_PER_REQUEST = 50;
 
 app.use(cors({ origin: ALLOWED_ORIGIN === "*" ? true : ALLOWED_ORIGIN.split(",").map((v) => v.trim()) }));
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "4mb" }));
 
 const sessions = new Map();
 const recentSentIds = new Map();
 const recentMessages = new Map();
+const lidToPn = new Map();
 
 const sanitizeId = (value) => String(value || "").replace(/[^a-zA-Z0-9_-]/g, "");
 const sessionDir = (id) => path.join(DATA_DIR, sanitizeId(id));
@@ -39,9 +41,60 @@ async function ensureDataDir() {
   await fs.mkdir(WEBHOOK_QUEUE_DIR, { recursive: true });
 }
 
+function normalizePnJid(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  if (raw.endsWith("@s.whatsapp.net")) return raw;
+  const digits = raw.replace(/\D/g, "");
+  return digits ? `${digits}@s.whatsapp.net` : null;
+}
+
+function rememberLidMapping(mapping) {
+  if (!mapping) return;
+  const lid = String(mapping.lid || "").trim();
+  const pn = normalizePnJid(mapping.pn);
+  if (!lid || !pn) return;
+  lidToPn.set(lid, pn);
+}
+
+function rememberLidMappings(mappings) {
+  for (const mapping of mappings || []) rememberLidMapping(mapping);
+}
+
+function resolveJid(rawJid, altCandidates = []) {
+  const raw = String(rawJid || "").trim();
+  if (!raw) return "";
+  if (!raw.endsWith("@lid")) return raw;
+
+  const mapped = lidToPn.get(raw);
+  if (mapped) return mapped;
+
+  for (const candidate of altCandidates || []) {
+    const value = String(candidate || "").trim();
+    if (value.endsWith("@s.whatsapp.net")) return value;
+    const normalized = normalizePnJid(value);
+    if (normalized) return normalized;
+  }
+
+  return raw;
+}
+
+function messageResolvedJid(msg) {
+  const key = msg?.key || {};
+  return resolveJid(key.remoteJid, [
+    key.remoteJidAlt,
+    key.senderPn,
+    key.participantPn,
+    key.participantAlt,
+  ]);
+}
+
 const webhookQueuePath = (payload) => {
-  const stableId = payload.wa_message_id || crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
-  return path.join(WEBHOOK_QUEUE_DIR, `${sanitizeId(payload.session_id)}-${sanitizeId(stableId)}.json`);
+  const stableId =
+    payload.wa_message_id ||
+    `${payload.event || "event"}-${payload.chat_id || payload.raw_chat_id || "unknown"}-${Date.now()}`;
+  const hash = crypto.createHash("sha256").update(String(stableId)).digest("hex");
+  return path.join(WEBHOOK_QUEUE_DIR, `${sanitizeId(payload.session_id)}-${hash}.json`);
 };
 
 async function queueWebhookPayload(payload) {
@@ -50,6 +103,7 @@ async function queueWebhookPayload(payload) {
 }
 
 async function sendWebhookPayload(payload) {
+  if (!WHATSAPP_WEBHOOK_URL) return { ok: false, status: 0, detail: "webhook_not_configured" };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
   try {
@@ -69,20 +123,42 @@ async function sendWebhookPayload(payload) {
   }
 }
 
+async function deliverWebhook(payload, logContext) {
+  try {
+    const result = await sendWebhookPayload(payload);
+    if (!result.ok) {
+      await queueWebhookPayload(payload);
+      logger.warn(
+        { ...logContext, status: result.status, detail: String(result.detail || "").slice(0, 500) },
+        "Webhook recusou evento; preservado para nova tentativa",
+      );
+      return false;
+    }
+    return true;
+  } catch (error) {
+    await queueWebhookPayload(payload).catch(() => {});
+    logger.warn({ ...logContext, err: error }, "Falha ao enviar evento ao Supabase");
+    return false;
+  }
+}
+
 async function flushWebhookQueue() {
   if (!WHATSAPP_WEBHOOK_URL) return;
   const files = await fs.readdir(WEBHOOK_QUEUE_DIR).catch(() => []);
-  for (const file of files.slice(0, 100)) {
+  for (const file of files.slice(0, 200)) {
     if (!file.endsWith(".json")) continue;
     const queuedPath = path.join(WEBHOOK_QUEUE_DIR, file);
     try {
       const payload = JSON.parse(await fs.readFile(queuedPath, "utf8"));
       const result = await sendWebhookPayload(payload);
-      if (result.ok) await fs.rm(queuedPath, { force: true });
-      else if (result.status >= 400 && result.status < 500 && result.status !== 408 && result.status !== 429) {
-        logger.warn({ status: result.status, detail: result.detail.slice(0, 300) }, "Webhook pendente ainda foi recusado");
-        break;
-      } else break;
+      if (result.ok) {
+        await fs.rm(queuedPath, { force: true });
+        continue;
+      }
+      if (result.status >= 400 && result.status < 500 && result.status !== 408 && result.status !== 429) {
+        logger.warn({ status: result.status, detail: String(result.detail || "").slice(0, 300) }, "Webhook pendente ainda foi recusado");
+      }
+      break;
     } catch (error) {
       logger.warn({ err: error, file }, "Falha ao reenviar webhook pendente");
       break;
@@ -116,8 +192,7 @@ async function writeMeta(id, patch) {
 
 function authorized(req) {
   if (!BACKEND_TOKEN) return true;
-  const header = req.headers.authorization || "";
-  return header === `Bearer ${BACKEND_TOKEN}`;
+  return (req.headers.authorization || "") === `Bearer ${BACKEND_TOKEN}`;
 }
 
 app.use((req, res, next) => {
@@ -176,7 +251,7 @@ async function getCachedMessage(key) {
 
 function unwrapMessage(message) {
   let current = message || null;
-  for (let i = 0; current && i < 5; i += 1) {
+  for (let i = 0; current && i < 6; i += 1) {
     if (current.ephemeralMessage?.message) current = current.ephemeralMessage.message;
     else if (current.viewOnceMessage?.message) current = current.viewOnceMessage.message;
     else if (current.viewOnceMessageV2?.message) current = current.viewOnceMessageV2.message;
@@ -188,36 +263,17 @@ function unwrapMessage(message) {
 
 function extractMessageData(rawMessage) {
   const message = unwrapMessage(rawMessage);
-  if (typeof message.conversation === "string") {
-    return { messageType: "text", content: message.conversation };
-  }
-  if (message.extendedTextMessage) {
-    return { messageType: "text", content: message.extendedTextMessage.text || "" };
-  }
-  if (message.imageMessage) {
-    return { messageType: "image", content: message.imageMessage.caption || "[Imagem]", mimeType: message.imageMessage.mimetype || null };
-  }
-  if (message.videoMessage) {
-    return { messageType: "video", content: message.videoMessage.caption || "[Vídeo]", mimeType: message.videoMessage.mimetype || null };
-  }
-  if (message.audioMessage) {
-    return { messageType: "audio", content: "[Áudio]", mimeType: message.audioMessage.mimetype || null };
-  }
-  if (message.documentMessage) {
-    return { messageType: "document", content: message.documentMessage.fileName || "[Documento]", mimeType: message.documentMessage.mimetype || null };
-  }
-  if (message.stickerMessage) {
-    return { messageType: "text", content: "[Figurinha]", mimeType: message.stickerMessage.mimetype || null };
-  }
-  if (message.contactMessage || message.contactsArrayMessage) {
-    return { messageType: "text", content: "[Contato]" };
-  }
-  if (message.locationMessage || message.liveLocationMessage) {
-    return { messageType: "text", content: "[Localização]" };
-  }
-  if (message.reactionMessage) {
-    return { messageType: "text", content: `[Reação ${message.reactionMessage.text || ""}]` };
-  }
+  if (typeof message.conversation === "string") return { messageType: "text", content: message.conversation };
+  if (message.extendedTextMessage) return { messageType: "text", content: message.extendedTextMessage.text || "" };
+  if (message.imageMessage) return { messageType: "image", content: message.imageMessage.caption || "[Imagem]", mimeType: message.imageMessage.mimetype || null };
+  if (message.videoMessage) return { messageType: "video", content: message.videoMessage.caption || "[Vídeo]", mimeType: message.videoMessage.mimetype || null };
+  if (message.audioMessage) return { messageType: "audio", content: "[Áudio]", mimeType: message.audioMessage.mimetype || null };
+  if (message.documentMessage) return { messageType: "document", content: message.documentMessage.fileName || "[Documento]", mimeType: message.documentMessage.mimetype || null };
+  if (message.stickerMessage) return { messageType: "text", content: "[Figurinha]", mimeType: message.stickerMessage.mimetype || null };
+  if (message.contactMessage || message.contactsArrayMessage) return { messageType: "text", content: "[Contato]" };
+  if (message.locationMessage || message.liveLocationMessage) return { messageType: "text", content: "[Localização]" };
+  if (message.reactionMessage) return { messageType: "text", content: `[Reação ${message.reactionMessage.text || ""}]` };
+  if (message.protocolMessage) return { messageType: "text", content: "[Mensagem de sistema]" };
   return { messageType: "text", content: "[Mensagem não suportada]" };
 }
 
@@ -229,11 +285,85 @@ function timestampToIso(value) {
   return new Date().toISOString();
 }
 
+function contactEventPayload(sessionId, contact, source = "live", fallback = {}) {
+  const rawId = String(contact?.id || fallback.id || "").trim();
+  if (!rawId) return null;
+
+  const explicitPhoneJid =
+    contact?.phoneNumber ||
+    contact?.pnJid ||
+    fallback.phoneNumber ||
+    fallback.pnJid ||
+    null;
+
+  const explicitLid = contact?.lid || contact?.lidJid || fallback.lid || fallback.lidJid || null;
+  if (explicitLid && explicitPhoneJid) rememberLidMapping({ lid: explicitLid, pn: explicitPhoneJid });
+  if (rawId.endsWith("@lid") && explicitPhoneJid) rememberLidMapping({ lid: rawId, pn: explicitPhoneJid });
+
+  const chatId = resolveJid(rawId, [explicitPhoneJid]);
+  const name = String(
+    contact?.name ||
+      contact?.notify ||
+      contact?.verifiedName ||
+      contact?.displayName ||
+      contact?.username ||
+      fallback.name ||
+      fallback.notify ||
+      "",
+  ).trim();
+
+  return {
+    event: "contact.upsert",
+    source,
+    session_id: sessionId,
+    chat_id: chatId,
+    raw_chat_id: rawId,
+    lid: rawId.endsWith("@lid") ? rawId : explicitLid || null,
+    phone_jid: chatId.endsWith("@s.whatsapp.net") ? chatId : normalizePnJid(explicitPhoneJid),
+    name: name || null,
+    notify: contact?.notify || fallback.notify || null,
+    username: contact?.username || fallback.username || null,
+    is_group: rawId.endsWith("@g.us") || chatId.endsWith("@g.us"),
+  };
+}
+
+async function dispatchContactToPlatform(sessionId, contact, source = "live", fallback = {}) {
+  if (!WHATSAPP_WEBHOOK_URL) return;
+  const payload = contactEventPayload(sessionId, contact, source, fallback);
+  if (!payload) return;
+  if (payload.chat_id === "status@broadcast" || payload.chat_id.endsWith("@broadcast")) return;
+
+  const ok = await deliverWebhook(payload, { sessionId, chatId: payload.chat_id, source, event: payload.event });
+  if (ok) logger.info({ sessionId, chatId: payload.chat_id, source }, "Contato encaminhado ao Inbox");
+}
+
+async function dispatchContacts(sessionId, contacts, source = "live") {
+  for (const contact of contacts || []) await dispatchContactToPlatform(sessionId, contact, source);
+}
+
+async function dispatchChatsAsContacts(sessionId, chats, source = "history") {
+  for (const chat of chats || []) {
+    await dispatchContactToPlatform(
+      sessionId,
+      {
+        id: chat?.id,
+        name: chat?.displayName || chat?.name || chat?.username || undefined,
+        phoneNumber: chat?.pnJid || undefined,
+        lid: chat?.lidJid || chat?.accountLid || undefined,
+        username: chat?.username || undefined,
+      },
+      source,
+    );
+  }
+}
+
 async function dispatchMessageToPlatform(sessionId, msg, source = "live") {
   if (!WHATSAPP_WEBHOOK_URL || !msg?.key?.remoteJid || !msg?.message) return;
   cacheMessage(msg);
-  const chatId = String(msg.key.remoteJid);
-  if (chatId === "status@broadcast" || chatId.endsWith("@broadcast")) return;
+
+  const rawChatId = String(msg.key.remoteJid);
+  const chatId = messageResolvedJid(msg);
+  if (!chatId || chatId === "status@broadcast" || chatId.endsWith("@broadcast")) return;
 
   const messageId = msg.key.id ? String(msg.key.id) : null;
   if (msg.key.fromMe && wasSentByApi(messageId)) return;
@@ -245,34 +375,24 @@ async function dispatchMessageToPlatform(sessionId, msg, source = "live") {
     session_id: sessionId,
     wa_message_id: messageId,
     chat_id: chatId,
+    raw_chat_id: rawChatId,
     from_me: Boolean(msg.key.fromMe),
     participant: msg.key.participant || null,
+    participant_pn: msg.key.participantPn || null,
     push_name: msg.pushName || null,
-    is_group: chatId.endsWith("@g.us"),
+    is_group: chatId.endsWith("@g.us") || rawChatId.endsWith("@g.us"),
     message_type: parsed.messageType,
     content: parsed.content,
     mime_type: parsed.mimeType || null,
     timestamp: timestampToIso(msg.messageTimestamp),
   };
 
-  try {
-    const result = await sendWebhookPayload(payload);
-    if (!result.ok) {
-      await queueWebhookPayload(payload);
-      logger.warn({ sessionId, status: result.status, detail: result.detail.slice(0, 500) }, "Webhook recusou mensagem; evento preservado para nova tentativa");
-    } else {
-      logger.info({ sessionId, messageId, chatId, source }, "Mensagem encaminhada ao Inbox");
-    }
-  } catch (error) {
-    await queueWebhookPayload(payload).catch(() => {});
-    logger.warn({ err: error, sessionId }, "Falha ao enviar mensagem ao Supabase");
-  }
+  const ok = await deliverWebhook(payload, { sessionId, messageId, chatId, rawChatId, source });
+  if (ok) logger.info({ sessionId, messageId, chatId, source }, "Mensagem encaminhada ao Inbox");
 }
 
 async function dispatchMany(sessionId, messages, source) {
-  for (const msg of messages || []) {
-    await dispatchMessageToPlatform(sessionId, msg, source);
-  }
+  for (const msg of messages || []) await dispatchMessageToPlatform(sessionId, msg, source);
 }
 
 function clearSessionTimers(entry) {
@@ -305,13 +425,14 @@ async function startSession(rawId, options = {}) {
     const openingAge = updatedAt ? Date.now() - updatedAt : Number.POSITIVE_INFINITY;
     const openingStale = meta?.status === "OPENING" && openingAge >= QR_GENERATION_TIMEOUT_MS;
     const shouldRestart = forceRestart || meta?.status === "TIMEOUT" || meta?.status === "DISCONNECTED" || openingStale;
-
     if (!shouldRestart) return existing;
 
-    logger.warn({ sessionId: id, status: meta?.status, openingAge, forceRestart }, "Reiniciando socket Baileys para recuperar geração do QR");
+    logger.warn({ sessionId: id, status: meta?.status, openingAge, forceRestart }, "Reiniciando socket Baileys");
     clearSessionTimers(existing);
     sessions.delete(id);
-    try { existing.socket.end?.(new Error("restart_for_qr")); } catch {}
+    try {
+      existing.socket.end?.(new Error("restart_for_qr"));
+    } catch {}
   }
 
   await ensureDataDir();
@@ -344,7 +465,9 @@ async function startSession(rawId, options = {}) {
 
     logger.warn({ sessionId: id }, "QR não foi gerado no tempo esperado; reiniciando socket Baileys");
     sessions.delete(id);
-    try { socket.end?.(new Error("qr_generation_timeout")); } catch {}
+    try {
+      socket.end?.(new Error("qr_generation_timeout"));
+    } catch {}
     await writeMeta(id, {
       status: "DISCONNECTED",
       qrcode: null,
@@ -363,15 +486,69 @@ async function startSession(rawId, options = {}) {
   socket.ev.on("creds.update", saveCreds);
 
   socket.ev.on("messages.upsert", (event) => {
-    logger.info({ sessionId: id, count: event.messages?.length || 0, type: event.type }, "messages.upsert recebido do WhatsApp");
+    logger.info(
+      { sessionId: id, count: event.messages?.length || 0, type: event.type, requestId: event.requestId || null },
+      "messages.upsert recebido do WhatsApp",
+    );
     for (const msg of event.messages || []) cacheMessage(msg);
-    dispatchMany(id, event.messages, "live").catch((error) => logger.warn({ err: error, sessionId: id }, "Falha ao processar mensagens"));
+    dispatchMany(id, event.messages, event.type === "notify" ? "live" : `upsert:${event.type || "unknown"}`).catch((error) =>
+      logger.warn({ err: error, sessionId: id }, "Falha ao processar messages.upsert"),
+    );
   });
 
   socket.ev.on("messaging-history.set", (event) => {
-    logger.info({ sessionId: id, count: event.messages?.length || 0, isLatest: event.isLatest }, "messaging-history.set recebido do WhatsApp");
-    for (const msg of event.messages || []) cacheMessage(msg);
-    dispatchMany(id, event.messages, "history").catch((error) => logger.warn({ err: error, sessionId: id }, "Falha ao importar histórico"));
+    const messages = event.messages || [];
+    const contacts = event.contacts || [];
+    const chats = event.chats || [];
+    const mappings = event.lidPnMappings || [];
+
+    rememberLidMappings(mappings);
+    logger.info(
+      {
+        sessionId: id,
+        messages: messages.length,
+        contacts: contacts.length,
+        chats: chats.length,
+        mappings: mappings.length,
+        isLatest: event.isLatest,
+        progress: event.progress ?? null,
+        syncType: event.syncType ?? null,
+      },
+      "messaging-history.set recebido do WhatsApp",
+    );
+
+    for (const msg of messages) cacheMessage(msg);
+    Promise.resolve()
+      .then(() => dispatchContacts(id, contacts, "history"))
+      .then(() => dispatchChatsAsContacts(id, chats, "history"))
+      .then(() => dispatchMany(id, messages, "history"))
+      .catch((error) => logger.warn({ err: error, sessionId: id }, "Falha ao importar histórico completo"));
+  });
+
+  socket.ev.on("contacts.upsert", (contacts) => {
+    logger.info({ sessionId: id, count: contacts?.length || 0 }, "contacts.upsert recebido do WhatsApp");
+    dispatchContacts(id, contacts, "contacts.upsert").catch((error) =>
+      logger.warn({ err: error, sessionId: id }, "Falha ao sincronizar contatos"),
+    );
+  });
+
+  socket.ev.on("contacts.update", (contacts) => {
+    logger.info({ sessionId: id, count: contacts?.length || 0 }, "contacts.update recebido do WhatsApp");
+    dispatchContacts(id, contacts, "contacts.update").catch((error) =>
+      logger.warn({ err: error, sessionId: id }, "Falha ao atualizar contatos"),
+    );
+  });
+
+  socket.ev.on("chats.upsert", (chats) => {
+    logger.info({ sessionId: id, count: chats?.length || 0 }, "chats.upsert recebido do WhatsApp");
+    dispatchChatsAsContacts(id, chats, "chats.upsert").catch((error) =>
+      logger.warn({ err: error, sessionId: id }, "Falha ao sincronizar chats"),
+    );
+  });
+
+  socket.ev.on("lid-mapping.update", (mapping) => {
+    rememberLidMapping(mapping);
+    logger.info({ sessionId: id, lid: mapping?.lid || null, pn: mapping?.pn || null }, "LID/telefone atualizado");
   });
 
   socket.ev.on("connection.update", async (update) => {
@@ -420,6 +597,8 @@ async function startSession(rawId, options = {}) {
         lastDisconnectedAt: new Date().toISOString(),
       });
 
+      logger.warn({ sessionId: id, statusCode, loggedOut, error: lastDisconnect?.error?.message || null }, "Conexão Baileys fechada");
+
       if (!loggedOut) {
         const timer = setTimeout(() => {
           startSession(id).catch((error) => logger.error({ err: error, sessionId: id }, "Falha ao reconectar"));
@@ -451,6 +630,8 @@ app.get("/health", async (_req, res) => {
     service: "biz-wa-hub-baileys",
     sessions: sessions.size,
     messageSync: Boolean(WHATSAPP_WEBHOOK_URL),
+    contactsSync: Boolean(WHATSAPP_WEBHOOK_URL),
+    historySync: true,
     baileysVersionFloor: "6.7.22",
     qrRecovery: true,
   });
@@ -464,6 +645,8 @@ app.get("/health/secure", async (_req, res) => {
     service: "biz-wa-hub-baileys",
     sessions: sessions.size,
     messageSync: Boolean(WHATSAPP_WEBHOOK_URL),
+    contactsSync: Boolean(WHATSAPP_WEBHOOK_URL),
+    historySync: true,
     baileysVersionFloor: "6.7.22",
     qrRecovery: true,
   });
@@ -525,6 +708,7 @@ app.get("/whatsapp/:id", async (req, res) => {
     });
     return res.json({ ...expired, qrExpired: true, qrTtlSeconds: 0 });
   }
+
   res.json({
     ...meta,
     qrExpired: false,
@@ -543,7 +727,9 @@ app.delete("/whatsappsession/:id", async (req, res) => {
     try {
       await entry.socket.logout();
     } catch {
-      try { entry.socket.end?.(new Error("manual_logout")); } catch {}
+      try {
+        entry.socket.end?.(new Error("manual_logout"));
+      } catch {}
     }
   }
   sessions.delete(id);
@@ -576,11 +762,17 @@ app.post("/api/send", async (req, res) => {
     }
 
     const meta = await readMeta(sessionId);
-    if (!entry?.socket || meta?.status !== "CONNECTED") {
-      return res.status(409).json({ error: "session_not_connected" });
+    if (!entry?.socket || meta?.status !== "CONNECTED") return res.status(409).json({ error: "session_not_connected" });
+
+    let jid = rawJid.includes("@") ? resolveJid(rawJid) : `${number}@s.whatsapp.net`;
+    if (!jid) return res.status(400).json({ error: "invalid_destination" });
+
+    if (!rawJid.includes("@") && number) {
+      const [exists] = await entry.socket.onWhatsApp(jid).catch(() => []);
+      if (exists?.exists === false) return res.status(404).json({ error: "number_not_on_whatsapp" });
+      if (exists?.jid) jid = exists.jid;
     }
 
-    const jid = rawJid.includes("@") ? rawJid : `${number}@s.whatsapp.net`;
     const result = await entry.socket.sendMessage(jid, { text: body });
     cacheMessage(result);
     const messageId = result?.key?.id || null;
@@ -588,7 +780,35 @@ app.post("/api/send", async (req, res) => {
     res.json({ success: true, messageId, sessionId, jid });
   } catch (error) {
     logger.error({ err: error }, "Erro ao enviar mensagem");
-    res.status(500).json({ error: "send_failed" });
+    res.status(500).json({ error: "send_failed", message: error instanceof Error ? error.message : "erro desconhecido" });
+  }
+});
+
+app.post("/api/history/:id", async (req, res) => {
+  try {
+    const sessionId = sanitizeId(req.params.id);
+    const entry = sessions.get(sessionId);
+    const meta = await readMeta(sessionId);
+    if (!entry?.socket || meta?.status !== "CONNECTED") return res.status(409).json({ error: "session_not_connected" });
+
+    const rawJid = String(req.body?.jid || "").trim();
+    const jid = resolveJid(rawJid);
+    const oldestKey = req.body?.oldest_key || req.body?.key || null;
+    const oldestTimestamp = req.body?.oldest_timestamp || req.body?.message_timestamp || null;
+    const count = Math.min(HISTORY_MAX_PER_REQUEST, Math.max(1, Number(req.body?.count || 50)));
+
+    if (!jid || !oldestKey || !oldestTimestamp) {
+      return res.status(400).json({
+        error: "jid_oldest_key_and_timestamp_required",
+        message: "Para buscar histórico anterior o Baileys exige o JID, a chave da mensagem mais antiga e o timestamp dela.",
+      });
+    }
+
+    await entry.socket.fetchMessageHistory(count, oldestKey, oldestTimestamp);
+    res.status(202).json({ success: true, requested: count, jid, message: "O histórico solicitado chegará em messaging-history.set." });
+  } catch (error) {
+    logger.error({ err: error, sessionId: req.params.id }, "Erro ao solicitar histórico sob demanda");
+    res.status(500).json({ error: "history_request_failed", message: error instanceof Error ? error.message : "erro desconhecido" });
   }
 });
 
@@ -599,12 +819,16 @@ app.use((err, _req, res, _next) => {
 
 await ensureDataDir();
 app.listen(PORT, "0.0.0.0", () => {
-  logger.info({
-    port: PORT,
-    dataDir: DATA_DIR,
-    messageSync: Boolean(WHATSAPP_WEBHOOK_URL),
-    qrGenerationTimeoutMs: QR_GENERATION_TIMEOUT_MS,
-  }, "Baileys service iniciado");
+  logger.info(
+    {
+      port: PORT,
+      dataDir: DATA_DIR,
+      messageSync: Boolean(WHATSAPP_WEBHOOK_URL),
+      contactsSync: Boolean(WHATSAPP_WEBHOOK_URL),
+      qrGenerationTimeoutMs: QR_GENERATION_TIMEOUT_MS,
+    },
+    "Baileys service iniciado",
+  );
   restoreSessions().catch((error) => logger.error({ err: error }, "Falha ao restaurar sessões"));
   flushWebhookQueue().catch((error) => logger.warn({ err: error }, "Falha ao recuperar webhooks pendentes"));
   setInterval(() => {
