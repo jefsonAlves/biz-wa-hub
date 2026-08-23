@@ -15,6 +15,7 @@ import AgentsConfig from "./pages/AgentsConfig";
 import Knowledge from "./pages/Knowledge";
 import Settings from "./pages/Settings";
 import Connections from "./pages/Connections";
+import Contacts from "./pages/Contacts";
 import N8nIntegration from "./pages/N8nIntegration";
 import Team from "./pages/Team";
 import Roles from "./pages/Roles";
@@ -29,7 +30,6 @@ import NotFound from "./pages/NotFound";
 import OAuthConsent from "./pages/OAuthConsent";
 import Checkout from "./pages/Checkout";
 import Subscription from "./pages/Subscription";
-
 
 const queryClient = new QueryClient();
 
@@ -51,6 +51,7 @@ const App = () => (
 
               <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout><Dashboard /></DashboardLayout></ProtectedRoute>} />
               <Route path="/inbox" element={<ProtectedRoute><DashboardLayout><Inbox /></DashboardLayout></ProtectedRoute>} />
+              <Route path="/contacts" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Contacts /></DashboardLayout></ProtectedRoute>} />
               <Route path="/departments" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Departments /></DashboardLayout></ProtectedRoute>} />
               <Route path="/agents" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><AgentsConfig /></DashboardLayout></ProtectedRoute>} />
               <Route path="/knowledge" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><DashboardLayout><Knowledge /></DashboardLayout></ProtectedRoute>} />
@@ -66,13 +67,11 @@ const App = () => (
               <Route path="/my-conversations" element={<ProtectedRoute><DashboardLayout><Inbox /></DashboardLayout></ProtectedRoute>} />
               <Route path="/subscription" element={<ProtectedRoute requiredRoles={["super_admin", "tenant_admin"]}><Subscription /></ProtectedRoute>} />
 
-              {/* Admin routes */}
               <Route path="/admin/tenants" element={<ProtectedRoute requiredRoles={["super_admin"]}><DashboardLayout><AdminTenants /></DashboardLayout></ProtectedRoute>} />
               <Route path="/admin/users" element={<ProtectedRoute requiredRoles={["super_admin"]}><DashboardLayout><AdminTenants /></DashboardLayout></ProtectedRoute>} />
               <Route path="/admin/plans" element={<ProtectedRoute requiredRoles={["super_admin"]}><DashboardLayout><AdminPlans /></DashboardLayout></ProtectedRoute>} />
               <Route path="/admin/logs" element={<ProtectedRoute requiredRoles={["super_admin"]}><DashboardLayout><AdminLogs /></DashboardLayout></ProtectedRoute>} />
 
-              {/* Legacy redirects */}
               <Route path="/admin/dashboard" element={<Navigate to="/dashboard" replace />} />
               <Route path="/company/*" element={<Navigate to="/dashboard" replace />} />
               <Route path="/employee/*" element={<Navigate to="/dashboard" replace />} />
