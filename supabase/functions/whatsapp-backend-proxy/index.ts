@@ -74,8 +74,6 @@ serve(async (req) => {
       }
     }
 
-    // Cadastro via Edge Function permanece suportado. O frontend atual pode
-    // cadastrar diretamente no Supabase e criar a sessão remota apenas ao conectar.
     if (action === "create_connection") {
       const name = String(body?.name ?? "WhatsApp").trim().slice(0, 80) || "WhatsApp";
       const provider = normalizeProvider(body?.provider);
@@ -198,50 +196,49 @@ serve(async (req) => {
     const provider = providerFromType(connection.provider_type);
     let remoteId = connection.provider_instance_id as string | null;
 
+    const createRemoteSession = async () => {
+      const created = await backendCall(svc, connectionBackend, "/whatsapp/", {
+        method: "POST",
+        body: JSON.stringify({ name: connection.name }),
+      });
+
+      if (created.status < 200 || created.status >= 300) {
+        throw new Error(created.body?.message ?? created.body?.error ?? `Backend respondeu HTTP ${created.status}.`);
+      }
+
+      const remote = created.body?.whatsapp ?? created.body;
+      const newRemoteId = remote?.id != null ? String(remote.id) : null;
+      if (!newRemoteId) throw new Error("O serviço não retornou o identificador da sessão.");
+
+      remoteId = newRemoteId;
+      await svc
+        .from("whatsapp_connections")
+        .update({
+          provider_instance_id: newRemoteId,
+          provider_session_id: newRemoteId,
+          provider_token: remote?.token ?? null,
+          status: "disconnected",
+          qr_status: "idle",
+          connection_error: null,
+          metadata: {
+            ...(connection.metadata ?? {}),
+            backend_provider: provider,
+            backend_ready: true,
+            stale_session_recovered_at: new Date().toISOString(),
+          },
+        })
+        .eq("id", connection.id);
+
+      return newRemoteId;
+    };
+
     if (!remoteId && action === "start_session") {
       try {
-        const created = await backendCall(svc, connectionBackend, "/whatsapp/", {
-          method: "POST",
-          body: JSON.stringify({ name: connection.name }),
-        });
-
-        if (created.status < 200 || created.status >= 300) {
-          return json({
-            success: false,
-            error: "backend_create_failed",
-            message: humanizeBackendError(created.body?.message ?? created.body?.error ?? `Backend respondeu HTTP ${created.status}.`),
-            backend_configured: true,
-            backend_status: created.status,
-          }, 502);
-        }
-
-        const remote = created.body?.whatsapp ?? created.body;
-        remoteId = remote?.id != null ? String(remote.id) : null;
-        if (!remoteId) {
-          return json({
-            success: false,
-            error: "session_id_missing",
-            message: "O serviço não retornou o identificador da sessão.",
-          }, 502);
-        }
-
-        await svc
-          .from("whatsapp_connections")
-          .update({
-            provider_instance_id: remoteId,
-            provider_session_id: remoteId,
-            provider_token: remote?.token ?? null,
-            metadata: {
-              ...(connection.metadata ?? {}),
-              backend_provider: provider,
-              backend_ready: true,
-            },
-          })
-          .eq("id", connection.id);
+        await createRemoteSession();
       } catch (error) {
         return json({
           success: false,
-          error: "backend_unreachable",
+          error: "backend_create_failed",
           backend_configured: true,
           message: humanizeBackendError(error instanceof Error ? error.message : "Backend inacessível."),
         }, 502);
@@ -313,11 +310,40 @@ serve(async (req) => {
       };
     };
 
-    try {
-      if (action === "start_session") {
-        const started = await backendCall(svc, connectionBackend, `/whatsappsession/${remoteId}`, {
+    const startCurrentRemoteSession = async () => {
+      let started = await backendCall(svc, connectionBackend, `/whatsappsession/${remoteId}`, {
+        method: "POST",
+      });
+
+      if (started.status === 404 && (started.body?.error === "session_not_found" || started.body?.message === "session_not_found")) {
+        const oldRemoteId = remoteId;
+        await svc
+          .from("whatsapp_connections")
+          .update({
+            provider_instance_id: null,
+            provider_session_id: null,
+            status: "disconnected",
+            qr_status: "idle",
+            metadata: {
+              ...(connection.metadata ?? {}),
+              stale_provider_instance_id: oldRemoteId,
+              stale_session_detected_at: new Date().toISOString(),
+            },
+          })
+          .eq("id", connection.id);
+
+        await createRemoteSession();
+        started = await backendCall(svc, connectionBackend, `/whatsappsession/${remoteId}`, {
           method: "POST",
         });
+      }
+
+      return started;
+    };
+
+    try {
+      if (action === "start_session") {
+        const started = await startCurrentRemoteSession();
 
         if (started.status < 200 || started.status >= 300) {
           return json({
@@ -338,14 +364,63 @@ serve(async (req) => {
           success: true,
           backend_configured: true,
           status: "connecting",
+          session_recreated: Boolean(connection.provider_instance_id && connection.provider_instance_id !== remoteId),
           message: "Sessão iniciada. Aguarde a geração do QR Code.",
         });
       }
 
       if (action === "refresh_status") {
-        const shown = await backendCall(svc, connectionBackend, `/whatsapp/${remoteId}`, {
+        let shown = await backendCall(svc, connectionBackend, `/whatsapp/${remoteId}`, {
           method: "GET",
         });
+
+        if (shown.status === 404 && (shown.body?.error === "session_not_found" || shown.body?.message === "session_not_found")) {
+          const staleRemoteId = remoteId;
+          await svc
+            .from("whatsapp_connections")
+            .update({
+              provider_instance_id: null,
+              provider_session_id: null,
+              status: "disconnected",
+              qr_status: "idle",
+              connection_error: null,
+              metadata: {
+                ...(connection.metadata ?? {}),
+                stale_provider_instance_id: staleRemoteId,
+                stale_session_detected_at: new Date().toISOString(),
+              },
+            })
+            .eq("id", connection.id);
+
+          await createRemoteSession();
+          const restarted = await backendCall(svc, connectionBackend, `/whatsappsession/${remoteId}`, {
+            method: "POST",
+          });
+
+          if (restarted.status < 200 || restarted.status >= 300) {
+            return json({
+              success: false,
+              error: "session_recovery_failed",
+              backend_configured: true,
+              backend_status: restarted.status,
+              message: humanizeBackendError(restarted.body?.message ?? restarted.body?.error ?? `Backend respondeu HTTP ${restarted.status}.`),
+            }, 502);
+          }
+
+          await svc
+            .from("whatsapp_connections")
+            .update({ status: "connecting", qr_status: "requested", connection_error: null })
+            .eq("id", connection.id);
+
+          return json({
+            success: true,
+            backend_configured: true,
+            status: "connecting",
+            has_qr: false,
+            session_recreated: true,
+            message: "A sessão anterior não existia mais no servidor. Uma nova sessão foi criada; aguarde o novo QR Code.",
+          });
+        }
 
         if (shown.status < 200 || shown.status >= 300) {
           return json({
@@ -365,15 +440,19 @@ serve(async (req) => {
       }
 
       if (action === "disconnect") {
-        await backendCall(svc, connectionBackend, `/whatsappsession/${remoteId}`, {
+        const disconnected = await backendCall(svc, connectionBackend, `/whatsappsession/${remoteId}`, {
           method: "DELETE",
         });
+        if (disconnected.status !== 404 && (disconnected.status < 200 || disconnected.status >= 300)) {
+          return json({ success: false, backend_configured: true, backend_status: disconnected.status, message: "Não foi possível desconectar a sessão." }, 502);
+        }
         await svc
           .from("whatsapp_connections")
           .update({
             status: "disconnected",
             qr_status: "idle",
             connection_error: null,
+            ...(disconnected.status === 404 ? { provider_instance_id: null, provider_session_id: null } : {}),
             last_disconnected_at: new Date().toISOString(),
           })
           .eq("id", connection.id);
@@ -381,8 +460,12 @@ serve(async (req) => {
       }
 
       if (action === "delete_session") {
-        await backendCall(svc, connectionBackend, `/whatsapp/${remoteId}`, { method: "DELETE" });
-        return json({ success: true, backend_configured: true });
+        const deleted = await backendCall(svc, connectionBackend, `/whatsapp/${remoteId}`, { method: "DELETE" });
+        await svc
+          .from("whatsapp_connections")
+          .update({ provider_instance_id: null, provider_session_id: null, status: "disconnected", qr_status: "idle" })
+          .eq("id", connection.id);
+        return json({ success: true, backend_configured: true, already_missing: deleted.status === 404 });
       }
 
       return json({ error: "invalid_action" }, 400);
