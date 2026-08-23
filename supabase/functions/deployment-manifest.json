@@ -1,24 +1,29 @@
 {
-  "version": 1,
-  "requested_at": "2026-08-03T00:00:00-03:00",
+  "version": 2,
+  "requested_at": "2026-08-23T01:15:00-03:00",
   "source_branch": "main",
   "functions": [
+    "whatsapp-backend-proxy",
+    "whatsapp-send-message",
+    "whatsapp-baileys-webhook",
     "whatsapp-connection-command",
     "process-event-outbox",
     "n8n-webhook-receiver",
     "n8n-test-connection"
   ],
   "contract": {
-    "sync_command_event": "whatsapp.messages.sync.request",
-    "sync_command_response_status": 202,
-    "sync_delivery": "event_outbox",
-    "sync_callback_event": "whatsapp.sync.batch",
+    "direct_whatsapp_provider": "baileys",
+    "incoming_message_delivery": "whatsapp-baileys-webhook",
+    "inbox_storage": "supabase",
+    "realtime_inbox": true,
+    "history_sync": true,
     "disconnect_requires_explicit_confirmation": true,
     "automatic_logout_enabled": false,
-    "n8n_webhook_path": "/webhook/biz-wa-hub/platform"
+    "n8n_optional": true
   },
   "security": {
     "contains_secrets": false,
+    "backend_to_webhook_auth": "WHATSAPP_BACKEND_TOKEN",
     "changes_urls": false,
     "changes_migrations": false
   }
