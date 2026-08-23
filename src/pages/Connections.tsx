@@ -249,8 +249,15 @@ const Connections = () => {
     try {
       await verifyBackend();
       const started = await runBackendConnectionAction(connectionId, "start_session", effectiveTenantId);
-      if (!started.success) {
+      if (!started.success && !started.retryable) {
         throw new Error(started.message || "Não foi possível iniciar a sessão do WhatsApp.");
+      }
+
+      if (started.retryable) {
+        toast({
+          title: "Serviço do WhatsApp reiniciando",
+          description: started.message || "Aguarde alguns instantes: vamos continuar tentando gerar o QR Code.",
+        });
       }
 
       setQrConnectionId(connectionId);
@@ -371,21 +378,31 @@ const Connections = () => {
     const state = qrConnection ? stateOf(qrConnection) : "connecting";
     if (state === "connected") return;
 
+    let cancelled = false;
+    let timer: number | undefined;
+
     const poll = async () => {
+      let delay = 2000;
       try {
         const result = await runBackendConnectionAction(qrConnectionId, "refresh_status", effectiveTenantId);
         if (result.backend_configured === false) setBackendReady(false);
+        // Indisponibilidade temporária: espera mais entre tentativas, sem derrubar a tela.
+        if (result.retryable) delay = 6000;
         await queryClient.invalidateQueries({
           queryKey: ["whatsapp_connections_safe", effectiveTenantId],
         });
       } catch {
         // A sessão continuará sendo consultada no próximo ciclo.
+        delay = 6000;
       }
+      if (!cancelled) timer = window.setTimeout(poll, delay);
     };
 
     void poll();
-    const timer = setInterval(poll, 2000);
-    return () => clearInterval(timer);
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
   }, [qrConnectionId, qrConnection, effectiveTenantId, queryClient]);
 
   return (
