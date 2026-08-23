@@ -307,7 +307,7 @@ serve(async (req) => {
           status,
           qr_status: qrStatus,
           phone_number: remote?.number ?? undefined,
-          connection_error: null,
+          connection_error: remote?.connectionError ?? null,
           metadata: {
             ...(connection.metadata ?? {}),
             qr_code: qrcode,
@@ -325,6 +325,7 @@ serve(async (req) => {
       return {
         status,
         has_qr: Boolean(qrcode),
+        connection_error: remote?.connectionError ?? null,
         phone_number: remote?.number ?? null,
         qr_expires_at: qrExpiresAt,
         qr_ttl_seconds: remote?.qrTtlSeconds ?? null,
