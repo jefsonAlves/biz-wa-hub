@@ -129,6 +129,7 @@ type ConnectionActionResult = {
   retryable?: boolean;
   status?: string;
   has_qr?: boolean;
+  connection_error?: string | null;
   phone_number?: string | null;
   qr_expires_at?: string | null;
   qr_ttl_seconds?: number | null;
