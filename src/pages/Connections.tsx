@@ -374,40 +374,52 @@ const Connections = () => {
             </div>
             <p className="text-sm text-muted-foreground md:text-base">
               Sincronize o projeto com a branch main do GitHub.
-              
+
               Commit obrigatório:
-              
-              6b006df0eec139e9bf6774ea6b87606b76550205
-              
-              Depois faça deploy/redeploy da Edge Function:
-              
-              whatsapp-baileys-webhook
-              
-              Confirme também que o Secret:
-              
-              WHATSAPP_BACKEND_TOKEN
-              
-              continua configurado.
-              
-              Não altere a arquitetura.
-              
-              Não use n8n para mensagens WhatsApp.
-              
-              O backend Baileys agora já possui fallback automático para a URL da Edge Function, portanto não é necessário cadastrar WHATSAPP_WEBHOOK_URL manualmente no Northflank.
-              
-              Após o deploy, teste recebendo uma NOVA mensagem no WhatsApp conectado.
-              
-              Verifique se foram criados registros nas tabelas:
-              
-              contacts
-              
-              conversations
-              
-              messages
-              
-              e se a conversa aparece no Inbox em tempo real.
-              
-              Se houver erro no webhook, informe o status HTTP e a mensagem exata.
+
+              44e4b2209651b57ffd006335677f0213ca6830c3
+
+              Depois faça redeploy da Edge Function:
+
+              whatsapp-backend-proxy
+
+              Não reescreva o código manualmente.
+
+              A nova versão trata automaticamente:
+
+              404 session_not_found
+
+              Quando o ID salvo no Supabase não existir mais no backend Baileys, a Edge Function deve:
+
+              1. remover provider_instance_id e provider_session_id antigos;
+
+              2. criar uma nova sessão no backend;
+
+              3. salvar o novo ID;
+
+              4. iniciar a sessão;
+
+              5. retornar status connecting;
+
+              6. permitir que o frontend mostre um novo QR Code.
+
+              Não transformar esse caso novamente em erro 502.
+
+              Depois do deploy, teste:
+
+              1. clicar em Atualizar;
+
+              2. se a sessão antiga não existir, aguardar recuperação automática;
+
+              3. clicar em Conectar WhatsApp caso necessário;
+
+              4. exibir o novo QR;
+
+              5. escanear;
+
+              6. confirmar status connected.
+
+              Informe apenas qualquer erro novo que permanecer.
             </p>
           </div>
 
