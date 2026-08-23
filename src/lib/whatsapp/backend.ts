@@ -22,7 +22,8 @@ function normalizeServiceError(raw: string): string {
     text.includes("backend_not_configured") ||
     text.includes("backend_service_unavailable") ||
     text.includes("upgrade aplicado7") ||
-    text.includes("RUNTIME_ERROR")
+    text.includes("RUNTIME_ERROR") ||
+    text.includes("verifique o motivo desse erro fatal")
   ) {
     return text;
   }
