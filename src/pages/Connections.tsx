@@ -399,8 +399,23 @@ const Connections = () => {
               </div>
               <h1 className="text-2xl font-bold md:text-3xl">Conexões WhatsApp</h1>
             </div>
-            <p className="text-sm text-muted-foreground md:text-base">
-              verifique o que falta para carregar as mensagens do whatsapp pois está conectado mais não mostra as mensagens ao encontrar o erro corrija7
+            <p className="text-sm text-muted-foreground md:text-base whitespace-pre-wrap">
+              For the code present, I get the error below.
+
+Please think step-by-step in order to resolve it.
+```
+Edge function returned 502: Error, {"success":false,"error":"status_failed","backend_configured":true,"backend_status":503,"message":"Backend respondeu HTTP 503."}
+
+{
+  "timestamp": 1787523442201,
+  "error_type": "RUNTIME_ERROR",
+  "filename": "supabase/functions/whatsapp-backend-proxy/index.ts",
+  "lineno": 0,
+  "colno": 0,
+  "stack": "not_applicable",
+  "has_blank_screen": true
+}
+```
             </p>
           </div>
 
