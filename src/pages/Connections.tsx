@@ -397,9 +397,9 @@ whatsapp-backend-proxy
 
 Depois da publicação, invoque a função com:
 
-{
+{'{'}
   "action": "health"
-}
+{'}'}
 
 Resultado esperado:
 
