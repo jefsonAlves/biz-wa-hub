@@ -1,5 +1,6 @@
 -- Expose only QR presentation data through the safe RPC.
 -- Credentials and secret references remain server-side.
+DROP FUNCTION IF EXISTS public.get_whatsapp_connections_safe();
 CREATE OR REPLACE FUNCTION public.get_whatsapp_connections_safe()
 RETURNS TABLE (
   id uuid,

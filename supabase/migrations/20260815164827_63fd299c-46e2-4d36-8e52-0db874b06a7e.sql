@@ -1,6 +1,8 @@
 -- Migration: super_admin_whatsapp_connections_by_tenant
 -- Created: 2026-08-15 13:30:00
 
+DROP FUNCTION IF EXISTS public.get_whatsapp_connections_safe();
+DROP FUNCTION IF EXISTS public.get_whatsapp_connections_safe(uuid);
 CREATE OR REPLACE FUNCTION public.get_whatsapp_connections_safe(_tenant_id uuid DEFAULT NULL)
 RETURNS TABLE (
     id uuid,

@@ -1,3 +1,4 @@
+DROP FUNCTION IF EXISTS public.get_whatsapp_connections_safe(uuid);
 CREATE OR REPLACE FUNCTION public.get_whatsapp_connections_safe(_tenant_id uuid DEFAULT NULL::uuid)
  RETURNS TABLE(id uuid, tenant_id uuid, name text, phone_number text, provider_type text, status text, qr_status text, qr_code text, qr_expires_at timestamp with time zone, webhook_status text, has_credentials boolean, last_connected_at timestamp with time zone, last_disconnected_at timestamp with time zone, last_health_check_at timestamp with time zone, connection_error text, created_at timestamp with time zone)
  LANGUAGE plpgsql

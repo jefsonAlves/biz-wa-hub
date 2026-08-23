@@ -65,6 +65,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 6. Recreate safe connection list
+DROP FUNCTION IF EXISTS public.get_whatsapp_connections_safe();
 CREATE OR REPLACE FUNCTION public.get_whatsapp_connections_safe()
 RETURNS TABLE (
     id UUID,
