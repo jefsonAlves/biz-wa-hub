@@ -17,6 +17,7 @@ const PORT = Number(process.env.PORT || 3001);
 const DATA_DIR = path.resolve(process.env.WHATSAPP_DATA_DIR || "./sessions");
 const BACKEND_TOKEN = process.env.BACKEND_TOKEN || "";
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "*";
+const QR_TTL_MS = Math.max(30000, Number(process.env.QR_TTL_MS || 60000));
 
 app.use(cors({ origin: ALLOWED_ORIGIN === "*" ? true : ALLOWED_ORIGIN.split(",").map((v) => v.trim()) }));
 app.use(express.json({ limit: "2mb" }));
@@ -46,6 +47,7 @@ async function writeMeta(id, patch) {
     name: "WhatsApp",
     status: "DISCONNECTED",
     qrcode: null,
+    qrExpiresAt: null,
     number: null,
     createdAt: new Date().toISOString(),
   };
@@ -80,7 +82,12 @@ async function startSession(rawId) {
   if (!id) throw new Error("invalid_session_id");
 
   const existing = sessions.get(id);
-  if (existing?.socket) return existing;
+  if (existing?.socket) {
+    const meta = await readMeta(id);
+    if (meta?.status !== "TIMEOUT") return existing;
+    sessions.delete(id);
+    try { existing.socket.end?.(new Error("qr_expired")); } catch {}
+  }
 
   await ensureDataDir();
   await fs.mkdir(sessionDir(id), { recursive: true });
@@ -108,7 +115,12 @@ async function startSession(rawId) {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      await writeMeta(id, { status: "QRCODE", qrcode: qr, connectionError: null });
+      await writeMeta(id, {
+        status: "QRCODE",
+        qrcode: qr,
+        qrExpiresAt: new Date(Date.now() + QR_TTL_MS).toISOString(),
+        connectionError: null,
+      });
     }
 
     if (connection === "open") {
@@ -116,6 +128,7 @@ async function startSession(rawId) {
       await writeMeta(id, {
         status: "CONNECTED",
         qrcode: null,
+        qrExpiresAt: null,
         number,
         connectionError: null,
         lastConnectedAt: new Date().toISOString(),
@@ -124,6 +137,8 @@ async function startSession(rawId) {
     }
 
     if (connection === "close") {
+      // Ignora o evento atrasado de um socket que já foi substituído ao renovar o QR.
+      if (sessions.get(id) !== entry) return;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = statusCode === DisconnectReason.loggedOut;
       sessions.delete(id);
@@ -131,6 +146,7 @@ async function startSession(rawId) {
       await writeMeta(id, {
         status: "DISCONNECTED",
         qrcode: null,
+        qrExpiresAt: null,
         connectionError: loggedOut ? "Sessão encerrada no WhatsApp." : null,
         lastDisconnectedAt: new Date().toISOString(),
       });
@@ -202,7 +218,21 @@ app.get("/whatsapp/:id", async (req, res) => {
   const id = sanitizeId(req.params.id);
   const meta = await readMeta(id);
   if (!meta) return res.status(404).json({ error: "session_not_found" });
-  res.json(meta);
+  const expiresAt = meta.qrExpiresAt ? new Date(meta.qrExpiresAt).getTime() : 0;
+  if (meta.qrcode && expiresAt && expiresAt <= Date.now()) {
+    const expired = await writeMeta(id, {
+      status: "TIMEOUT",
+      qrcode: null,
+      qrExpiresAt: null,
+      connectionError: "QR Code expirado. Gere um novo código.",
+    });
+    return res.json({ ...expired, qrExpired: true, qrTtlSeconds: 0 });
+  }
+  res.json({
+    ...meta,
+    qrExpired: false,
+    qrTtlSeconds: expiresAt ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)) : null,
+  });
 });
 
 app.delete("/whatsappsession/:id", async (req, res) => {
@@ -220,7 +250,7 @@ app.delete("/whatsappsession/:id", async (req, res) => {
     }
   }
   sessions.delete(id);
-  await writeMeta(id, { status: "DISCONNECTED", qrcode: null, number: null });
+  await writeMeta(id, { status: "DISCONNECTED", qrcode: null, qrExpiresAt: null, number: null });
   res.json({ success: true });
 });
 
