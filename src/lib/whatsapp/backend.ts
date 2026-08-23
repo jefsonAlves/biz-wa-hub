@@ -18,11 +18,6 @@ type ProxyErrorPayload = {
 function normalizeServiceError(raw: string): string {
   const text = String(raw || "");
   
-  // Se contiver a string de sincronização solicitada, retorna exatamente ela sem alterações.
-  if (text.includes("verifique o motivo desse erro fatal") || text.includes("d7910ac09e1baa999d83727c364180036574ef24")) {
-    return text;
-  }
-
   if (
     text.includes("backend_not_configured") ||
     text.includes("backend_service_unavailable") ||
@@ -133,6 +128,9 @@ type ConnectionActionResult = {
   status?: string;
   has_qr?: boolean;
   phone_number?: string | null;
+  qr_expires_at?: string | null;
+  qr_ttl_seconds?: number | null;
+  qr_expired?: boolean;
   message?: string;
   backend_configured?: boolean;
   backend_status?: number;

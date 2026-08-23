@@ -100,6 +100,7 @@ const Connections = () => {
   const [qrConnectionId, setQrConnectionId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SafeConnection | null>(null);
   const [backendReady, setBackendReady] = useState(false);
+  const [qrSecondsLeft, setQrSecondsLeft] = useState<number | null>(null);
   const previousStatuses = useRef<Record<string, string>>({});
 
   useEffect(() => {
@@ -139,6 +140,23 @@ const Connections = () => {
 
   const qrDisplaySource =
     toQrImageSource(qrConnection?.qr_code ?? null) ?? toQrGeneratorUrl(qrConnection?.qr_code ?? null);
+
+  useEffect(() => {
+    if (!qrConnectionId || !qrConnection?.qr_expires_at) {
+      setQrSecondsLeft(null);
+      return;
+    }
+    const update = () => {
+      const remaining = Math.max(
+        0,
+        Math.ceil((new Date(qrConnection.qr_expires_at as string).getTime() - Date.now()) / 1000),
+      );
+      setQrSecondsLeft(remaining);
+    };
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [qrConnectionId, qrConnection?.qr_expires_at]);
 
   useEffect(() => {
     for (const connection of connections) {
@@ -576,6 +594,13 @@ const Connections = () => {
             <DialogTitle>Escaneie o QR Code</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center gap-4 py-2 text-center">
+            <Badge variant={qrDisplaySource && qrSecondsLeft !== 0 ? "default" : "secondary"}>
+              {qrDisplaySource
+                ? qrSecondsLeft === 0
+                  ? "QR Code expirado"
+                  : `QR Code ativo${qrSecondsLeft !== null ? ` • expira em ${qrSecondsLeft}s` : ""}`
+                : "Aguardando o servidor gerar o QR Code"}
+            </Badge>
             {qrDisplaySource ? (
               <div className="rounded-2xl border bg-white p-4 shadow-sm">
                 <img
@@ -597,6 +622,11 @@ const Connections = () => {
             <div className="rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground">
               Abra o WhatsApp no celular → Aparelhos conectados → Conectar aparelho.
             </div>
+            {qrSecondsLeft === 0 && qrConnectionId && (
+              <Button onClick={() => connect(qrConnectionId)} disabled={pending === `${qrConnectionId}:connect`}>
+                <RefreshCw className="mr-2 h-4 w-4" /> Gerar novo QR Code
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

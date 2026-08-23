@@ -29,8 +29,6 @@ const providerTypeOf = (provider: BackendProvider) =>
 const providerFromType = (providerType: string): BackendProvider =>
   providerType === "wuzapi_backend" ? "wuzapi" : "baileys";
 
-const NEW_SYNC_MESSAGE = `verifique o motivo desse erro fatal e corrija sem danificar o que já funciona: Edge function returned 502: Error, {"success":false,"backend_configured":true,"message":"For the code present, I get the error below.\n\nPlease think step-by-step in order to resolve it.\n\`\`\`\nEdge function returned 502: Error, {\"success\":false,\"backend_configured\":true,\"message\":\"Exiba um indicador de estado e um contador de expiração do QR Code em tempo real para que eu saiba quando ele falhar ou precisar ser atualizado.\"\n\n{\n  \"timestamp\": 1787450992737,\n  \"error_type\": \"RUNTIME_ERROR\",\n  \"filename\": \"supabase/functions/whatsapp-backend-proxy/index.ts\",\n  \"lineno\": 0,\n  \"colno\": 0,\n  \"stack\": \"not_applicable\",\n  \"has_blank_screen\": true\n}\n\`\`\`\"}\n\n{\n  \"timestamp\": 1787451062932,\n  \"error_type\": \"RUNTIME_ERROR\",\n  \"filename\": \"supabase/functions/whatsapp-backend-proxy/index.ts\",\n  \"lineno\": 0,\n  \"colno\": 0,\n  \"stack\": \"not_applicable\",\n  \"has_blank_screen\": true\n}`;
-
 const backendUnavailable = (action: Action) =>
   json({
     success: false,
@@ -39,7 +37,7 @@ const backendUnavailable = (action: Action) =>
     has_qr: false,
     phone_number: null,
     action,
-    message: NEW_SYNC_MESSAGE,
+    message: "O backend do WhatsApp não está configurado para esta empresa.",
   }, 502);
 
 serve(async (req) => {
@@ -82,7 +80,7 @@ serve(async (req) => {
         return json({
           success: false,
           backend_configured: true,
-          message: NEW_SYNC_MESSAGE,
+          message: humanizeBackendError(error instanceof Error ? error.message : "Falha ao consultar o backend."),
         }, 502);
       }
     }
@@ -130,7 +128,7 @@ serve(async (req) => {
           return json({
             success: false,
             error: "backend_create_failed",
-            message: NEW_SYNC_MESSAGE,
+            message: humanizeBackendError(created.body?.message ?? created.body?.error ?? `Backend respondeu HTTP ${created.status}.`),
             backend_status: created.status,
           }, 502);
         }
@@ -169,7 +167,7 @@ serve(async (req) => {
         return json({
           success: false,
           error: "backend_unreachable",
-          message: NEW_SYNC_MESSAGE,
+          message: humanizeBackendError(error instanceof Error ? error.message : "Backend inacessível."),
         }, 502);
       }
     }
@@ -220,7 +218,7 @@ serve(async (req) => {
           return json({
             success: false,
             error: "backend_create_failed",
-            message: NEW_SYNC_MESSAGE,
+            message: humanizeBackendError(created.body?.message ?? created.body?.error ?? `Backend respondeu HTTP ${created.status}.`),
             backend_configured: true,
             backend_status: created.status,
           }, 502);
@@ -254,7 +252,7 @@ serve(async (req) => {
           success: false,
           error: "backend_unreachable",
           backend_configured: true,
-          message: NEW_SYNC_MESSAGE,
+          message: humanizeBackendError(error instanceof Error ? error.message : "Backend inacessível."),
         }, 502);
       }
     }
@@ -289,6 +287,8 @@ serve(async (req) => {
     const applyRemoteState = async (remote: any) => {
       const status = mapBackendStatus(remote?.status);
       const qrcode = remote?.qrcode ? String(remote.qrcode) : null;
+      const qrExpiresAt = remote?.qrExpiresAt ? String(remote.qrExpiresAt) : null;
+      const qrExpired = remote?.qrExpired === true;
       const qrStatus = qrcode ? "available" : status === "connected" ? "idle" : "requested";
 
       await svc
@@ -301,6 +301,7 @@ serve(async (req) => {
           metadata: {
             ...(connection.metadata ?? {}),
             qr_code: qrcode,
+            qr_expires_at: qrExpiresAt,
             backend_status: remote?.status ?? null,
             backend_provider: provider,
             backend_ready: true,
@@ -311,7 +312,14 @@ serve(async (req) => {
         })
         .eq("id", connection.id);
 
-      return { status, has_qr: Boolean(qrcode), phone_number: remote?.number ?? null };
+      return {
+        status,
+        has_qr: Boolean(qrcode),
+        phone_number: remote?.number ?? null,
+        qr_expires_at: qrExpiresAt,
+        qr_ttl_seconds: remote?.qrTtlSeconds ?? null,
+        qr_expired: qrExpired,
+      };
     };
 
     try {
@@ -326,7 +334,7 @@ serve(async (req) => {
             error: "session_start_failed",
             backend_configured: true,
             backend_status: started.status,
-            message: NEW_SYNC_MESSAGE,
+            message: humanizeBackendError(started.body?.message ?? started.body?.error ?? `Backend respondeu HTTP ${started.status}.`),
           }, 502);
         }
 
@@ -354,7 +362,7 @@ serve(async (req) => {
             error: "status_failed",
             backend_configured: true,
             backend_status: shown.status,
-            message: NEW_SYNC_MESSAGE,
+            message: humanizeBackendError(shown.body?.message ?? shown.body?.error ?? `Backend respondeu HTTP ${shown.status}.`),
           }, 502);
         }
 
@@ -406,7 +414,7 @@ serve(async (req) => {
         success: false,
         backend_configured: true,
         status: "disconnected",
-        message: NEW_SYNC_MESSAGE,
+        message,
       }, 502);
     }
   } catch (error) {
