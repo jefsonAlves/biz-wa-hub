@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
-  corsHeaders, hmacSha256Hex, json, serviceClient, sha256Hex,
+  corsHeaders, getIntegration, hmacSha256Hex, json, serviceClient, sha256Hex,
   signaturePayload, timingSafeEqual, webhookSecret,
 } from "../_shared/n8n.ts";
 
