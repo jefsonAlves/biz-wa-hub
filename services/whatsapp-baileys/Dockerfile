@@ -10,7 +10,7 @@ COPY package.json ./
 RUN npm install --omit=dev --ignore-scripts \
     && npm cache clean --force
 
-COPY server.mjs ./
+COPY server.mjs start.mjs ./
 
 ENV NODE_ENV=production
 EXPOSE 8080
