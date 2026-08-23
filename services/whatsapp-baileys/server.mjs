@@ -593,7 +593,11 @@ async function startSession(rawId, options = {}) {
         status: "DISCONNECTED",
         qrcode: null,
         qrExpiresAt: null,
-        connectionError: loggedOut ? "Sessão encerrada no WhatsApp." : null,
+        connectionError: loggedOut
+          ? "Sessão encerrada no WhatsApp."
+          : `Conexão fechada pelo WhatsApp (código ${statusCode ?? "desconhecido"}${
+              lastDisconnect?.error?.message ? `: ${lastDisconnect.error.message}` : ""
+            }). Tentando reconectar.`,
         lastDisconnectedAt: new Date().toISOString(),
       });
 

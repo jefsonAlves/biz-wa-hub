@@ -75,6 +75,7 @@ serve(async (req) => {
       return json({ ok: true, acknowledged: results.length });
     }
 
+    return json({ error: "unsupported_action" }, 400);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     // Log full error internally

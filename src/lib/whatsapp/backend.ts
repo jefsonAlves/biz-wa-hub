@@ -124,8 +124,12 @@ export type BackendConnectionAction =
 
 type ConnectionActionResult = {
   success: boolean;
+  error?: string;
+  /** true quando o serviço está temporariamente indisponível e vale nova tentativa. */
+  retryable?: boolean;
   status?: string;
   has_qr?: boolean;
+  connection_error?: string | null;
   phone_number?: string | null;
   qr_expires_at?: string | null;
   qr_ttl_seconds?: number | null;
@@ -147,6 +151,8 @@ export async function runBackendConnectionAction(
     connection_id: connectionId,
     tenant_id: tenantId ?? null,
   });
+
+  if (result.retryable) return result;
 
   if (result.backend_configured === false && action === "start_session") {
     throw new Error(

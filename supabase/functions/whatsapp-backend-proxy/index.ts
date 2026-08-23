@@ -5,8 +5,10 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { authenticate, corsHeaders, json, serviceClient } from "../_shared/n8n.ts";
 import {
   backendCall,
+  backendCallWithRetry,
   getBackend,
   humanizeBackendError,
+  isTransientBackendStatus,
   mapBackendStatus,
 } from "../_shared/whatsapp-backend.ts";
 
@@ -305,7 +307,7 @@ serve(async (req) => {
           status,
           qr_status: qrStatus,
           phone_number: remote?.number ?? undefined,
-          connection_error: null,
+          connection_error: remote?.connectionError ?? null,
           metadata: {
             ...(connection.metadata ?? {}),
             qr_code: qrcode,
@@ -323,6 +325,7 @@ serve(async (req) => {
       return {
         status,
         has_qr: Boolean(qrcode),
+        connection_error: remote?.connectionError ?? null,
         phone_number: remote?.number ?? null,
         qr_expires_at: qrExpiresAt,
         qr_ttl_seconds: remote?.qrTtlSeconds ?? null,
@@ -331,7 +334,7 @@ serve(async (req) => {
     };
 
     const startCurrentRemoteSession = async () => {
-      let started = await backendCall(svc, connectionBackend, `/whatsappsession/${remoteId}`, {
+      let started = await backendCallWithRetry(svc, connectionBackend, `/whatsappsession/${remoteId}`, {
         method: "POST",
       });
 
@@ -353,7 +356,7 @@ serve(async (req) => {
           .eq("id", connection.id);
 
         await createRemoteSession();
-        started = await backendCall(svc, connectionBackend, `/whatsappsession/${remoteId}`, {
+        started = await backendCallWithRetry(svc, connectionBackend, `/whatsappsession/${remoteId}`, {
           method: "POST",
         });
       }
@@ -366,13 +369,18 @@ serve(async (req) => {
         const started = await startCurrentRemoteSession();
 
         if (started.status < 200 || started.status >= 300) {
+          const transient = isTransientBackendStatus(started.status);
           return json({
             success: false,
-            error: "session_start_failed",
+            error: transient ? "backend_unavailable" : "session_start_failed",
+            retryable: transient,
             backend_configured: true,
             backend_status: started.status,
-            message: humanizeBackendError(started.body?.message ?? started.body?.error ?? `Backend respondeu HTTP ${started.status}.`),
-          }, 502);
+            status: transient ? "connecting" : undefined,
+            message: transient
+              ? "O serviço do WhatsApp está reiniciando. Tentando novamente em alguns instantes."
+              : humanizeBackendError(started.body?.message ?? started.body?.error ?? "Não foi possível iniciar a sessão."),
+          }, transient ? 200 : 502);
         }
 
         await svc
@@ -390,7 +398,7 @@ serve(async (req) => {
       }
 
       if (action === "refresh_status") {
-        let shown = await backendCall(svc, connectionBackend, `/whatsapp/${remoteId}`, {
+        let shown = await backendCallWithRetry(svc, connectionBackend, `/whatsapp/${remoteId}`, {
           method: "GET",
         });
 
@@ -443,13 +451,20 @@ serve(async (req) => {
         }
 
         if (shown.status < 200 || shown.status >= 300) {
+          const transient = isTransientBackendStatus(shown.status);
+          // Indisponibilidade temporária não pode virar erro fatal na interface.
           return json({
             success: false,
-            error: "status_failed",
+            error: transient ? "backend_unavailable" : "status_failed",
+            retryable: transient,
             backend_configured: true,
             backend_status: shown.status,
-            message: humanizeBackendError(shown.body?.message ?? shown.body?.error ?? `Backend respondeu HTTP ${shown.status}.`),
-          }, 502);
+            status: connection.status ?? "disconnected",
+            has_qr: Boolean((connection.metadata as any)?.qr_code),
+            message: transient
+              ? "O serviço do WhatsApp está reiniciando. Tentando novamente em alguns instantes."
+              : humanizeBackendError(shown.body?.message ?? shown.body?.error ?? "Não foi possível consultar o status."),
+          }, transient ? 200 : 502);
         }
 
         return json({
@@ -504,12 +519,18 @@ serve(async (req) => {
         })
         .eq("id", connection.id);
 
+      const transientNetwork = /timed out|aborted|connection|dns|lookup|reset/i.test(errMsg);
+
       return json({
         success: false,
+        error: transientNetwork ? "backend_unavailable" : "backend_error",
+        retryable: transientNetwork,
         backend_configured: true,
-        status: "disconnected",
-        message: humanizeBackendError(errMsg),
-      }, 502);
+        status: transientNetwork ? (connection.status ?? "disconnected") : "disconnected",
+        message: transientNetwork
+          ? "O serviço do WhatsApp não respondeu agora. Tentando novamente em alguns instantes."
+          : humanizeBackendError(errMsg),
+      }, transientNetwork ? 200 : 502);
     }
   } catch (error) {
     console.error("whatsapp-backend-proxy error:", error);
