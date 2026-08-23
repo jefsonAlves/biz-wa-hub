@@ -373,7 +373,64 @@ const Connections = () => {
               <h1 className="text-2xl font-bold md:text-3xl">Conexões WhatsApp</h1>
             </div>
             <p className="text-sm text-muted-foreground md:text-base">
-              solicite o token que vou adicionar
+              O erro anterior foi corrigido. O erro atual é exclusivamente de autenticação entre Supabase e Northflank:
+
+WHATSAPP_BACKEND_TOKEN ausente ou diferente do BACKEND_TOKEN.
+
+Eu já adicionei o secret. Não altere novamente a lógica da Edge Function e não grave este pedido dentro do código.
+
+Execute somente estas ações:
+
+Confirme que está usando o projeto Supabase:
+uyaapytraftbnfwhxajr
+
+Em Cloud → Secrets, confirme:
+
+WHATSAPP_BACKEND_URL=https://site--biz-wa-hub--xzvlmtkkj4np.code.run
+
+WHATSAPP_BACKEND_TOKEN está cadastrado, sem espaços antes ou depois.
+
+Não mostre nem copie o valor do token para código, frontend, logs ou respostas.
+
+Publique novamente apenas a Edge Function:
+whatsapp-backend-proxy
+
+Depois da publicação, invoque a função com:
+
+{
+  "action": "health"
+}
+
+Resultado esperado:
+
+HTTP 200;
+
+"success": true;
+
+"backend_configured": true;
+
+serviço semelhante a "biz-wa-hub-baileys".
+
+Se ainda retornar HTTP 401/502, não altere o código. Informe claramente:
+O WHATSAPP_BACKEND_TOKEN cadastrado no Supabase não é idêntico ao BACKEND_TOKEN do Northflank.
+
+Se o health retornar sucesso:
+
+publique o frontend;
+
+atualize a tela de conexões;
+
+inicie a sessão;
+
+consulte refresh_status a cada 2 segundos até receber o QR Code;
+
+preserve o indicador de estado e o contador de expiração.
+
+Não recrie projeto, tabela, conexão ou Edge Function.
+
+Não use n8n nesse fluxo.
+
+Não substitua mensagens de erro por textos enviados no chat.
             </p>
           </div>
 
