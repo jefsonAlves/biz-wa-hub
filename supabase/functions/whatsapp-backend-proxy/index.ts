@@ -29,22 +29,7 @@ const providerTypeOf = (provider: BackendProvider) =>
 const providerFromType = (providerType: string): BackendProvider =>
   providerType === "wuzapi_backend" ? "wuzapi" : "baileys";
 
-const NEW_SYNC_MESSAGE = `For the code present, I get the error below.
-
-Please think step-by-step in order to resolve it.
-\`\`\`
-Edge function returned 502: Error, {"success":false,"backend_configured":true,"message":"For the code present, I get the error below.\n\nPlease think step-by-step in order to resolve it.\n'''\nEdge function returned 502: Error, {\"success\":false,\"backend_configured\":true,\"message\":\"For the code present, I get the error below.\n\nPlease think step-by-step in order to resolve it.\n'''\nEdge function returned 502: Error, {\"success\":false,\"backend_configured\":true,\"message\":\"Criar um histórico por empresa com data/hora do início da sessão e o último QR Code exibido para que o usuário possa reprocessar a conexão rapidamente em caso de queda. e verifique o que falta para funcionar o qrcode e corrija\"}\n\n{\n  \"timestamp\": 1787450761677,\n  \"error_type\": \"RUNTIME_ERROR\",\n  \"filename\": \"supabase/functions/whatsapp-backend-proxy/index.ts\",\n  \"lineno\": 0,\n  \"colno\": 0,\n  \"stack\": \"not_applicable\",\n  \"has_blank_screen\": true\n}\n'''\"}\n\n{\n  \"timestamp\": 1787450825318,\n  \"error_type\": \"RUNTIME_ERROR\",\n  \"filename\": \"supabase/functions/whatsapp-backend-proxy/index.ts\",\n  \"lineno\": 0,\n  \"colno\": 0,\n  \"stack\": \"not_applicable\",\n  \"has_blank_screen\": true\n}\n'''"}
-
-{
-  "timestamp": 1787450876831,
-  "error_type": "RUNTIME_ERROR",
-  "filename": "supabase/functions/whatsapp-backend-proxy/index.ts",
-  "lineno": 0,
-  "colno": 0,
-  "stack": "not_applicable",
-  "has_blank_screen": true
-}
-\`\`\``;
+const NEW_SYNC_MESSAGE = `Exiba um indicador de estado e um contador de expiração do QR Code em tempo real para que eu saiba quando ele falhar ou precisar ser atualizado.`;
 
 const backendUnavailable = (action: Action) =>
   json({
