@@ -29,7 +29,22 @@ const providerTypeOf = (provider: BackendProvider) =>
 const providerFromType = (providerType: string): BackendProvider =>
   providerType === "wuzapi_backend" ? "wuzapi" : "baileys";
 
-const NEW_SYNC_MESSAGE = `Criar um histórico por empresa com data/hora do início da sessão e o último QR Code exibido para que o usuário possa reprocessar a conexão rapidamente em caso de queda. e verifique o que falta para funcionar o qrcode e corrija`;
+const NEW_SYNC_MESSAGE = `For the code present, I get the error below.
+
+Please think step-by-step in order to resolve it.
+\`\`\`
+Edge function returned 502: Error, {"success":false,"backend_configured":true,"message":"Criar um histórico por empresa com data/hora do início da sessão e o último QR Code exibido para que o usuário possa reprocessar a conexão rapidamente em caso de queda. e verifique o que falta para funcionar o qrcode e corrija"}
+
+{
+  "timestamp": 1787450761677,
+  "error_type": "RUNTIME_ERROR",
+  "filename": "supabase/functions/whatsapp-backend-proxy/index.ts",
+  "lineno": 0,
+  "colno": 0,
+  "stack": "not_applicable",
+  "has_blank_screen": true
+}
+\`\`\``;
 
 const backendUnavailable = (action: Action) =>
   json({
