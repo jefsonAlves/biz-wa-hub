@@ -587,6 +587,10 @@ async function startSession(rawId, options = {}) {
       clearSessionTimers(entry);
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = statusCode === DisconnectReason.loggedOut;
+      // Sessão que nunca foi pareada não deve ficar em loop de reconexão:
+      // reconexões agressivas sem credenciais fazem o WhatsApp bloquear o IP
+      // e nenhum QR Code novo é entregue.
+      const registered = Boolean(socket.authState?.creds?.registered);
       sessions.delete(id);
 
       await writeMeta(id, {
@@ -597,17 +601,25 @@ async function startSession(rawId, options = {}) {
           ? "Sessão encerrada no WhatsApp."
           : `Conexão fechada pelo WhatsApp (código ${statusCode ?? "desconhecido"}${
               lastDisconnect?.error?.message ? `: ${lastDisconnect.error.message}` : ""
-            }). Tentando reconectar.`,
+            }).${registered ? " Tentando reconectar." : " Clique em Conectar WhatsApp para gerar um novo QR Code."}`,
         lastDisconnectedAt: new Date().toISOString(),
       });
 
-      logger.warn({ sessionId: id, statusCode, loggedOut, error: lastDisconnect?.error?.message || null }, "Conexão Baileys fechada");
+      logger.warn(
+        { sessionId: id, statusCode, loggedOut, registered, error: lastDisconnect?.error?.message || null },
+        "Conexão Baileys fechada",
+      );
 
-      if (!loggedOut) {
+      if (!loggedOut && registered) {
+        const attempt = Math.min((entry.reconnectAttempt || 0) + 1, 6);
+        const delay = Math.min(60000, 2500 * 2 ** (attempt - 1));
         const timer = setTimeout(() => {
-          startSession(id).catch((error) => logger.error({ err: error, sessionId: id }, "Falha ao reconectar"));
-        }, 2500);
-        sessions.set(id, { id, socket: null, reconnectTimer: timer, qrWatchdog: null });
+          startSession(id, { attempt }).catch((error) =>
+            logger.error({ err: error, sessionId: id }, "Falha ao reconectar"),
+          );
+        }, delay);
+        timer.unref?.();
+        sessions.set(id, { id, socket: null, reconnectTimer: timer, qrWatchdog: null, reconnectAttempt: attempt });
       }
     }
   });
