@@ -193,8 +193,35 @@ serve(async (req) => {
 
     if (!auth.isSuperAdmin) query = query.eq("tenant_id", auth.tenantId);
 
-    const { data: connection } = await query.maybeSingle();
-    if (!connection) return json({ error: "connection_not_found", message: "Conexão não encontrada" }, 404);
+    let { data: connection } = await query.maybeSingle();
+
+    // A interface pode manter por alguns segundos o ID de uma sessão removida
+    // ou recriada. Quando a empresa possui uma única conexão própria, ela é a
+    // escolha inequívoca e segura; recupera o fluxo sem exigir que o usuário
+    // selecione novamente o mesmo número.
+    if (!connection) {
+      const { data: tenantConnections } = await svc
+        .from("whatsapp_connections")
+        .select("id, tenant_id, name, provider_type, provider_instance_id, provider_session_id, status, metadata")
+        .eq("tenant_id", tenantId)
+        .in("provider_type", ["baileys_backend", "wuzapi_backend"])
+        .order("last_connected_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: true })
+        .limit(2);
+
+      if (tenantConnections?.length === 1) connection = tenantConnections[0];
+    }
+
+    if (!connection) {
+      // Retorna HTTP 200 com falha de negócio para que a Lovable mostre uma
+      // mensagem controlada, em vez de transformar o 404 em erro fatal.
+      return json({
+        success: false,
+        error: "connection_not_found",
+        message: "A conexão exibida não existe mais. Atualize a lista ou cadastre o WhatsApp novamente.",
+        backend_configured: true,
+      });
+    }
 
     if (!["baileys_backend", "wuzapi_backend"].includes(connection.provider_type)) {
       return json({ error: "unsupported_provider", message: "Esta conexão não usa o backend próprio." }, 400);
