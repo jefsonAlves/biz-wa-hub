@@ -156,6 +156,13 @@ async function flushWebhookQueue() {
         await fs.rm(queuedPath, { force: true });
         continue;
       }
+      if (result.status === 404 && String(result.detail || "").includes("connection_not_found")) {
+        // A sessão foi removida definitivamente do Supabase. Manter esses
+        // eventos na frente da fila bloqueia para sempre mensagens atuais.
+        await fs.rm(queuedPath, { force: true });
+        logger.info({ file }, "Webhook órfão descartado");
+        continue;
+      }
       if (result.status >= 400 && result.status < 500 && result.status !== 408 && result.status !== 429) {
         logger.warn({ status: result.status, detail: String(result.detail || "").slice(0, 300) }, "Webhook pendente ainda foi recusado");
       }
@@ -189,6 +196,27 @@ async function writeMeta(id, patch) {
   const next = { ...current, ...patch, id, updatedAt: new Date().toISOString() };
   await fs.writeFile(metaPath(id), JSON.stringify(next, null, 2));
   return next;
+}
+
+async function hasRegisteredCredentials(id) {
+  try {
+    const credentials = JSON.parse(await fs.readFile(path.join(sessionDir(id), "creds.json"), "utf8"));
+    return credentials?.registered === true;
+  } catch {
+    return false;
+  }
+}
+
+async function cleanUnregisteredSessions() {
+  const dirs = await fs.readdir(DATA_DIR, { withFileTypes: true }).catch(() => []);
+  for (const dir of dirs) {
+    if (!dir.isDirectory() || dir.name === "_webhook-outbox") continue;
+    const id = sanitizeId(dir.name);
+    if (!id || (await hasRegisteredCredentials(id))) continue;
+    await closeSocket(id);
+    await fs.rm(sessionDir(id), { recursive: true, force: true });
+    logger.info({ sessionId: id }, "Sessão não pareada antiga removida");
+  }
 }
 
 function authorized(req) {
@@ -448,7 +476,7 @@ async function startSession(rawId, options = {}) {
     auth: state,
     printQRInTerminal: false,
     logger: logger.child({ sessionId: id }),
-    browser: Browsers.macOS("Desktop"),
+    browser: Browsers.ubuntu("Chrome"),
     markOnlineOnConnect: false,
     fireInitQueries: true,
     syncFullHistory: true,
@@ -620,7 +648,7 @@ async function startSession(rawId, options = {}) {
       // Sessão que nunca foi pareada não deve ficar em loop de reconexão:
       // reconexões agressivas sem credenciais fazem o WhatsApp bloquear o IP
       // e nenhum QR Code novo é entregue.
-      const registered = Boolean(socket.authState?.creds?.registered);
+      const registered = state.creds.registered === true;
       sessions.delete(id);
 
       await writeMeta(id, {
@@ -665,6 +693,11 @@ async function restoreSessions() {
     const id = sanitizeId(dir.name);
     const meta = await readMeta(id);
     if (!meta) continue;
+    const registered = await hasRegisteredCredentials(id);
+    if (!registered || meta.status !== "CONNECTED") {
+      logger.info({ sessionId: id, status: meta.status, registered }, "Sessão antiga não será restaurada automaticamente");
+      continue;
+    }
     startSession(id).catch((error) => logger.error({ err: error, sessionId: id }, "Falha ao restaurar sessão"));
   }
 }
@@ -700,6 +733,7 @@ app.get("/health/secure", async (_req, res) => {
 
 app.post("/whatsapp/", async (req, res) => {
   try {
+    await cleanUnregisteredSessions();
     const id = crypto.randomUUID();
     const name = String(req.body?.name || "WhatsApp").slice(0, 80);
     const meta = await writeMeta(id, {
