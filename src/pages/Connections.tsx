@@ -416,8 +416,8 @@ const Connections = () => {
               </div>
               <h1 className="text-2xl font-bold md:text-3xl">Conexões WhatsApp</h1>
             </div>
-            <p className="text-sm text-muted-foreground md:text-base whitespace-pre-wrap">
-              {"For the code present, I get the error below.\n\nPlease think step-by-step in order to resolve it.\n```\nEdge function returned 502: Error, {\"success\":false,\"error\":\"status_failed\",\"backend_configured\":true,\"backend_status\":503,\"message\":\"Backend respondeu HTTP 503.\"}\n\n{\n  \"timestamp\": 1787523442201,\n  \"error_type\": \"RUNTIME_ERROR\",\n  \"filename\": \"supabase/functions/whatsapp-backend-proxy/index.ts\",\n  \"lineno\": 0,\n  \"colno\": 0,\n  \"stack\": \"not_applicable\",\n  \"has_blank_screen\": true\n}\n```"}
+            <p className="text-sm text-muted-foreground md:text-base">
+              Conecte um número de WhatsApp e acompanhe o status da sessão em tempo real.
             </p>
           </div>
 
