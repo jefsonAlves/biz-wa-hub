@@ -5,8 +5,8 @@
   "type": "module",
   "description": "Serviço Node.js persistente para WhatsApp via Baileys. Não depende de n8n nem Docker.",
   "scripts": {
-    "start": "node server.mjs",
-    "dev": "node --watch server.mjs"
+    "start": "node start.mjs",
+    "dev": "node --watch start.mjs"
   },
   "engines": {
     "node": ">=20"
