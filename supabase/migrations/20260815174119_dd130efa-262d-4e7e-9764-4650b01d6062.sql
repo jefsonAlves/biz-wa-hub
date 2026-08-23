@@ -4,6 +4,7 @@
 DROP FUNCTION IF EXISTS public.get_whatsapp_connections_safe();
 
 -- 2. Recreate the version with _tenant_id to be robust
+DROP FUNCTION IF EXISTS public.get_whatsapp_connections_safe(uuid);
 CREATE OR REPLACE FUNCTION public.get_whatsapp_connections_safe(_tenant_id uuid DEFAULT NULL::uuid)
  RETURNS TABLE(
     id uuid, 

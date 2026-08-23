@@ -35,10 +35,17 @@ SET conversation_id = mapping.keeper_id
 FROM conversation_merge_map AS mapping
 WHERE item.conversation_id = mapping.duplicate_id;
 
-UPDATE public.whatsapp_access_requests AS item
-SET conversation_id = mapping.keeper_id
-FROM conversation_merge_map AS mapping
-WHERE item.conversation_id = mapping.duplicate_id;
+DO $$
+BEGIN
+  IF to_regclass('public.whatsapp_access_requests') IS NOT NULL THEN
+    EXECUTE $sql$
+      UPDATE public.whatsapp_access_requests AS item
+      SET conversation_id = mapping.keeper_id
+      FROM conversation_merge_map AS mapping
+      WHERE item.conversation_id = mapping.duplicate_id
+    $sql$;
+  END IF;
+END $$;
 
 WITH totals AS (
   SELECT

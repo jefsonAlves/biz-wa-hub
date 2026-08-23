@@ -25,6 +25,13 @@ DECLARE
   v_profile_exists boolean;
   v_tenant_exists boolean;
 BEGIN
+  -- Projetos novos não possuem o UUID histórico do projeto original.
+  -- O trigger acima criará profile/tenant normalmente quando o usuário se cadastrar.
+  IF NOT EXISTS (SELECT 1 FROM auth.users WHERE id = v_user_id) THEN
+    RAISE NOTICE 'Usuário histórico não existe neste projeto; backfill ignorado.';
+    RETURN;
+  END IF;
+
   -- Verificar se profile já existe
   SELECT EXISTS(SELECT 1 FROM public.profiles WHERE user_id = v_user_id) INTO v_profile_exists;
 
