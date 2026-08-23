@@ -18,11 +18,14 @@ const DATA_DIR = path.resolve(process.env.WHATSAPP_DATA_DIR || "./sessions");
 const BACKEND_TOKEN = process.env.BACKEND_TOKEN || "";
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "*";
 const QR_TTL_MS = Math.max(30000, Number(process.env.QR_TTL_MS || 60000));
+const WHATSAPP_WEBHOOK_URL = String(process.env.WHATSAPP_WEBHOOK_URL || "").trim();
+const WEBHOOK_TIMEOUT_MS = Math.max(3000, Number(process.env.WEBHOOK_TIMEOUT_MS || 15000));
 
 app.use(cors({ origin: ALLOWED_ORIGIN === "*" ? true : ALLOWED_ORIGIN.split(",").map((v) => v.trim()) }));
 app.use(express.json({ limit: "2mb" }));
 
 const sessions = new Map();
+const recentSentIds = new Map();
 
 const sanitizeId = (value) => String(value || "").replace(/[^a-zA-Z0-9_-]/g, "");
 const sessionDir = (id) => path.join(DATA_DIR, sanitizeId(id));
@@ -68,6 +71,134 @@ app.use((req, res, next) => {
   next();
 });
 
+function rememberSentMessage(messageId) {
+  if (!messageId) return;
+  recentSentIds.set(messageId, Date.now() + 5 * 60 * 1000);
+  if (recentSentIds.size > 1000) {
+    const now = Date.now();
+    for (const [id, expiresAt] of recentSentIds) {
+      if (expiresAt <= now) recentSentIds.delete(id);
+    }
+  }
+}
+
+function wasSentByApi(messageId) {
+  if (!messageId) return false;
+  const expiresAt = recentSentIds.get(messageId);
+  if (!expiresAt) return false;
+  recentSentIds.delete(messageId);
+  return expiresAt > Date.now();
+}
+
+function unwrapMessage(message) {
+  let current = message || null;
+  for (let i = 0; current && i < 5; i += 1) {
+    if (current.ephemeralMessage?.message) current = current.ephemeralMessage.message;
+    else if (current.viewOnceMessage?.message) current = current.viewOnceMessage.message;
+    else if (current.viewOnceMessageV2?.message) current = current.viewOnceMessageV2.message;
+    else if (current.documentWithCaptionMessage?.message) current = current.documentWithCaptionMessage.message;
+    else break;
+  }
+  return current || {};
+}
+
+function extractMessageData(rawMessage) {
+  const message = unwrapMessage(rawMessage);
+  if (typeof message.conversation === "string") {
+    return { messageType: "text", content: message.conversation };
+  }
+  if (message.extendedTextMessage) {
+    return { messageType: "text", content: message.extendedTextMessage.text || "" };
+  }
+  if (message.imageMessage) {
+    return { messageType: "image", content: message.imageMessage.caption || "[Imagem]", mimeType: message.imageMessage.mimetype || null };
+  }
+  if (message.videoMessage) {
+    return { messageType: "video", content: message.videoMessage.caption || "[Vídeo]", mimeType: message.videoMessage.mimetype || null };
+  }
+  if (message.audioMessage) {
+    return { messageType: "audio", content: "[Áudio]", mimeType: message.audioMessage.mimetype || null };
+  }
+  if (message.documentMessage) {
+    return { messageType: "document", content: message.documentMessage.fileName || "[Documento]", mimeType: message.documentMessage.mimetype || null };
+  }
+  if (message.stickerMessage) {
+    return { messageType: "text", content: "[Figurinha]", mimeType: message.stickerMessage.mimetype || null };
+  }
+  if (message.contactMessage || message.contactsArrayMessage) {
+    return { messageType: "text", content: "[Contato]" };
+  }
+  if (message.locationMessage || message.liveLocationMessage) {
+    return { messageType: "text", content: "[Localização]" };
+  }
+  if (message.reactionMessage) {
+    return { messageType: "text", content: `[Reação ${message.reactionMessage.text || ""}]` };
+  }
+  return { messageType: "text", content: "[Mensagem não suportada]" };
+}
+
+function timestampToIso(value) {
+  try {
+    const seconds = typeof value === "number" ? value : Number(value?.toString?.() || value || 0);
+    if (seconds > 0) return new Date(seconds * 1000).toISOString();
+  } catch {}
+  return new Date().toISOString();
+}
+
+async function dispatchMessageToPlatform(sessionId, msg, source = "live") {
+  if (!WHATSAPP_WEBHOOK_URL || !msg?.key?.remoteJid || !msg?.message) return;
+  const chatId = String(msg.key.remoteJid);
+  if (chatId === "status@broadcast" || chatId.endsWith("@broadcast")) return;
+
+  const messageId = msg.key.id ? String(msg.key.id) : null;
+  if (msg.key.fromMe && wasSentByApi(messageId)) return;
+
+  const parsed = extractMessageData(msg.message);
+  const payload = {
+    event: "message.upsert",
+    source,
+    session_id: sessionId,
+    wa_message_id: messageId,
+    chat_id: chatId,
+    from_me: Boolean(msg.key.fromMe),
+    participant: msg.key.participant || null,
+    push_name: msg.pushName || null,
+    is_group: chatId.endsWith("@g.us"),
+    message_type: parsed.messageType,
+    content: parsed.content,
+    mime_type: parsed.mimeType || null,
+    timestamp: timestampToIso(msg.messageTimestamp),
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+  try {
+    const response = await fetch(WHATSAPP_WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(BACKEND_TOKEN ? { Authorization: `Bearer ${BACKEND_TOKEN}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      logger.warn({ sessionId, status: response.status, detail: detail.slice(0, 500) }, "Webhook recusou mensagem");
+    }
+  } catch (error) {
+    logger.warn({ err: error, sessionId }, "Falha ao enviar mensagem ao Supabase");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function dispatchMany(sessionId, messages, source) {
+  for (const msg of messages || []) {
+    await dispatchMessageToPlatform(sessionId, msg, source);
+  }
+}
+
 async function closeSocket(id) {
   const entry = sessions.get(id);
   if (!entry?.socket) return;
@@ -103,13 +234,22 @@ async function startSession(rawId) {
     logger: logger.child({ sessionId: id }),
     browser: Browsers.ubuntu("Chrome"),
     markOnlineOnConnect: false,
-    syncFullHistory: false,
+    syncFullHistory: true,
+    shouldSyncHistoryMessage: () => true,
   });
 
   const entry = { id, socket, reconnectTimer: null };
   sessions.set(id, entry);
 
   socket.ev.on("creds.update", saveCreds);
+
+  socket.ev.on("messages.upsert", ({ messages }) => {
+    dispatchMany(id, messages, "live").catch((error) => logger.warn({ err: error, sessionId: id }, "Falha ao processar mensagens"));
+  });
+
+  socket.ev.on("messaging-history.set", ({ messages }) => {
+    dispatchMany(id, messages, "history").catch((error) => logger.warn({ err: error, sessionId: id }, "Falha ao importar histórico"));
+  });
 
   socket.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -137,7 +277,6 @@ async function startSession(rawId) {
     }
 
     if (connection === "close") {
-      // Ignora o evento atrasado de um socket que já foi substituído ao renovar o QR.
       if (sessions.get(id) !== entry) return;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = statusCode === DisconnectReason.loggedOut;
@@ -177,12 +316,12 @@ async function restoreSessions() {
 
 app.get("/health", async (_req, res) => {
   await ensureDataDir();
-  res.json({ ok: true, service: "biz-wa-hub-baileys", sessions: sessions.size });
+  res.json({ ok: true, service: "biz-wa-hub-baileys", sessions: sessions.size, messageSync: Boolean(WHATSAPP_WEBHOOK_URL) });
 });
 
 app.get("/health/secure", async (_req, res) => {
   await ensureDataDir();
-  res.json({ ok: true, authenticated: true, service: "biz-wa-hub-baileys", sessions: sessions.size });
+  res.json({ ok: true, authenticated: true, service: "biz-wa-hub-baileys", sessions: sessions.size, messageSync: Boolean(WHATSAPP_WEBHOOK_URL) });
 });
 
 app.post("/whatsapp/", async (req, res) => {
@@ -266,11 +405,12 @@ app.delete("/whatsapp/:id", async (req, res) => {
 app.post("/api/send", async (req, res) => {
   try {
     const sessionId = sanitizeId(req.body?.sessionId || req.body?.session_id || req.body?.connectionId);
+    const rawJid = String(req.body?.jid || "").trim();
     const number = String(req.body?.number || "").replace(/\D/g, "");
     const body = String(req.body?.body || req.body?.message || "");
 
     if (!sessionId) return res.status(400).json({ error: "session_id_required" });
-    if (!number) return res.status(400).json({ error: "number_required" });
+    if (!rawJid && !number) return res.status(400).json({ error: "destination_required" });
     if (!body.trim()) return res.status(400).json({ error: "message_required" });
 
     let entry = sessions.get(sessionId);
@@ -284,9 +424,11 @@ app.post("/api/send", async (req, res) => {
       return res.status(409).json({ error: "session_not_connected" });
     }
 
-    const jid = `${number}@s.whatsapp.net`;
+    const jid = rawJid.includes("@") ? rawJid : `${number}@s.whatsapp.net`;
     const result = await entry.socket.sendMessage(jid, { text: body });
-    res.json({ success: true, messageId: result?.key?.id || null, sessionId });
+    const messageId = result?.key?.id || null;
+    rememberSentMessage(messageId);
+    res.json({ success: true, messageId, sessionId, jid });
   } catch (error) {
     logger.error({ err: error }, "Erro ao enviar mensagem");
     res.status(500).json({ error: "send_failed" });
@@ -300,6 +442,6 @@ app.use((err, _req, res, _next) => {
 
 await ensureDataDir();
 app.listen(PORT, "0.0.0.0", () => {
-  logger.info({ port: PORT, dataDir: DATA_DIR }, "Baileys service iniciado");
+  logger.info({ port: PORT, dataDir: DATA_DIR, messageSync: Boolean(WHATSAPP_WEBHOOK_URL) }, "Baileys service iniciado");
   restoreSessions().catch((error) => logger.error({ err: error }, "Falha ao restaurar sessões"));
 });
