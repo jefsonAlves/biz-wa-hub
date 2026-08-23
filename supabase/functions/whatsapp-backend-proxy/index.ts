@@ -83,7 +83,7 @@ serve(async (req) => {
     const backend = await getBackend(svc, tenantId);
 
     if (action === "health") {
-      if (!backend) return backendUnavailable(action);
+      if (!backend) return json({ success: false, backend_configured: true, message: "Backend não configurado." }, 502);
       try {
         const result = await backendCall(svc, backend, "/health", { method: "GET", timeoutMs: 10000 });
         return json({
@@ -97,7 +97,7 @@ serve(async (req) => {
         return json({
           success: false,
           backend_configured: true,
-          message: NEW_SYNC_MESSAGE,
+          message: humanizeBackendError(error instanceof Error ? error.message : "Backend inacessível."),
         }, 502);
       }
     }
@@ -145,7 +145,7 @@ serve(async (req) => {
           return json({
             success: false,
             error: "backend_create_failed",
-            message: NEW_SYNC_MESSAGE,
+            message: humanizeBackendError(created.body?.message ?? created.body?.error ?? `Backend respondeu HTTP ${created.status}.`),
             backend_status: created.status,
             backend_configured: true,
           }, 502);
@@ -185,7 +185,7 @@ serve(async (req) => {
         return json({
           success: false,
           error: "backend_unreachable",
-          message: NEW_SYNC_MESSAGE,
+          message: humanizeBackendError(error instanceof Error ? error.message : "Backend inacessível."),
           backend_configured: true,
         }, 502);
       }
@@ -220,7 +220,7 @@ serve(async (req) => {
           last_health_check_at: new Date().toISOString(),
         })
         .eq("id", connection.id);
-      return backendUnavailable(action);
+      return json({ success: false, backend_configured: true, message: "Backend não configurado." }, 502);
     }
 
     const provider = providerFromType(connection.provider_type);
@@ -237,7 +237,7 @@ serve(async (req) => {
           return json({
             success: false,
             error: "backend_create_failed",
-            message: NEW_SYNC_MESSAGE,
+            message: humanizeBackendError(created.body?.message ?? created.body?.error ?? `Backend respondeu HTTP ${created.status}.`),
             backend_configured: true,
             backend_status: created.status,
           }, 502);
@@ -271,7 +271,7 @@ serve(async (req) => {
           success: false,
           error: "backend_unreachable",
           backend_configured: true,
-          message: NEW_SYNC_MESSAGE,
+          message: humanizeBackendError(error instanceof Error ? error.message : "Backend inacessível."),
         }, 502);
       }
     }
@@ -353,7 +353,7 @@ serve(async (req) => {
             error: "session_start_failed",
             backend_configured: true,
             backend_status: started.status,
-            message: NEW_SYNC_MESSAGE,
+            message: humanizeBackendError(started.body?.message ?? started.body?.error ?? `Backend respondeu HTTP ${started.status}.`),
           }, 502);
         }
 
@@ -381,7 +381,7 @@ serve(async (req) => {
             error: "status_failed",
             backend_configured: true,
             backend_status: shown.status,
-            message: NEW_SYNC_MESSAGE,
+            message: humanizeBackendError(shown.body?.message ?? shown.body?.error ?? `Backend respondeu HTTP ${shown.status}.`),
           }, 502);
         }
 
@@ -415,6 +415,7 @@ serve(async (req) => {
 
       return json({ error: "invalid_action" }, 400);
     } catch (error) {
+      const errMsg = error instanceof Error ? error.message : "Backend inacessível.";
       await svc
         .from("whatsapp_connections")
         .update({
@@ -422,7 +423,7 @@ serve(async (req) => {
           metadata: {
             ...(connection.metadata ?? {}),
             backend_ready: false,
-            backend_last_error: NEW_SYNC_MESSAGE,
+            backend_last_error: humanizeBackendError(errMsg),
           },
           last_health_check_at: new Date().toISOString(),
         })
@@ -432,7 +433,7 @@ serve(async (req) => {
         success: false,
         backend_configured: true,
         status: "disconnected",
-        message: NEW_SYNC_MESSAGE,
+        message: humanizeBackendError(errMsg),
       }, 502);
     }
   } catch (error) {
