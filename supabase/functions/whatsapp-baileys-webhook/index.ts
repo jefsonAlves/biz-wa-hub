@@ -123,6 +123,7 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
+    let conversationCreated = false;
     if (!conversation) {
       const created = await svc
         .from("conversations")
@@ -142,6 +143,7 @@ serve(async (req) => {
         .single();
       if (created.error) throw created.error;
       conversation = created.data;
+      conversationCreated = true;
     }
 
     const messageInsert = await svc
@@ -169,7 +171,8 @@ serve(async (req) => {
 
     if (messageInsert.error) throw messageInsert.error;
 
-    const nextUnread = fromMe ? conversation.unread_count || 0 : (conversation.unread_count || 0) + (conversation.status ? 1 : 1);
+    const currentUnread = conversation.unread_count || 0;
+    const nextUnread = fromMe ? currentUnread : conversationCreated ? currentUnread : currentUnread + 1;
     const conversationPatch: Record<string, unknown> = {
       last_message_at: timestamp,
       last_message_direction: fromMe ? "outgoing" : "incoming",
