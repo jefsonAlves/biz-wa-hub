@@ -455,7 +455,16 @@ async function startSession(rawId, options = {}) {
     getMessage: getCachedMessage,
   });
 
-  const entry = { id, socket, reconnectTimer: null, qrWatchdog: null, startedAt: Date.now() };
+  const qrAttempt = Number(options.qrAttempt || 0);
+  const entry = {
+    id,
+    socket,
+    reconnectTimer: null,
+    qrWatchdog: null,
+    startedAt: Date.now(),
+    reconnectAttempt: Number(options.attempt || 0),
+    qrAttempt,
+  };
   sessions.set(id, entry);
 
   entry.qrWatchdog = setTimeout(async () => {
@@ -463,7 +472,10 @@ async function startSession(rawId, options = {}) {
     const meta = await readMeta(id);
     if (meta?.status !== "OPENING") return;
 
-    logger.warn({ sessionId: id }, "QR não foi gerado no tempo esperado; reiniciando socket Baileys");
+    // Duas tentativas automáticas; depois paramos para não sobrecarregar o
+    // WhatsApp (o que fazia o QR nunca mais ser emitido).
+    const canRetry = qrAttempt < 2;
+    logger.warn({ sessionId: id, qrAttempt, canRetry }, "QR não foi gerado no tempo esperado");
     sessions.delete(id);
     try {
       socket.end?.(new Error("qr_generation_timeout"));
@@ -472,14 +484,18 @@ async function startSession(rawId, options = {}) {
       status: "DISCONNECTED",
       qrcode: null,
       qrExpiresAt: null,
-      connectionError: "O servidor demorou para gerar o QR Code. Tentando novamente.",
+      connectionError: canRetry
+        ? "O servidor demorou para gerar o QR Code. Tentando novamente."
+        : "O WhatsApp não liberou um novo QR Code agora. Aguarde alguns minutos e clique em Conectar WhatsApp.",
     });
 
+    if (!canRetry) return;
+
     setTimeout(() => {
-      startSession(id, { forceRestart: true }).catch((error) =>
+      startSession(id, { forceRestart: true, qrAttempt: qrAttempt + 1 }).catch((error) =>
         logger.error({ err: error, sessionId: id }, "Falha ao reiniciar sessão após timeout do QR"),
       );
-    }, 1000).unref();
+    }, 5000).unref();
   }, QR_GENERATION_TIMEOUT_MS);
   entry.qrWatchdog.unref?.();
 
