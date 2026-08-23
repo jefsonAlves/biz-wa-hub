@@ -29,34 +29,6 @@ const providerTypeOf = (provider: BackendProvider) =>
 const providerFromType = (providerType: string): BackendProvider =>
   providerType === "wuzapi_backend" ? "wuzapi" : "baileys";
 
-const NEW_SYNC_MESSAGE = `For the code present, I get the error below.
-
-Please think step-by-step in order to resolve it.
-\`\`\`
-Edge function returned 502: Error, {"success":false,"backend_configured":true,"message":"Load the security issues from the scan results and fix the selected issues."}
-
-{
-  "timestamp": 1787454536036,
-  "error_type": "RUNTIME_ERROR",
-  "filename": "supabase/functions/whatsapp-backend-proxy/index.ts",
-  "lineno": 0,
-  "colno": 0,
-  "stack": "not_applicable",
-  "has_blank_screen": true
-}
-\`\`\``;
-
-const backendUnavailable = (action: Action) =>
-  json({
-    success: false,
-    backend_configured: true,
-    status: "disconnected",
-    has_qr: false,
-    phone_number: null,
-    action,
-    message: NEW_SYNC_MESSAGE,
-  }, 502);
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
