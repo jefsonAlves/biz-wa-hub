@@ -518,12 +518,18 @@ serve(async (req) => {
         })
         .eq("id", connection.id);
 
+      const transientNetwork = /timed out|aborted|connection|dns|lookup|reset/i.test(errMsg);
+
       return json({
         success: false,
+        error: transientNetwork ? "backend_unavailable" : "backend_error",
+        retryable: transientNetwork,
         backend_configured: true,
-        status: "disconnected",
-        message: humanizeBackendError(errMsg),
-      }, 502);
+        status: transientNetwork ? (connection.status ?? "disconnected") : "disconnected",
+        message: transientNetwork
+          ? "O serviço do WhatsApp não respondeu agora. Tentando novamente em alguns instantes."
+          : humanizeBackendError(errMsg),
+      }, transientNetwork ? 200 : 502);
     }
   } catch (error) {
     console.error("whatsapp-backend-proxy error:", error);
