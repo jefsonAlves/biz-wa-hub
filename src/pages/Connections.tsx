@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useActiveTenant } from "@/hooks/useActiveTenant";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -87,12 +88,11 @@ const toQrGeneratorUrl = (value: string | null) => {
 };
 
 const Connections = () => {
-  const { profile, isSuperAdmin } = useAuth();
+  const { isSuperAdmin } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
-  const effectiveTenantId = isSuperAdmin ? selectedTenantId : profile?.tenant_id;
+  const { effectiveTenantId, selectedTenantId, setSelectedTenantId, tenants } = useActiveTenant();
 
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -107,16 +107,6 @@ const Connections = () => {
     setBackendReady(false);
     setQrConnectionId(null);
   }, [effectiveTenantId]);
-
-  const { data: tenants = [] } = useQuery({
-    queryKey: ["admin-tenants-list"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("tenants").select("id, name").order("name");
-      if (error) throw error;
-      return data;
-    },
-    enabled: isSuperAdmin,
-  });
 
   const { data: connections = [], isLoading } = useQuery({
     queryKey: ["whatsapp_connections_safe", effectiveTenantId],
@@ -208,6 +198,43 @@ const Connections = () => {
     }
     return result;
   };
+
+  // O status persistido no banco pode ficar desatualizado depois de um deploy.
+  // Ao abrir a tela, consulta o backend e sincroniza automaticamente a única
+  // sessão (ou todas as sessões cadastradas) sem exigir clique em Atualizar.
+  useEffect(() => {
+    if (!effectiveTenantId || connections.length === 0) return;
+    let cancelled = false;
+
+    const syncConnections = async () => {
+      try {
+        const health = await checkWhatsAppBackend(effectiveTenantId);
+        if (cancelled) return;
+        setBackendReady(health.success === true && health.backend_configured !== false);
+        if (!health.success) return;
+
+        await Promise.all(
+          connections.map((connection) =>
+            runBackendConnectionAction(connection.id, "refresh_status", effectiveTenantId).catch(() => null),
+          ),
+        );
+        if (!cancelled) {
+          await queryClient.invalidateQueries({
+            queryKey: ["whatsapp_connections_safe", effectiveTenantId],
+          });
+        }
+      } catch {
+        if (!cancelled) setBackendReady(false);
+      }
+    };
+
+    void syncConnections();
+    const timer = window.setInterval(syncConnections, 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [effectiveTenantId, connections.map((connection) => connection.id).join(","), queryClient]);
 
   const connect = async (connectionId: string) => {
     if (!backendReady) {

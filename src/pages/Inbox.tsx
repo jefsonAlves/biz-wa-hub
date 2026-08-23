@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { useActiveTenant } from "@/hooks/useActiveTenant";
 import { Send, MessageSquare, Pause, Play, UserCheck, Bot, Sparkles, Loader2, Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -42,7 +43,7 @@ const Inbox = () => {
   const { profile, user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const tenantId = profile?.tenant_id;
+  const { effectiveTenantId: tenantId } = useActiveTenant();
 
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
@@ -105,6 +106,9 @@ const Inbox = () => {
       return { data: data || [], count: count || 0 };
     },
     enabled: !!tenantId,
+    // Realtime continua sendo o caminho principal. Este polling curto evita
+    // que uma queda temporária do canal deixe o Inbox parado até outro reload.
+    refetchInterval: 5000,
   });
 
   const conversations = conversationsData?.data || [];
@@ -129,6 +133,7 @@ const Inbox = () => {
       };
     },
     enabled: !!tenantId,
+    refetchInterval: 5000,
   });
 
   // Messages
