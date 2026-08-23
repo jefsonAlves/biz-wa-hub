@@ -21,9 +21,7 @@ function normalizeServiceError(raw: string): string {
   if (
     text.includes("backend_not_configured") ||
     text.includes("backend_service_unavailable") ||
-    text.includes("upgrade aplicado7") ||
-    text.includes("RUNTIME_ERROR") ||
-    text.includes("For the code present, I get the error below.")
+    text.includes("upgrade aplicado7")
   ) {
     return text;
   }
