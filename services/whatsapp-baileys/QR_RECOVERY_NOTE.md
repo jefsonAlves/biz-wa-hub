@@ -1,0 +1,1 @@
+QR generation recovery watchdog added. If a Baileys session remains OPENING without a QR beyond the configured timeout, the service restarts the socket automatically. Health exposes qrRecovery=true.

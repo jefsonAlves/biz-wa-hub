@@ -18,6 +18,7 @@ const DATA_DIR = path.resolve(process.env.WHATSAPP_DATA_DIR || "./sessions");
 const BACKEND_TOKEN = process.env.BACKEND_TOKEN || "";
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "*";
 const QR_TTL_MS = Math.max(30000, Number(process.env.QR_TTL_MS || 60000));
+const QR_GENERATION_TIMEOUT_MS = Math.max(10000, Number(process.env.QR_GENERATION_TIMEOUT_MS || 20000));
 const WHATSAPP_WEBHOOK_URL = String(process.env.WHATSAPP_WEBHOOK_URL || "").trim();
 const WEBHOOK_TIMEOUT_MS = Math.max(3000, Number(process.env.WEBHOOK_TIMEOUT_MS || 15000));
 const WEBHOOK_QUEUE_DIR = path.join(DATA_DIR, "_webhook-outbox");
@@ -274,30 +275,48 @@ async function dispatchMany(sessionId, messages, source) {
   }
 }
 
+function clearSessionTimers(entry) {
+  if (!entry) return;
+  if (entry.reconnectTimer) clearTimeout(entry.reconnectTimer);
+  if (entry.qrWatchdog) clearTimeout(entry.qrWatchdog);
+}
+
 async function closeSocket(id) {
   const entry = sessions.get(id);
-  if (!entry?.socket) return;
-  try {
-    entry.socket.end?.(new Error("manual_disconnect"));
-  } catch {}
+  if (!entry) return;
+  clearSessionTimers(entry);
+  if (entry.socket) {
+    try {
+      entry.socket.end?.(new Error("manual_disconnect"));
+    } catch {}
+  }
   sessions.delete(id);
 }
 
-async function startSession(rawId) {
+async function startSession(rawId, options = {}) {
   const id = sanitizeId(rawId);
   if (!id) throw new Error("invalid_session_id");
+  const forceRestart = options.forceRestart === true;
 
   const existing = sessions.get(id);
   if (existing?.socket) {
     const meta = await readMeta(id);
-    if (meta?.status !== "TIMEOUT") return existing;
+    const updatedAt = meta?.updatedAt ? new Date(meta.updatedAt).getTime() : 0;
+    const openingAge = updatedAt ? Date.now() - updatedAt : Number.POSITIVE_INFINITY;
+    const openingStale = meta?.status === "OPENING" && openingAge >= QR_GENERATION_TIMEOUT_MS;
+    const shouldRestart = forceRestart || meta?.status === "TIMEOUT" || meta?.status === "DISCONNECTED" || openingStale;
+
+    if (!shouldRestart) return existing;
+
+    logger.warn({ sessionId: id, status: meta?.status, openingAge, forceRestart }, "Reiniciando socket Baileys para recuperar geração do QR");
+    clearSessionTimers(existing);
     sessions.delete(id);
-    try { existing.socket.end?.(new Error("qr_expired")); } catch {}
+    try { existing.socket.end?.(new Error("restart_for_qr")); } catch {}
   }
 
   await ensureDataDir();
   await fs.mkdir(sessionDir(id), { recursive: true });
-  await writeMeta(id, { status: "OPENING", qrcode: null, connectionError: null });
+  await writeMeta(id, { status: "OPENING", qrcode: null, qrExpiresAt: null, connectionError: null });
 
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir(id));
   const { version } = await fetchLatestBaileysVersion();
@@ -315,8 +334,31 @@ async function startSession(rawId) {
     getMessage: getCachedMessage,
   });
 
-  const entry = { id, socket, reconnectTimer: null };
+  const entry = { id, socket, reconnectTimer: null, qrWatchdog: null, startedAt: Date.now() };
   sessions.set(id, entry);
+
+  entry.qrWatchdog = setTimeout(async () => {
+    if (sessions.get(id) !== entry) return;
+    const meta = await readMeta(id);
+    if (meta?.status !== "OPENING") return;
+
+    logger.warn({ sessionId: id }, "QR não foi gerado no tempo esperado; reiniciando socket Baileys");
+    sessions.delete(id);
+    try { socket.end?.(new Error("qr_generation_timeout")); } catch {}
+    await writeMeta(id, {
+      status: "DISCONNECTED",
+      qrcode: null,
+      qrExpiresAt: null,
+      connectionError: "O servidor demorou para gerar o QR Code. Tentando novamente.",
+    });
+
+    setTimeout(() => {
+      startSession(id, { forceRestart: true }).catch((error) =>
+        logger.error({ err: error, sessionId: id }, "Falha ao reiniciar sessão após timeout do QR"),
+      );
+    }, 1000).unref();
+  }, QR_GENERATION_TIMEOUT_MS);
+  entry.qrWatchdog.unref?.();
 
   socket.ev.on("creds.update", saveCreds);
 
@@ -336,15 +378,21 @@ async function startSession(rawId) {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
+      if (entry.qrWatchdog) {
+        clearTimeout(entry.qrWatchdog);
+        entry.qrWatchdog = null;
+      }
       await writeMeta(id, {
         status: "QRCODE",
         qrcode: qr,
         qrExpiresAt: new Date(Date.now() + QR_TTL_MS).toISOString(),
         connectionError: null,
       });
+      logger.info({ sessionId: id }, "QR Code recebido do WhatsApp");
     }
 
     if (connection === "open") {
+      clearSessionTimers(entry);
       const number = socket.user?.id?.split(":")[0]?.split("@")[0] || null;
       await writeMeta(id, {
         status: "CONNECTED",
@@ -359,6 +407,7 @@ async function startSession(rawId) {
 
     if (connection === "close") {
       if (sessions.get(id) !== entry) return;
+      clearSessionTimers(entry);
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = statusCode === DisconnectReason.loggedOut;
       sessions.delete(id);
@@ -375,7 +424,7 @@ async function startSession(rawId) {
         const timer = setTimeout(() => {
           startSession(id).catch((error) => logger.error({ err: error, sessionId: id }, "Falha ao reconectar"));
         }, 2500);
-        sessions.set(id, { id, socket: null, reconnectTimer: timer });
+        sessions.set(id, { id, socket: null, reconnectTimer: timer, qrWatchdog: null });
       }
     }
   });
@@ -397,12 +446,27 @@ async function restoreSessions() {
 
 app.get("/health", async (_req, res) => {
   await ensureDataDir();
-  res.json({ ok: true, service: "biz-wa-hub-baileys", sessions: sessions.size, messageSync: Boolean(WHATSAPP_WEBHOOK_URL), baileysVersionFloor: "6.7.22" });
+  res.json({
+    ok: true,
+    service: "biz-wa-hub-baileys",
+    sessions: sessions.size,
+    messageSync: Boolean(WHATSAPP_WEBHOOK_URL),
+    baileysVersionFloor: "6.7.22",
+    qrRecovery: true,
+  });
 });
 
 app.get("/health/secure", async (_req, res) => {
   await ensureDataDir();
-  res.json({ ok: true, authenticated: true, service: "biz-wa-hub-baileys", sessions: sessions.size, messageSync: Boolean(WHATSAPP_WEBHOOK_URL), baileysVersionFloor: "6.7.22" });
+  res.json({
+    ok: true,
+    authenticated: true,
+    service: "biz-wa-hub-baileys",
+    sessions: sessions.size,
+    messageSync: Boolean(WHATSAPP_WEBHOOK_URL),
+    baileysVersionFloor: "6.7.22",
+    qrRecovery: true,
+  });
 });
 
 app.post("/whatsapp/", async (req, res) => {
@@ -426,8 +490,10 @@ app.post("/whatsappsession/:id", async (req, res) => {
   try {
     const id = sanitizeId(req.params.id);
     if (!(await readMeta(id))) return res.status(404).json({ error: "session_not_found" });
-    await startSession(id);
-    res.status(202).json({ success: true, id, status: "OPENING" });
+    const existingMeta = await readMeta(id);
+    const forceRestart = existingMeta?.status === "OPENING" && !existingMeta?.qrcode;
+    await startSession(id, { forceRestart });
+    res.status(202).json({ success: true, id, status: "OPENING", forceRestart });
   } catch (error) {
     logger.error({ err: error, id: req.params.id }, "Erro ao iniciar sessão");
     res.status(500).json({ error: "session_start_failed" });
@@ -438,6 +504,17 @@ app.get("/whatsapp/:id", async (req, res) => {
   const id = sanitizeId(req.params.id);
   const meta = await readMeta(id);
   if (!meta) return res.status(404).json({ error: "session_not_found" });
+
+  if (meta.status === "OPENING") {
+    const updatedAt = meta.updatedAt ? new Date(meta.updatedAt).getTime() : 0;
+    if (updatedAt && Date.now() - updatedAt >= QR_GENERATION_TIMEOUT_MS) {
+      logger.warn({ sessionId: id }, "Consulta detectou sessão presa em OPENING; forçando recuperação");
+      startSession(id, { forceRestart: true }).catch((error) =>
+        logger.error({ err: error, sessionId: id }, "Falha ao recuperar sessão presa em OPENING"),
+      );
+    }
+  }
+
   const expiresAt = meta.qrExpiresAt ? new Date(meta.qrExpiresAt).getTime() : 0;
   if (meta.qrcode && expiresAt && expiresAt <= Date.now()) {
     const expired = await writeMeta(id, {
@@ -461,7 +538,7 @@ app.delete("/whatsappsession/:id", async (req, res) => {
   if (!meta) return res.status(404).json({ error: "session_not_found" });
 
   const entry = sessions.get(id);
-  if (entry?.reconnectTimer) clearTimeout(entry.reconnectTimer);
+  clearSessionTimers(entry);
   if (entry?.socket) {
     try {
       await entry.socket.logout();
@@ -476,8 +553,6 @@ app.delete("/whatsappsession/:id", async (req, res) => {
 
 app.delete("/whatsapp/:id", async (req, res) => {
   const id = sanitizeId(req.params.id);
-  const entry = sessions.get(id);
-  if (entry?.reconnectTimer) clearTimeout(entry.reconnectTimer);
   await closeSocket(id);
   await fs.rm(sessionDir(id), { recursive: true, force: true });
   res.json({ success: true });
@@ -524,7 +599,12 @@ app.use((err, _req, res, _next) => {
 
 await ensureDataDir();
 app.listen(PORT, "0.0.0.0", () => {
-  logger.info({ port: PORT, dataDir: DATA_DIR, messageSync: Boolean(WHATSAPP_WEBHOOK_URL) }, "Baileys service iniciado");
+  logger.info({
+    port: PORT,
+    dataDir: DATA_DIR,
+    messageSync: Boolean(WHATSAPP_WEBHOOK_URL),
+    qrGenerationTimeoutMs: QR_GENERATION_TIMEOUT_MS,
+  }, "Baileys service iniciado");
   restoreSessions().catch((error) => logger.error({ err: error }, "Falha ao restaurar sessões"));
   flushWebhookQueue().catch((error) => logger.warn({ err: error }, "Falha ao recuperar webhooks pendentes"));
   setInterval(() => {
