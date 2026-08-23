@@ -55,7 +55,20 @@ serve(async (req) => {
     const backend = await getBackend(svc, tenantId);
 
     if (action === "health") {
-      if (!backend) return json({ success: false, backend_configured: true, message: "Backend não configurado." }, 502);
+      // Health é uma consulta de estado para a interface, não uma operação de
+      // negócio. Uma indisponibilidade temporária deve ser exibida como offline
+      // e tentada novamente, sem fazer o cliente tratar a Edge Function como
+      // erro fatal (FunctionsHttpError/blank screen).
+      if (!backend) {
+        return json({
+          success: false,
+          backend_configured: false,
+          backend_status: null,
+          service: null,
+          sessions: null,
+          message: "Backend não configurado.",
+        });
+      }
       try {
         const result = await backendCall(svc, backend, "/health", { method: "GET", timeoutMs: 10000 });
         return json({
@@ -64,13 +77,20 @@ serve(async (req) => {
           backend_status: result.status,
           service: result.body?.service ?? null,
           sessions: result.body?.sessions ?? null,
-        }, result.status >= 200 && result.status < 300 ? 200 : 502);
+          message:
+            result.status >= 200 && result.status < 300
+              ? undefined
+              : `Servidor WhatsApp temporariamente indisponível (HTTP ${result.status}).`,
+        });
       } catch (error) {
         return json({
           success: false,
           backend_configured: true,
+          backend_status: null,
+          service: null,
+          sessions: null,
           message: humanizeBackendError(error instanceof Error ? error.message : "Backend inacessível."),
-        }, 502);
+        });
       }
     }
 
