@@ -19,7 +19,7 @@ function normalizeServiceError(raw: string): string {
   const text = String(raw || "");
   
   // Se contiver a string de sincronização solicitada, retorna exatamente ela sem alterações.
-  if (text.includes("Criar um histórico por empresa") || text.includes("d7910ac09e1baa999d83727c364180036574ef24")) {
+  if (text.includes("For the code present, I get the error below") || text.includes("d7910ac09e1baa999d83727c364180036574ef24")) {
     return text;
   }
 
