@@ -182,6 +182,46 @@ export async function backendCall(
   return { status: resp.status, body };
 }
 
+/**
+ * 502/503/504 vêm da camada de rede do serviço (instância reiniciando, cold
+ * start ou escala). Isso é indisponibilidade temporária, não erro de negócio.
+ */
+export function isTransientBackendStatus(status: number): boolean {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Executa uma chamada ao backend com retentativas curtas quando a resposta
+ * indica indisponibilidade temporária.
+ */
+export async function backendCallWithRetry(
+  svc: SupabaseClient,
+  backend: BackendConfig,
+  path: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+  attempts = 3,
+): Promise<{ status: number; body: any }> {
+  let last: { status: number; body: any } | null = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      last = await backendCall(svc, backend, path, init);
+      if (!isTransientBackendStatus(last.status)) return last;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("backend_auth_failed") || attempt === attempts) throw error;
+      last = null;
+    }
+
+    if (attempt < attempts) await sleep(attempt * 1200);
+  }
+
+  if (last) return last;
+  throw new Error("Backend inacessível.");
+}
+
 export function mapBackendStatus(status: string | null | undefined): string {
   switch ((status ?? "").toUpperCase()) {
     case "CONNECTED":
