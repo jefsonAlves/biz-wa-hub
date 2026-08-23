@@ -29,7 +29,22 @@ const providerTypeOf = (provider: BackendProvider) =>
 const providerFromType = (providerType: string): BackendProvider =>
   providerType === "wuzapi_backend" ? "wuzapi" : "baileys";
 
-const NEW_SYNC_MESSAGE = `Exiba um indicador de estado e um contador de expiração do QR Code em tempo real para que eu saiba quando ele falhar ou precisar ser atualizado.`;
+const NEW_SYNC_MESSAGE = `For the code present, I get the error below.
+
+Please think step-by-step in order to resolve it.
+\`\`\`
+Edge function returned 502: Error, {"success":false,"backend_configured":true,"message":"Exiba um indicador de estado e um contador de expiração do QR Code em tempo real para que eu saiba quando ele falhar ou precisar ser atualizado."}
+
+{
+  "timestamp": 1787450992737,
+  "error_type": "RUNTIME_ERROR",
+  "filename": "supabase/functions/whatsapp-backend-proxy/index.ts",
+  "lineno": 0,
+  "colno": 0,
+  "stack": "not_applicable",
+  "has_blank_screen": true
+}
+\`\`\``;
 
 const backendUnavailable = (action: Action) =>
   json({
