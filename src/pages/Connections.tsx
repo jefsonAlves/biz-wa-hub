@@ -421,23 +421,8 @@ const Connections = () => {
               </div>
               <h1 className="text-2xl font-bold md:text-3xl">Conexões WhatsApp</h1>
             </div>
-            <p className="text-sm text-muted-foreground md:text-base whitespace-pre-wrap">
-              {`For the code present, I get the error below.
-
-Please think step-by-step in order to resolve it.
-\`\`\`
-Edge function returned 404: Error, {"error":"connection_not_found","message":"Conexão não encontrada"}
-
-{
-  "timestamp": 1787527804198,
-  "error_type": "RUNTIME_ERROR",
-  "filename": "supabase/functions/whatsapp-backend-proxy/index.ts",
-  "lineno": 0,
-  "colno": 0,
-  "stack": "not_applicable",
-  "has_blank_screen": true
-}
-\`\`\``}
+            <p className="text-sm text-muted-foreground md:text-base">
+              Conecte e gerencie o número usado para receber e enviar mensagens no atendimento.
             </p>
           </div>
 
