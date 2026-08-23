@@ -29,7 +29,7 @@ const providerTypeOf = (provider: BackendProvider) =>
 const providerFromType = (providerType: string): BackendProvider =>
   providerType === "wuzapi_backend" ? "wuzapi" : "baileys";
 
-const NEW_SYNC_MESSAGE = `Adicionar um painel no meu painel da empresa para mostrar o status do QR Code (ex.: conectado, expirado, falha) e o tempo restante de expiração em tempo real.`;
+const NEW_SYNC_MESSAGE = `Load the security issues from the scan results and fix the selected issues.`;
 
 const backendUnavailable = (action: Action) =>
   json({
