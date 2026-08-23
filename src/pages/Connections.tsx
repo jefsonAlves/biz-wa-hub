@@ -101,6 +101,7 @@ const Connections = () => {
   const [deleteTarget, setDeleteTarget] = useState<SafeConnection | null>(null);
   const [backendReady, setBackendReady] = useState(false);
   const [qrSecondsLeft, setQrSecondsLeft] = useState<number | null>(null);
+  const [qrImageFailed, setQrImageFailed] = useState(false);
   const previousStatuses = useRef<Record<string, string>>({});
 
   useEffect(() => {
@@ -130,6 +131,10 @@ const Connections = () => {
 
   const qrDisplaySource =
     toQrImageSource(qrConnection?.qr_code ?? null) ?? toQrGeneratorUrl(qrConnection?.qr_code ?? null);
+
+  useEffect(() => {
+    setQrImageFailed(false);
+  }, [qrDisplaySource]);
 
   useEffect(() => {
     if (!qrConnectionId || !qrConnection?.qr_expires_at) {
@@ -645,13 +650,27 @@ const Connections = () => {
                   : `QR Code ativo${qrSecondsLeft !== null ? ` • expira em ${qrSecondsLeft}s` : ""}`
                 : "Aguardando o servidor gerar o QR Code"}
             </Badge>
-            {qrDisplaySource ? (
+            {qrDisplaySource && !qrImageFailed ? (
               <div className="rounded-2xl border bg-white p-4 shadow-sm">
                 <img
                   src={qrDisplaySource}
                   alt="QR Code para conectar o WhatsApp"
                   className="h-72 w-72 object-contain"
+                  onError={() => setQrImageFailed(true)}
                 />
+              </div>
+            ) : qrImageFailed ? (
+              <div className="flex h-72 w-72 flex-col items-center justify-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-6">
+                <AlertCircle className="h-8 w-8 text-destructive" />
+                <p className="text-sm font-medium">Não foi possível exibir o QR Code</p>
+                <p className="text-xs text-muted-foreground">
+                  Gere um novo código. O servidor agora cria a imagem internamente, sem depender de sites externos.
+                </p>
+                {qrConnectionId && (
+                  <Button size="sm" onClick={() => connect(qrConnectionId)}>
+                    <RefreshCw className="mr-2 h-4 w-4" /> Gerar novamente
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="flex h-72 w-72 flex-col items-center justify-center gap-3 rounded-2xl border bg-muted/20">
