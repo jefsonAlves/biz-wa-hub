@@ -27,6 +27,7 @@ app.use(express.json({ limit: "2mb" }));
 
 const sessions = new Map();
 const recentSentIds = new Map();
+const recentMessages = new Map();
 
 const sanitizeId = (value) => String(value || "").replace(/[^a-zA-Z0-9_-]/g, "");
 const sessionDir = (id) => path.join(DATA_DIR, sanitizeId(id));
@@ -143,6 +144,35 @@ function wasSentByApi(messageId) {
   return expiresAt > Date.now();
 }
 
+function messageCacheKey(key) {
+  if (!key?.remoteJid || !key?.id) return null;
+  return `${key.remoteJid}:${key.id}`;
+}
+
+function cacheMessage(msg) {
+  const key = messageCacheKey(msg?.key);
+  if (!key || !msg?.message) return;
+  recentMessages.set(key, { message: msg.message, expiresAt: Date.now() + 30 * 60 * 1000 });
+  if (recentMessages.size > 2500) {
+    const now = Date.now();
+    for (const [cacheKey, value] of recentMessages) {
+      if (value.expiresAt <= now || recentMessages.size > 2000) recentMessages.delete(cacheKey);
+    }
+  }
+}
+
+async function getCachedMessage(key) {
+  const cacheKey = messageCacheKey(key);
+  if (!cacheKey) return undefined;
+  const cached = recentMessages.get(cacheKey);
+  if (!cached) return undefined;
+  if (cached.expiresAt <= Date.now()) {
+    recentMessages.delete(cacheKey);
+    return undefined;
+  }
+  return cached.message;
+}
+
 function unwrapMessage(message) {
   let current = message || null;
   for (let i = 0; current && i < 5; i += 1) {
@@ -200,6 +230,7 @@ function timestampToIso(value) {
 
 async function dispatchMessageToPlatform(sessionId, msg, source = "live") {
   if (!WHATSAPP_WEBHOOK_URL || !msg?.key?.remoteJid || !msg?.message) return;
+  cacheMessage(msg);
   const chatId = String(msg.key.remoteJid);
   if (chatId === "status@broadcast" || chatId.endsWith("@broadcast")) return;
 
@@ -228,6 +259,8 @@ async function dispatchMessageToPlatform(sessionId, msg, source = "live") {
     if (!result.ok) {
       await queueWebhookPayload(payload);
       logger.warn({ sessionId, status: result.status, detail: result.detail.slice(0, 500) }, "Webhook recusou mensagem; evento preservado para nova tentativa");
+    } else {
+      logger.info({ sessionId, messageId, chatId, source }, "Mensagem encaminhada ao Inbox");
     }
   } catch (error) {
     await queueWebhookPayload(payload).catch(() => {});
@@ -274,10 +307,12 @@ async function startSession(rawId) {
     auth: state,
     printQRInTerminal: false,
     logger: logger.child({ sessionId: id }),
-    browser: Browsers.ubuntu("Chrome"),
+    browser: Browsers.macOS("Desktop"),
     markOnlineOnConnect: false,
+    fireInitQueries: true,
     syncFullHistory: true,
     shouldSyncHistoryMessage: () => true,
+    getMessage: getCachedMessage,
   });
 
   const entry = { id, socket, reconnectTimer: null };
@@ -285,12 +320,16 @@ async function startSession(rawId) {
 
   socket.ev.on("creds.update", saveCreds);
 
-  socket.ev.on("messages.upsert", ({ messages }) => {
-    dispatchMany(id, messages, "live").catch((error) => logger.warn({ err: error, sessionId: id }, "Falha ao processar mensagens"));
+  socket.ev.on("messages.upsert", (event) => {
+    logger.info({ sessionId: id, count: event.messages?.length || 0, type: event.type }, "messages.upsert recebido do WhatsApp");
+    for (const msg of event.messages || []) cacheMessage(msg);
+    dispatchMany(id, event.messages, "live").catch((error) => logger.warn({ err: error, sessionId: id }, "Falha ao processar mensagens"));
   });
 
-  socket.ev.on("messaging-history.set", ({ messages }) => {
-    dispatchMany(id, messages, "history").catch((error) => logger.warn({ err: error, sessionId: id }, "Falha ao importar histórico"));
+  socket.ev.on("messaging-history.set", (event) => {
+    logger.info({ sessionId: id, count: event.messages?.length || 0, isLatest: event.isLatest }, "messaging-history.set recebido do WhatsApp");
+    for (const msg of event.messages || []) cacheMessage(msg);
+    dispatchMany(id, event.messages, "history").catch((error) => logger.warn({ err: error, sessionId: id }, "Falha ao importar histórico"));
   });
 
   socket.ev.on("connection.update", async (update) => {
@@ -315,7 +354,7 @@ async function startSession(rawId) {
         connectionError: null,
         lastConnectedAt: new Date().toISOString(),
       });
-      logger.info({ sessionId: id, number }, "WhatsApp conectado");
+      logger.info({ sessionId: id, number, webhookConfigured: Boolean(WHATSAPP_WEBHOOK_URL) }, "WhatsApp conectado");
     }
 
     if (connection === "close") {
@@ -358,12 +397,12 @@ async function restoreSessions() {
 
 app.get("/health", async (_req, res) => {
   await ensureDataDir();
-  res.json({ ok: true, service: "biz-wa-hub-baileys", sessions: sessions.size, messageSync: Boolean(WHATSAPP_WEBHOOK_URL) });
+  res.json({ ok: true, service: "biz-wa-hub-baileys", sessions: sessions.size, messageSync: Boolean(WHATSAPP_WEBHOOK_URL), baileysVersionFloor: "6.7.22" });
 });
 
 app.get("/health/secure", async (_req, res) => {
   await ensureDataDir();
-  res.json({ ok: true, authenticated: true, service: "biz-wa-hub-baileys", sessions: sessions.size, messageSync: Boolean(WHATSAPP_WEBHOOK_URL) });
+  res.json({ ok: true, authenticated: true, service: "biz-wa-hub-baileys", sessions: sessions.size, messageSync: Boolean(WHATSAPP_WEBHOOK_URL), baileysVersionFloor: "6.7.22" });
 });
 
 app.post("/whatsapp/", async (req, res) => {
@@ -468,6 +507,7 @@ app.post("/api/send", async (req, res) => {
 
     const jid = rawJid.includes("@") ? rawJid : `${number}@s.whatsapp.net`;
     const result = await entry.socket.sendMessage(jid, { text: body });
+    cacheMessage(result);
     const messageId = result?.key?.id || null;
     rememberSentMessage(messageId);
     res.json({ success: true, messageId, sessionId, jid });
