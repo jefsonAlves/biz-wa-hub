@@ -373,53 +373,7 @@ const Connections = () => {
               <h1 className="text-2xl font-bold md:text-3xl">Conexões WhatsApp</h1>
             </div>
             <p className="text-sm text-muted-foreground md:text-base">
-              Sincronize o projeto com a branch main do GitHub.
-
-              Commit obrigatório:
-
-              44e4b2209651b57ffd006335677f0213ca6830c3
-
-              Depois faça redeploy da Edge Function:
-
-              whatsapp-backend-proxy
-
-              Não reescreva o código manualmente.
-
-              A nova versão trata automaticamente:
-
-              404 session_not_found
-
-              Quando o ID salvo no Supabase não existir mais no backend Baileys, a Edge Function deve:
-
-              1. remover provider_instance_id e provider_session_id antigos;
-
-              2. criar uma nova sessão no backend;
-
-              3. salvar o novo ID;
-
-              4. iniciar a sessão;
-
-              5. retornar status connecting;
-
-              6. permitir que o frontend mostre um novo QR Code.
-
-              Não transformar esse caso novamente em erro 502.
-
-              Depois do deploy, teste:
-
-              1. clicar em Atualizar;
-
-              2. se a sessão antiga não existir, aguardar recuperação automática;
-
-              3. clicar em Conectar WhatsApp caso necessário;
-
-              4. exibir o novo QR;
-
-              5. escanear;
-
-              6. confirmar status connected.
-
-              Informe apenas qualquer erro novo que permanecer.
+              verifique o que falta para carregar as mensagens do whatsapp pois está conectado mais não mostra as mensagens ao encontrar o erro corrija7
             </p>
           </div>
 
