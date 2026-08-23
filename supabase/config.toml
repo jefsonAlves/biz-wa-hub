@@ -2,3 +2,6 @@ project_id = "uyaapytraftbnfwhxajr"
 
 [functions.whatsapp-baileys-webhook]
 verify_jwt = false
+
+[functions.whatsapp-start-conversation]
+verify_jwt = true

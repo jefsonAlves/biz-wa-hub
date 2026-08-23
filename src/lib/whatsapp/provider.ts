@@ -169,6 +169,23 @@ export async function sendMessage(params: {
   return data as { success: boolean; message_id?: string; warning?: string };
 }
 
+export async function startConversation(params: {
+  phone: string;
+  name?: string;
+  connectionId?: string | null;
+}) {
+  const { data, error } = await supabase.functions.invoke("whatsapp-start-conversation", {
+    body: {
+      phone: params.phone,
+      name: params.name ?? "",
+      connection_id: params.connectionId ?? null,
+    },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data as { success: boolean; conversation_id: string; connection_id: string };
+}
+
 /** Funções abaixo são exclusivamente de automação n8n opcional. */
 export async function testN8nIntegration(params?: {
   tenant_id?: string | null;

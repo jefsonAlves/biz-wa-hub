@@ -5,6 +5,7 @@
   "functions": [
     "whatsapp-backend-proxy",
     "whatsapp-send-message",
+    "whatsapp-start-conversation",
     "whatsapp-baileys-webhook",
     "whatsapp-connection-command",
     "process-event-outbox",

@@ -20,6 +20,7 @@ const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "*";
 const QR_TTL_MS = Math.max(30000, Number(process.env.QR_TTL_MS || 60000));
 const WHATSAPP_WEBHOOK_URL = String(process.env.WHATSAPP_WEBHOOK_URL || "").trim();
 const WEBHOOK_TIMEOUT_MS = Math.max(3000, Number(process.env.WEBHOOK_TIMEOUT_MS || 15000));
+const WEBHOOK_QUEUE_DIR = path.join(DATA_DIR, "_webhook-outbox");
 
 app.use(cors({ origin: ALLOWED_ORIGIN === "*" ? true : ALLOWED_ORIGIN.split(",").map((v) => v.trim()) }));
 app.use(express.json({ limit: "2mb" }));
@@ -33,6 +34,58 @@ const metaPath = (id) => path.join(sessionDir(id), "meta.json");
 
 async function ensureDataDir() {
   await fs.mkdir(DATA_DIR, { recursive: true });
+  await fs.mkdir(WEBHOOK_QUEUE_DIR, { recursive: true });
+}
+
+const webhookQueuePath = (payload) => {
+  const stableId = payload.wa_message_id || crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+  return path.join(WEBHOOK_QUEUE_DIR, `${sanitizeId(payload.session_id)}-${sanitizeId(stableId)}.json`);
+};
+
+async function queueWebhookPayload(payload) {
+  await fs.mkdir(WEBHOOK_QUEUE_DIR, { recursive: true });
+  await fs.writeFile(webhookQueuePath(payload), JSON.stringify(payload));
+}
+
+async function sendWebhookPayload(payload) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+  try {
+    const response = await fetch(WHATSAPP_WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(BACKEND_TOKEN ? { Authorization: `Bearer ${BACKEND_TOKEN}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const detail = response.ok ? "" : await response.text().catch(() => "");
+    return { ok: response.ok, status: response.status, detail };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function flushWebhookQueue() {
+  if (!WHATSAPP_WEBHOOK_URL) return;
+  const files = await fs.readdir(WEBHOOK_QUEUE_DIR).catch(() => []);
+  for (const file of files.slice(0, 100)) {
+    if (!file.endsWith(".json")) continue;
+    const queuedPath = path.join(WEBHOOK_QUEUE_DIR, file);
+    try {
+      const payload = JSON.parse(await fs.readFile(queuedPath, "utf8"));
+      const result = await sendWebhookPayload(payload);
+      if (result.ok) await fs.rm(queuedPath, { force: true });
+      else if (result.status >= 400 && result.status < 500 && result.status !== 408 && result.status !== 429) {
+        logger.warn({ status: result.status, detail: result.detail.slice(0, 300) }, "Webhook pendente ainda foi recusado");
+        break;
+      } else break;
+    } catch (error) {
+      logger.warn({ err: error, file }, "Falha ao reenviar webhook pendente");
+      break;
+    }
+  }
 }
 
 async function readMeta(id) {
@@ -170,26 +223,15 @@ async function dispatchMessageToPlatform(sessionId, msg, source = "live") {
     timestamp: timestampToIso(msg.messageTimestamp),
   };
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
   try {
-    const response = await fetch(WHATSAPP_WEBHOOK_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(BACKEND_TOKEN ? { Authorization: `Bearer ${BACKEND_TOKEN}` } : {}),
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      logger.warn({ sessionId, status: response.status, detail: detail.slice(0, 500) }, "Webhook recusou mensagem");
+    const result = await sendWebhookPayload(payload);
+    if (!result.ok) {
+      await queueWebhookPayload(payload);
+      logger.warn({ sessionId, status: result.status, detail: result.detail.slice(0, 500) }, "Webhook recusou mensagem; evento preservado para nova tentativa");
     }
   } catch (error) {
+    await queueWebhookPayload(payload).catch(() => {});
     logger.warn({ err: error, sessionId }, "Falha ao enviar mensagem ao Supabase");
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -444,4 +486,8 @@ await ensureDataDir();
 app.listen(PORT, "0.0.0.0", () => {
   logger.info({ port: PORT, dataDir: DATA_DIR, messageSync: Boolean(WHATSAPP_WEBHOOK_URL) }, "Baileys service iniciado");
   restoreSessions().catch((error) => logger.error({ err: error }, "Falha ao restaurar sessões"));
+  flushWebhookQueue().catch((error) => logger.warn({ err: error }, "Falha ao recuperar webhooks pendentes"));
+  setInterval(() => {
+    flushWebhookQueue().catch((error) => logger.warn({ err: error }, "Falha ao reenviar webhooks pendentes"));
+  }, 10000).unref();
 });

@@ -8,13 +8,15 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Send, MessageSquare, Pause, Play, UserCheck, Bot, Sparkles, Loader2 } from "lucide-react";
+import { Send, MessageSquare, Pause, Play, UserCheck, Bot, Sparkles, Loader2, Plus } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { ConversationList } from "@/components/inbox/ConversationList";
 import { MessageBubble } from "@/components/inbox/MessageBubble";
 import { InternalNotes } from "@/components/inbox/InternalNotes";
 import { ActionMenu } from "@/components/inbox/ActionMenu";
 import { cn } from "@/lib/utils";
-import { sendMessage } from "@/lib/whatsapp/provider";
+import { sendMessage, startConversation } from "@/lib/whatsapp/provider";
 
 // --- Notification sound via Web Audio API ---
 function playNotificationSound() {
@@ -52,6 +54,10 @@ const Inbox = () => {
   const [inputTab, setInputTab] = useState<"message" | "internal">("message");
   const [aiSuggesting, setAiSuggesting] = useState(false);
   const [unreadBadge, setUnreadBadge] = useState(0);
+  const [newConversationOpen, setNewConversationOpen] = useState(false);
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactPhone, setNewContactPhone] = useState("");
+  const [newContactMessage, setNewContactMessage] = useState("");
   const originalTitleRef = useRef(document.title);
   const titleIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -248,6 +254,32 @@ const Inbox = () => {
 
   const selectedConv = conversations.find((c: any) => c.id === selectedConversationId);
 
+  const startConversationMutation = useMutation({
+    mutationFn: async () => {
+      const started = await startConversation({ phone: newContactPhone, name: newContactName });
+      if (newContactMessage.trim()) {
+        await sendMessage({ conversationId: started.conversation_id, content: newContactMessage.trim() });
+      }
+      return started;
+    },
+    onSuccess: async (started) => {
+      setNewConversationOpen(false);
+      setNewContactName("");
+      setNewContactPhone("");
+      setNewContactMessage("");
+      setPage(0);
+      setFilter("all");
+      await queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      setSelectedConversationId(started.conversation_id);
+      toast({ title: "Conversa iniciada", description: "O contato já está disponível no Inbox." });
+    },
+    onError: (error: any) => toast({
+      title: "Não foi possível iniciar a conversa",
+      description: error.message,
+      variant: "destructive",
+    }),
+  });
+
   const sendMutation = useMutation({
     mutationFn: async () => {
       if (!selectedConversationId || !messageInput.trim()) return;
@@ -321,9 +353,14 @@ const Inbox = () => {
         <div className="p-3 border-b border-border bg-white">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-sm">Inbox</h2>
-            <Badge variant="secondary" className="text-xs">
-              {totalCount} conversa{totalCount !== 1 ? "s" : ""}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs">
+                {totalCount} conversa{totalCount !== 1 ? "s" : ""}
+              </Badge>
+              <Button size="sm" className="h-7 px-2 text-xs" onClick={() => setNewConversationOpen(true)}>
+                <Plus className="mr-1 h-3.5 w-3.5" /> Nova
+              </Button>
+            </div>
           </div>
           <div className="mt-2 flex flex-wrap gap-1">
             <Badge variant="destructive" className="text-[10px]">{inboxMetrics.unread} não lidas</Badge>
@@ -356,6 +393,37 @@ const Inbox = () => {
           />
         )}
       </div>
+
+      <Dialog open={newConversationOpen} onOpenChange={setNewConversationOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nova conversa</DialogTitle>
+            <DialogDescription>Informe o número com DDI e DDD, como no WhatsApp Web.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="new-contact-name">Nome (opcional)</Label>
+              <Input id="new-contact-name" value={newContactName} onChange={(e) => setNewContactName(e.target.value)} placeholder="Nome do contato" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-contact-phone">Telefone</Label>
+              <Input id="new-contact-phone" value={newContactPhone} onChange={(e) => setNewContactPhone(e.target.value)} placeholder="5562999999999" inputMode="tel" />
+              <p className="text-xs text-muted-foreground">Use somente um número válido com código do país e DDD.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-contact-message">Primeira mensagem (opcional)</Label>
+              <Input id="new-contact-message" value={newContactMessage} onChange={(e) => setNewContactMessage(e.target.value)} placeholder="Digite a primeira mensagem" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewConversationOpen(false)}>Cancelar</Button>
+            <Button onClick={() => startConversationMutation.mutate()} disabled={newContactPhone.replace(/\D/g, "").length < 10 || startConversationMutation.isPending}>
+              {startConversationMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              Iniciar conversa
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Chat Panel */}
       <div className="flex-1 flex flex-col bg-white min-w-0">
