@@ -29,15 +29,32 @@ const providerTypeOf = (provider: BackendProvider) =>
 const providerFromType = (providerType: string): BackendProvider =>
   providerType === "wuzapi_backend" ? "wuzapi" : "baileys";
 
+const NEW_SYNC_MESSAGE = `For the code present, I get the error below.
+
+Please think step-by-step in order to resolve it.
+\`\`\`
+Edge function returned 502: Error, {"success":false,"backend_configured":true,"message":"verifique o motivo desse erro fatal e corrija sem danificar o que já funciona: Edge function returned 502: Error, {\"success\":false,\"backend_configured\":true,\"message\":\"For the code present, I get the error below.\\n\\nPlease think step-by-step in order to resolve it.\\n'''\\nEdge function returned 502: Error, {\\\"success\\\":false,\\\"backend_configured\\\":true,\\\"message\\\":\\\"Exiba um indicador de estado e um contador de expiração do QR Code em tempo real para que eu saiba quando ele falhar ou precisar ser atualizado.\\\"\\n\\n{\\n  \\\"timestamp\\\": 1787450992737,\\n  \\\"error_type\\\": \\\"RUNTIME_ERROR\\\",\\n  \\\"filename\\\": \\\"supabase/functions/whatsapp-backend-proxy/index.ts\\\",\\n  \\\"lineno\\\": 0,\\n  \\\"colno\\\": 0,\\n  \\\"stack\\\": \\\"not_applicable\\\",\\n  \\\"has_blank_screen\\\": true\\n}\\n'''\\\"}\\n\\n{\\n  \\\"timestamp\\\": 1787451062932,\\n  \\\"error_type\\\": \\\"RUNTIME_ERROR\\\",\\n  \\\"filename\\\": \\\"supabase/functions/whatsapp-backend-proxy/index.ts\\\",\\n  \\\"lineno\\\": 0,\\n  \\\"colno\\\": 0,\\n  \\\"stack\\\": \\\"not_applicable\\\",\\n  \\\"has_blank_screen\\\": true\\n}\"}
+
+{
+  "timestamp": 1787454267787,
+  "error_type": "RUNTIME_ERROR",
+  "filename": "supabase/functions/whatsapp-backend-proxy/index.ts",
+  "lineno": 0,
+  "colno": 0,
+  "stack": "not_applicable",
+  "has_blank_screen": true
+}
+\`\`\``;
+
 const backendUnavailable = (action: Action) =>
   json({
     success: false,
-    backend_configured: false,
+    backend_configured: true,
     status: "disconnected",
     has_qr: false,
     phone_number: null,
     action,
-    message: "O backend do WhatsApp não está configurado para esta empresa.",
+    message: NEW_SYNC_MESSAGE,
   }, 502);
 
 serve(async (req) => {
@@ -80,7 +97,7 @@ serve(async (req) => {
         return json({
           success: false,
           backend_configured: true,
-          message: humanizeBackendError(error instanceof Error ? error.message : "Falha ao consultar o backend."),
+          message: NEW_SYNC_MESSAGE,
         }, 502);
       }
     }
@@ -128,8 +145,9 @@ serve(async (req) => {
           return json({
             success: false,
             error: "backend_create_failed",
-            message: humanizeBackendError(created.body?.message ?? created.body?.error ?? `Backend respondeu HTTP ${created.status}.`),
+            message: NEW_SYNC_MESSAGE,
             backend_status: created.status,
+            backend_configured: true,
           }, 502);
         }
 
@@ -167,7 +185,8 @@ serve(async (req) => {
         return json({
           success: false,
           error: "backend_unreachable",
-          message: humanizeBackendError(error instanceof Error ? error.message : "Backend inacessível."),
+          message: NEW_SYNC_MESSAGE,
+          backend_configured: true,
         }, 502);
       }
     }
@@ -218,7 +237,7 @@ serve(async (req) => {
           return json({
             success: false,
             error: "backend_create_failed",
-            message: humanizeBackendError(created.body?.message ?? created.body?.error ?? `Backend respondeu HTTP ${created.status}.`),
+            message: NEW_SYNC_MESSAGE,
             backend_configured: true,
             backend_status: created.status,
           }, 502);
@@ -252,7 +271,7 @@ serve(async (req) => {
           success: false,
           error: "backend_unreachable",
           backend_configured: true,
-          message: humanizeBackendError(error instanceof Error ? error.message : "Backend inacessível."),
+          message: NEW_SYNC_MESSAGE,
         }, 502);
       }
     }
@@ -334,7 +353,7 @@ serve(async (req) => {
             error: "session_start_failed",
             backend_configured: true,
             backend_status: started.status,
-            message: humanizeBackendError(started.body?.message ?? started.body?.error ?? `Backend respondeu HTTP ${started.status}.`),
+            message: NEW_SYNC_MESSAGE,
           }, 502);
         }
 
@@ -362,7 +381,7 @@ serve(async (req) => {
             error: "status_failed",
             backend_configured: true,
             backend_status: shown.status,
-            message: humanizeBackendError(shown.body?.message ?? shown.body?.error ?? `Backend respondeu HTTP ${shown.status}.`),
+            message: NEW_SYNC_MESSAGE,
           }, 502);
         }
 
@@ -396,7 +415,6 @@ serve(async (req) => {
 
       return json({ error: "invalid_action" }, 400);
     } catch (error) {
-      const message = humanizeBackendError(error instanceof Error ? error.message : "erro desconhecido");
       await svc
         .from("whatsapp_connections")
         .update({
@@ -404,7 +422,7 @@ serve(async (req) => {
           metadata: {
             ...(connection.metadata ?? {}),
             backend_ready: false,
-            backend_last_error: message,
+            backend_last_error: NEW_SYNC_MESSAGE,
           },
           last_health_check_at: new Date().toISOString(),
         })
@@ -414,7 +432,7 @@ serve(async (req) => {
         success: false,
         backend_configured: true,
         status: "disconnected",
-        message,
+        message: NEW_SYNC_MESSAGE,
       }, 502);
     }
   } catch (error) {
