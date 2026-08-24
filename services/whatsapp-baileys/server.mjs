@@ -207,6 +207,28 @@ async function hasRegisteredCredentials(id) {
   }
 }
 
+async function resetUnregisteredAuth(id) {
+  if (await hasRegisteredCredentials(id)) return false;
+
+  const meta = await readMeta(id);
+  await closeSocket(id);
+  const entries = await fs.readdir(sessionDir(id), { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (entry.name === "meta.json") continue;
+    await fs.rm(path.join(sessionDir(id), entry.name), { recursive: true, force: true });
+  }
+  if (meta) {
+    await writeMeta(id, {
+      status: "DISCONNECTED",
+      qrcode: null,
+      qrExpiresAt: null,
+      connectionError: null,
+    });
+  }
+  logger.info({ sessionId: id }, "Credenciais incompletas removidas antes de gerar novo QR");
+  return true;
+}
+
 async function cleanUnregisteredSessions() {
   const dirs = await fs.readdir(DATA_DIR, { withFileTypes: true }).catch(() => []);
   for (const dir of dirs) {
@@ -446,6 +468,8 @@ async function startSession(rawId, options = {}) {
   const id = sanitizeId(rawId);
   if (!id) throw new Error("invalid_session_id");
   const forceRestart = options.forceRestart === true;
+
+  if (forceRestart) await resetUnregisteredAuth(id);
 
   const existing = sessions.get(id);
   if (existing?.socket) {
@@ -760,9 +784,12 @@ app.post("/whatsappsession/:id", async (req, res) => {
     const id = sanitizeId(req.params.id);
     if (!(await readMeta(id))) return res.status(404).json({ error: "session_not_found" });
     const existingMeta = await readMeta(id);
-    const forceRestart = existingMeta?.status === "OPENING" && !existingMeta?.qrcode;
+    const registered = await hasRegisteredCredentials(id);
+    // Um novo clique em Conectar deve sempre produzir um pareamento limpo se
+    // a tentativa anterior não chegou a registrar a conta.
+    const forceRestart = !registered || (existingMeta?.status === "OPENING" && !existingMeta?.qrcode);
     await startSession(id, { forceRestart });
-    res.status(202).json({ success: true, id, status: "OPENING", forceRestart });
+    res.status(202).json({ success: true, id, status: "OPENING", forceRestart, authReset: !registered });
   } catch (error) {
     logger.error({ err: error, id: req.params.id }, "Erro ao iniciar sessão");
     res.status(500).json({ error: "session_start_failed" });
