@@ -645,6 +645,7 @@ async function startSession(rawId, options = {}) {
       clearSessionTimers(entry);
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = statusCode === DisconnectReason.loggedOut;
+      const restartRequired = statusCode === DisconnectReason.restartRequired;
       // Sessão que nunca foi pareada não deve ficar em loop de reconexão:
       // reconexões agressivas sem credenciais fazem o WhatsApp bloquear o IP
       // e nenhum QR Code novo é entregue.
@@ -657,6 +658,8 @@ async function startSession(rawId, options = {}) {
         qrExpiresAt: null,
         connectionError: loggedOut
           ? "Sessão encerrada no WhatsApp."
+          : restartRequired
+            ? "QR Code confirmado. Finalizando a autenticação."
           : `Conexão fechada pelo WhatsApp (código ${statusCode ?? "desconhecido"}${
               lastDisconnect?.error?.message ? `: ${lastDisconnect.error.message}` : ""
             }).${registered ? " Tentando reconectar." : " Clique em Conectar WhatsApp para gerar um novo QR Code."}`,
@@ -664,13 +667,16 @@ async function startSession(rawId, options = {}) {
       });
 
       logger.warn(
-        { sessionId: id, statusCode, loggedOut, registered, error: lastDisconnect?.error?.message || null },
+        { sessionId: id, statusCode, loggedOut, restartRequired, registered, error: lastDisconnect?.error?.message || null },
         "Conexão Baileys fechada",
       );
 
-      if (!loggedOut && registered) {
+      // Após ler o QR, o Baileys encerra o primeiro socket com 515
+      // (restartRequired). Esse reinício é parte normal do pareamento e deve
+      // acontecer mesmo que o evento creds.update ainda esteja terminando.
+      if (!loggedOut && (registered || restartRequired)) {
         const attempt = Math.min((entry.reconnectAttempt || 0) + 1, 6);
-        const delay = Math.min(60000, 2500 * 2 ** (attempt - 1));
+        const delay = restartRequired ? 750 : Math.min(60000, 2500 * 2 ** (attempt - 1));
         const timer = setTimeout(() => {
           startSession(id, { attempt }).catch((error) =>
             logger.error({ err: error, sessionId: id }, "Falha ao reconectar"),
