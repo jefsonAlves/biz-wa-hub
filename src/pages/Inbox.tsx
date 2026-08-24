@@ -65,7 +65,13 @@ const Inbox = () => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Conversations with server-side pagination
-  const { data: conversationsData, isLoading: convsLoading } = useQuery({
+  const {
+    data: conversationsData,
+    isLoading: convsLoading,
+    isError: convsError,
+    error: conversationsError,
+    refetch: refetchConversations,
+  } = useQuery({
     queryKey: ["conversations", tenantId, page, filter, search, salesStatusFilter, departmentFilter],
     queryFn: async () => {
       if (!tenantId) return { data: [], count: 0 };
@@ -101,7 +107,10 @@ const Inbox = () => {
         query = query.or(`contacts.name.ilike.%${search}%,contacts.phone.ilike.%${search}%`);
       }
 
-      const { data, error, count } = await query;
+      const timeout = new Promise<never>((_, reject) => {
+        window.setTimeout(() => reject(new Error("A consulta do Inbox excedeu 15 segundos.")), 15000);
+      });
+      const { data, error, count } = await Promise.race([query, timeout]);
       if (error) throw error;
       return { data: data || [], count: count || 0 };
     },
@@ -109,6 +118,7 @@ const Inbox = () => {
     // Realtime continua sendo o caminho principal. Este polling curto evita
     // que uma queda temporária do canal deixe o Inbox parado até outro reload.
     refetchInterval: 5000,
+    retry: 1,
   });
 
   const conversations = conversationsData?.data || [];
@@ -376,6 +386,19 @@ const Inbox = () => {
         {convsLoading ? (
           <div className="flex-1 flex items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : convsError ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+            <MessageSquare className="h-8 w-8 text-destructive/70" />
+            <div>
+              <p className="text-sm font-medium">Não foi possível carregar o Inbox</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {conversationsError instanceof Error ? conversationsError.message : "Falha ao consultar as conversas."}
+              </p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => refetchConversations()}>
+              Tentar novamente
+            </Button>
           </div>
         ) : (
           <ConversationList
