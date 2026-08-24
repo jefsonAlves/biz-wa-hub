@@ -41,7 +41,7 @@ serve(async (req) => {
     if (!sessionId || !chatId) return json({ error: "session_id_and_chat_id_required" }, 400);
     if (isBroadcast(chatId)) return json({ success: true, ignored: true, reason: "broadcast" });
 
-    const { data: connection, error: connectionError } = await svc
+    let { data: connection, error: connectionError } = await svc
       .from("whatsapp_connections")
       .select("id, tenant_id, provider_instance_id, provider_session_id")
       .or(`provider_instance_id.eq.${sessionId},provider_session_id.eq.${sessionId}`)
@@ -49,6 +49,33 @@ serve(async (req) => {
       .maybeSingle();
 
     if (connectionError) throw connectionError;
+    let sessionRemapped = false;
+    if (!connection) {
+      const { data: onlyConnections, error: fallbackError } = await svc
+        .from("whatsapp_connections")
+        .select("id, tenant_id, provider_instance_id, provider_session_id")
+        .in("provider_type", ["baileys_backend", "wuzapi_backend"])
+        .order("last_connected_at", { ascending: false, nullsFirst: false })
+        .limit(2);
+      if (fallbackError) throw fallbackError;
+
+      if (onlyConnections?.length === 1) {
+        connection = onlyConnections[0];
+        const { error: remapError } = await svc
+          .from("whatsapp_connections")
+          .update({
+            provider_instance_id: sessionId,
+            provider_session_id: sessionId,
+            status: "connected",
+            connection_error: null,
+            last_connected_at: new Date().toISOString(),
+          })
+          .eq("id", connection.id);
+        if (remapError) throw remapError;
+        sessionRemapped = true;
+      }
+    }
+
     if (!connection) return json({ error: "connection_not_found", session_id: sessionId }, 404);
 
     const tenantId = connection.tenant_id;
@@ -276,6 +303,7 @@ serve(async (req) => {
 
     return json({
       success: true,
+      session_remapped: sessionRemapped,
       event,
       tenant_id: tenantId,
       connection_id: connection.id,
