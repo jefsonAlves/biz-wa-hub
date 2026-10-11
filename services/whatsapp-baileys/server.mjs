@@ -859,12 +859,28 @@ app.delete("/whatsapp/:id", async (req, res) => {
 
 app.post("/api/send", async (req, res) => {
   try {
-    const sessionId = sanitizeId(req.body?.sessionId || req.body?.session_id || req.body?.connectionId);
+    let sessionId = sanitizeId(req.body?.sessionId || req.body?.session_id || req.body?.connectionId);
     const rawJid = String(req.body?.jid || "").trim();
     const number = String(req.body?.number || "").replace(/\D/g, "");
     const body = String(req.body?.body || req.body?.message || "");
 
-    if (!sessionId) return res.status(400).json({ error: "session_id_required" });
+    // O Radar/n8n pode omitir a sessão quando há exatamente uma conexão ativa.
+    // Isso mantém chamadas explícitas compatíveis e evita gravar um UUID de sessão no workflow.
+    if (!sessionId) {
+      const connectedSessionIds = [];
+      for (const [id, entry] of sessions) {
+        if (!entry?.socket) continue;
+        const meta = await readMeta(id);
+        if (meta?.status === "CONNECTED") connectedSessionIds.push(id);
+      }
+      if (connectedSessionIds.length === 1) {
+        [sessionId] = connectedSessionIds;
+      } else if (connectedSessionIds.length === 0) {
+        return res.status(409).json({ error: "session_not_connected" });
+      } else {
+        return res.status(400).json({ error: "session_id_required", connectedSessions: connectedSessionIds.length });
+      }
+    }
     if (!rawJid && !number) return res.status(400).json({ error: "destination_required" });
     if (!body.trim()) return res.status(400).json({ error: "message_required" });
 
