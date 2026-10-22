@@ -32,6 +32,8 @@ const sessions = new Map();
 const recentSentIds = new Map();
 const recentMessages = new Map();
 const lidToPn = new Map();
+const profilePictureCache = new Map();
+const PROFILE_PICTURE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 const sanitizeId = (value) => String(value || "").replace(/[^a-zA-Z0-9_-]/g, "");
 const sessionDir = (id) => path.join(DATA_DIR, sanitizeId(id));
@@ -88,6 +90,35 @@ function messageResolvedJid(msg) {
     key.participantPn,
     key.participantAlt,
   ]);
+}
+
+async function resolveProfilePictureUrl(sessionId, jid) {
+  const targetJid = String(jid || "").trim();
+  if (!targetJid || targetJid === "status@broadcast" || targetJid.endsWith("@broadcast")) return null;
+
+  const cacheKey = `${sessionId}:${targetJid}`;
+  const cached = profilePictureCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.url;
+
+  const socket = sessions.get(sessionId)?.socket;
+  if (!socket?.profilePictureUrl) return null;
+
+  try {
+    const url = await socket.profilePictureUrl(targetJid, "image");
+    const normalized = typeof url === "string" && url.trim() ? url.trim() : null;
+    profilePictureCache.set(cacheKey, {
+      url: normalized,
+      expiresAt: Date.now() + PROFILE_PICTURE_CACHE_TTL_MS,
+    });
+    return normalized;
+  } catch (error) {
+    profilePictureCache.set(cacheKey, {
+      url: null,
+      expiresAt: Date.now() + 30 * 60 * 1000,
+    });
+    logger.debug({ sessionId, jid: targetJid, err: error }, "Foto de perfil indisponível");
+    return null;
+  }
 }
 
 const webhookQueuePath = (payload) => {
@@ -374,6 +405,13 @@ function contactEventPayload(sessionId, contact, source = "live", fallback = {})
     name: name || null,
     notify: contact?.notify || fallback.notify || null,
     username: contact?.username || fallback.username || null,
+    avatar_url:
+      contact?.avatar_url ||
+      contact?.avatarUrl ||
+      contact?.profilePictureUrl ||
+      fallback.avatar_url ||
+      fallback.avatarUrl ||
+      null,
     is_group: rawId.endsWith("@g.us") || chatId.endsWith("@g.us"),
   };
 }
@@ -383,6 +421,10 @@ async function dispatchContactToPlatform(sessionId, contact, source = "live", fa
   const payload = contactEventPayload(sessionId, contact, source, fallback);
   if (!payload) return;
   if (payload.chat_id === "status@broadcast" || payload.chat_id.endsWith("@broadcast")) return;
+
+  if (!payload.avatar_url) {
+    payload.avatar_url = await resolveProfilePictureUrl(sessionId, payload.chat_id);
+  }
 
   const ok = await deliverWebhook(payload, { sessionId, chatId: payload.chat_id, source, event: payload.event });
   if (ok) logger.info({ sessionId, chatId: payload.chat_id, source }, "Contato encaminhado ao Inbox");
@@ -420,6 +462,7 @@ async function dispatchMessageToPlatform(sessionId, msg, source = "live") {
   if (msg.key.fromMe && wasSentByApi(messageId)) return;
 
   const parsed = extractMessageData(msg.message);
+  const avatarUrl = await resolveProfilePictureUrl(sessionId, chatId);
   const payload = {
     event: "message.upsert",
     source,
@@ -431,6 +474,7 @@ async function dispatchMessageToPlatform(sessionId, msg, source = "live") {
     participant: msg.key.participant || null,
     participant_pn: msg.key.participantPn || null,
     push_name: msg.pushName || null,
+    avatar_url: avatarUrl,
     is_group: chatId.endsWith("@g.us") || rawChatId.endsWith("@g.us"),
     message_type: parsed.messageType,
     content: parsed.content,

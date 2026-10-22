@@ -86,7 +86,7 @@ serve(async (req) => {
     const findContact = async () => {
       let { data: contact } = await svc
         .from("contacts")
-        .select("id, name, phone, wa_chat_id, metadata")
+        .select("id, name, phone, wa_chat_id, avatar_url, metadata")
         .eq("tenant_id", tenantId)
         .eq("wa_chat_id", chatId)
         .limit(1)
@@ -95,7 +95,7 @@ serve(async (req) => {
       if (!contact && rawChatId && rawChatId !== chatId) {
         const byRaw = await svc
           .from("contacts")
-          .select("id, name, phone, wa_chat_id, metadata")
+          .select("id, name, phone, wa_chat_id, avatar_url, metadata")
           .eq("tenant_id", tenantId)
           .eq("wa_chat_id", rawChatId)
           .limit(1)
@@ -106,7 +106,7 @@ serve(async (req) => {
       if (!contact && phone) {
         const byPhone = await svc
           .from("contacts")
-          .select("id, name, phone, wa_chat_id, metadata")
+          .select("id, name, phone, wa_chat_id, avatar_url, metadata")
           .eq("tenant_id", tenantId)
           .eq("phone", phone)
           .limit(1)
@@ -119,6 +119,7 @@ serve(async (req) => {
 
     if (event === "contact.upsert" || event === "contact.update" || event === "chat.upsert") {
       const contactName = String(body?.name || body?.notify || "").trim();
+      const avatarUrl = String(body?.avatar_url || "").trim();
       const existing = await findContact();
       const metadata = {
         ...(existing?.metadata ?? {}),
@@ -141,10 +142,11 @@ serve(async (req) => {
             phone,
             wa_chat_id: chatId,
             name: contactName || (isGroup ? `Grupo ${phone}` : phone),
+            avatar_url: avatarUrl || null,
             last_message_preview: null,
             metadata,
           })
-          .select("id, name, phone, wa_chat_id, metadata")
+          .select("id, name, phone, wa_chat_id, avatar_url, metadata")
           .single();
         if (created.error) throw created.error;
         return json({ success: true, event, contact_id: created.data.id, created: true });
@@ -159,6 +161,7 @@ serve(async (req) => {
       if (contactName && (!existing.name || existing.name === existing.phone || existing.name.startsWith("Grupo "))) {
         contactPatch.name = contactName;
       }
+      if (avatarUrl) contactPatch.avatar_url = avatarUrl;
 
       const updated = await svc.from("contacts").update(contactPatch).eq("id", existing.id);
       if (updated.error) throw updated.error;
@@ -183,6 +186,7 @@ serve(async (req) => {
     }
 
     const incomingName = !fromMe ? String(body?.push_name || "").trim() : "";
+    const incomingAvatarUrl = String(body?.avatar_url || "").trim();
     let contact = await findContact();
 
     if (!contact) {
@@ -193,6 +197,7 @@ serve(async (req) => {
           phone,
           wa_chat_id: chatId,
           name: incomingName || (isGroup ? `Grupo ${phone}` : phone),
+          avatar_url: incomingAvatarUrl || null,
           last_message_preview: content.slice(0, 100),
           metadata: {
             source: "baileys",
@@ -202,7 +207,7 @@ serve(async (req) => {
             synced_from_whatsapp: true,
           },
         })
-        .select("id, name, phone, wa_chat_id, metadata")
+        .select("id, name, phone, wa_chat_id, avatar_url, metadata")
         .single();
       if (created.error) throw created.error;
       contact = created.data;
@@ -222,6 +227,7 @@ serve(async (req) => {
         updated_at: new Date().toISOString(),
       };
       if (incomingName && (!contact.name || contact.name === contact.phone)) contactPatch.name = incomingName;
+      if (incomingAvatarUrl) contactPatch.avatar_url = incomingAvatarUrl;
       const updated = await svc.from("contacts").update(contactPatch).eq("id", contact.id);
       if (updated.error) throw updated.error;
     }
@@ -245,6 +251,7 @@ serve(async (req) => {
           whatsapp_connection_id: connection.id,
           wa_chat_id: chatId,
           status: "open",
+          ai_paused: true,
           unread_count: fromMe ? 0 : 1,
           last_message_at: timestamp,
           last_message_direction: fromMe ? "outgoing" : "incoming",

@@ -176,14 +176,9 @@ serve(async (req) => {
         }
         break;
       case "automation.pause":
-        if (data.conversation_id) {
-          await svc.from("conversations").update({ ai_paused: true }).eq("id", data.conversation_id).eq("tenant_id", tenantId);
-        }
-        break;
       case "automation.resume":
-        if (data.conversation_id) {
-          await svc.from("conversations").update({ ai_paused: false }).eq("id", data.conversation_id).eq("tenant_id", tenantId);
-        }
+        // Estado da IA é controlado exclusivamente pelo usuário no painel.
+        // Eventos externos nunca devem ligar ou desligar a IA automaticamente.
         break;
       case "automation.assign":
         if (data.conversation_id && data.agent_id) {
@@ -371,7 +366,8 @@ async function handleInboundMessage(
     const inserted = await svc.from("conversations").insert({
       tenant_id: tenantId, contact_id: contact.id,
       whatsapp_connection_id: connectionId, status: "open",
-      wa_chat_id: chatId, unread_count: !incrementUnread || isOutgoing ? 0 : 1,
+      wa_chat_id: chatId, ai_paused: true,
+      unread_count: !incrementUnread || isOutgoing ? 0 : 1,
       last_message_at: messageOccurredAt,
       last_message_direction: isOutgoing ? "outgoing" : "incoming",
       awaiting_reply: !isOutgoing,
